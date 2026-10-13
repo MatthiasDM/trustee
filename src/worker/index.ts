@@ -17,6 +17,8 @@ import ledger, { postDueScheduled } from "./routes/ledger";
 import { runBackups } from "./lib/backup";
 import reports, { autoReminders } from "./routes/reports";
 import orgs from "./routes/orgs";
+import suppliers, { runDueRecurring } from "./routes/suppliers";
+import compliance, { complianceReminders } from "./routes/compliance";
 import { notifyBuilding } from "./lib/notify";
 
 const app = new Hono<AppEnv>();
@@ -34,6 +36,8 @@ app.route("/api/buildings", agenda);
 app.route("/api/buildings", mandates);
 app.route("/api/buildings", ledger);
 app.route("/api/buildings", reports);
+app.route("/api/buildings", suppliers);
+app.route("/api/buildings", compliance);
 app.route("/api/notifications", notifications);
 app.route("/api/orgs", orgs);
 
@@ -77,6 +81,7 @@ export default {
         await notifyBuilding(env, { buildingId: m.building_id, type: "mandate", title: `Mandaat loopt af over 60 dagen: ${ORGAN_RULES[m.organ as keyof typeof ORGAN_RULES].label}`, body: `${m.user_name ?? m.holder_name} — tot ${m.end_date}. Agendeer de herbenoeming op de algemene vergadering.`, link: `/b/${m.building_id}/members?tab=mandates`, roles: ["syndicus", "raad"] });
       }
       log.posted_scheduled = await postDueScheduled(env); // geplande afschrijvingen boeken
+      if (new Date().getUTCHours() === 5 && new Date().getUTCMinutes() < 15) { log.recurring = await runDueRecurring(env); log.compliance = await complianceReminders(env); }
       if (new Date().getUTCHours() === 7 && new Date().getUTCMinutes() < 15) log.reminders = await autoReminders(env); // dagelijks om 9u Belgische zomertijd
       await env.DB.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(nowIso).run();
       await env.DB.prepare("DELETE FROM password_resets WHERE expires_at < ?").bind(nowIso).run();

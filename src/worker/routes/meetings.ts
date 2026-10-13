@@ -4,7 +4,7 @@ import type { AppEnv } from "../env";
 import { requireAuth, requireBuilding } from "../lib/auth";
 import { HttpError, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
-import { isBoard } from "../lib/auth";
+import { isBoard, isOwner } from "../lib/auth";
 import { attendance, majorityReached, MAJ, renderMinutesHtml, validateProxy } from "../lib/meeting";
 
 const meetings = new Hono<AppEnv>();
@@ -181,6 +181,52 @@ meetings.post("/:buildingId/meetings/:meetingId/minutes/finalize", requireBuildi
   await audit(c.env, b.id, user.id, "minutes.finalize", "meeting", m.id);
   await notifyBuilding(c.env, { buildingId: b.id, type: "minutes", title: `Notulen: ${m.title}`, body: "De notulen van de algemene vergadering zijn beschikbaar. Beslissingen kunnen binnen 4 maanden aangevochten worden (art. 3.92 §3 BW).", link: `/b/${b.id}/meetings`, roles: ["syndicus", "raad", "eigenaar", "commissaris"], excludeUserId: user.id, email: true });
   return c.json({ ok: true, documentId: docId });
+});
+
+// ---------- Verzoek tot AV door mede-eigenaars met minstens 1/5 van de aandelen (art. 3.87 §2) ----------
+async function requestWithProgress(env: AppEnv["Bindings"], buildingId: string, req: any) {
+  const total = (await env.DB.prepare("SELECT COALESCE(SUM(shares),0) AS s FROM units WHERE building_id = ?").bind(buildingId).first<any>())?.s ?? 0;
+  const sigs = (await env.DB.prepare("SELECT s.user_id, s.signed_at, u.name, (SELECT COALESCE(SUM(un.shares * uo.share_pct / 100.0),0) FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = ? AND uo.user_id = s.user_id) AS shares FROM meeting_request_signatures s JOIN users u ON u.id = s.user_id WHERE s.request_id = ? ORDER BY s.signed_at").bind(buildingId, req.id).all()).results as any[];
+  const shares = Math.round(sigs.reduce((a, x) => a + x.shares, 0) * 100) / 100;
+  return { ...req, signatures: sigs, shares, total_shares: total, needed: Math.ceil(total / 5), reached: shares >= total / 5 };
+}
+meetings.get("/:buildingId/meeting-requests", requireBuilding(), async (c) => {
+  const b = c.get("building");
+  const rows = (await c.env.DB.prepare("SELECT r.*, u.name AS created_by_name, m.title AS meeting_title, m.starts_at AS meeting_starts_at FROM meeting_requests r JOIN users u ON u.id = r.created_by LEFT JOIN meetings m ON m.id = r.fulfilled_meeting_id WHERE r.building_id = ? ORDER BY r.created_at DESC").bind(b.id).all()).results as any[];
+  return c.json(await Promise.all(rows.map((r) => requestWithProgress(c.env, b.id, r))));
+});
+meetings.post("/:buildingId/meeting-requests", requireBuilding(), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  if (!isOwner(b.role)) throw new HttpError(403, "Enkel mede-eigenaars kunnen een vergadering vragen");
+  const { subject, body } = z.object({ subject: z.string().min(3).max(200), body: z.string().max(5000).optional() }).parse(await c.req.json());
+  const id = uid();
+  await c.env.DB.batch([c.env.DB.prepare("INSERT INTO meeting_requests (id, building_id, subject, body, created_by) VALUES (?,?,?,?,?)").bind(id, b.id, subject, body ?? null, user.id), c.env.DB.prepare("INSERT INTO meeting_request_signatures (request_id, user_id) VALUES (?,?)").bind(id, user.id)]);
+  await notifyBuilding(c.env, { buildingId: b.id, type: "meeting_request", title: `Verzoek tot algemene vergadering: ${subject}`, body: `${user.name} vraagt een AV. Onderteken mee als je het verzoek steunt; vanaf 1/5 van de aandelen moet de syndicus binnen 30 dagen bijeenroepen.`, link: `/b/${b.id}/meetings`, roles: ["eigenaar", "raad", "commissaris"], excludeUserId: user.id, email: false });
+  return c.json({ id }, 201);
+});
+meetings.post("/:buildingId/meeting-requests/:id/sign", requireBuilding(), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  if (!isOwner(b.role)) throw new HttpError(403, "Enkel mede-eigenaars kunnen ondertekenen");
+  const req = await c.env.DB.prepare("SELECT * FROM meeting_requests WHERE id = ? AND building_id = ?").bind(c.req.param("id"), b.id).first<any>();
+  if (!req || req.status === "cancelled" || req.status === "fulfilled") throw new HttpError(400, "Dit verzoek is niet meer open");
+  await c.env.DB.prepare("INSERT OR IGNORE INTO meeting_request_signatures (request_id, user_id) VALUES (?,?)").bind(req.id, user.id).run();
+  const p = await requestWithProgress(c.env, b.id, req);
+  if (p.reached && req.status === "collecting") {
+    const deadline = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10);
+    await c.env.DB.prepare("UPDATE meeting_requests SET status = 'threshold_reached', threshold_reached_at = ?, deadline = ? WHERE id = ?").bind(new Date().toISOString(), deadline, req.id).run();
+    await notifyBuilding(c.env, { buildingId: b.id, type: "meeting_request", title: `Verplichte bijeenroeping: ${req.subject}`, body: `Mede-eigenaars met ${p.shares}/${p.total_shares} aandelen (≥ 1/5) vragen een AV. De syndicus moet de bijeenroeping versturen vóór ${deadline} (art. 3.87 §2 BW).`, link: `/b/${b.id}/meetings`, roles: ["syndicus", "raad"] });
+  }
+  return c.json(await requestWithProgress(c.env, b.id, await c.env.DB.prepare("SELECT * FROM meeting_requests WHERE id = ?").bind(req.id).first()));
+});
+meetings.patch("/:buildingId/meeting-requests/:id", requireBuilding(), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  const req = await c.env.DB.prepare("SELECT * FROM meeting_requests WHERE id = ? AND building_id = ?").bind(c.req.param("id"), b.id).first<any>();
+  if (!req) throw new HttpError(404, "Niet gevonden");
+  const body = z.object({ status: z.enum(["fulfilled", "cancelled"]).optional(), fulfilled_meeting_id: z.string().nullable().optional() }).parse(await c.req.json());
+  if (body.status === "cancelled" && req.created_by !== user.id && !isBoard(b.role)) throw new HttpError(403, "Geen rechten");
+  if (body.status === "fulfilled" && !isBoard(b.role)) throw new HttpError(403, "Enkel de syndicus kan een verzoek als ingewilligd markeren");
+  await c.env.DB.prepare("UPDATE meeting_requests SET status = COALESCE(?, status), fulfilled_meeting_id = COALESCE(?, fulfilled_meeting_id) WHERE id = ?").bind(body.status ?? null, body.fulfilled_meeting_id ?? null, req.id).run();
+  return c.json({ ok: true });
 });
 
 /** iCal-export van een vergadering. */

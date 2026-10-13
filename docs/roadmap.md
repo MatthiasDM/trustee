@@ -68,4 +68,5 @@ Stand op 13 oktober 2026, na de bouw van de boekhoudmodule. Gerangschikt per dom
 3. ~~Jaarrekening en afrekening als PDF, commissarisverslag, betalingsherinneringen.~~ Gedaan 13 okt 2026.
 4. ~~Vereenvoudigde boekhouding voor kleine VME's en het overdrachtsdossier bij verkoop.~~ Gedaan 13 okt 2026.
 5. ~~Meertaligheid en het kantoorportaal.~~ Gedaan 13 okt 2026: kantoorportaal volledig; taallaag (NL/FR/EN) voor de navigatie, aanmelding, dashboard, organen, meldingen, instellingen en de koppen en hoofdknoppen van alle pagina's. Nog te vertalen: formulieren en dialoogvensters in de diepere pagina's (boekhouding, vergaderingen, leden), server-side meldingen en e-mails, gegenereerde documenten, handleiding.
-6. Daarna: notulen ook als PDF, leveranciersbeheer, periodieke boekingen, 1/5-verzoek tot AV, schriftelijke besluitvorming, keuringsattesten, tickets met leverancier.
+6. ~~Leveranciersbeheer, periodieke boekingen, 1/5-verzoek tot AV, schriftelijke besluitvorming, keuringsattesten, tickets met leverancier.~~ Gedaan 13 okt 2026.
+7. Nog open: notulen als PDF, volledige vertaling van diepere schermen en servermeldingen, OCR op facturen, PSD2-bankkoppeling, abonnementen en facturatie, tweestapsverificatie, versiegeschiedenis van documenten, vruchtgebruik/onverdeeldheid per kavel, deelverenigingen.

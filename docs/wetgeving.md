@@ -136,4 +136,7 @@ Wat een individuele mede-eigenaar **niet** kan: de syndicus instructies geven bu
 | Quorum | Vergaderingen: aanwezigheid per kavel met automatische quorumtoets; tweede bijeenroeping zonder quorum |
 | Onthoudingen tellen niet mee | Stemming per agendapunt: meerderheid berekend op vóór + tegen |
 | Notulen met namen van tegenstemmers, verzending binnen 30 dagen | Notulen genereren, definitief maken, document in Verslagen AV, melding aan alle stemgerechtigden |
+| 1/5 van de aandelen kan een AV eisen; syndicus roept binnen 30 dagen op | Vergaderingen: verzoek met handtekeningen, automatische drempelbewaking en melding met deadline |
+| Schriftelijke besluitvorming enkel bij eenparigheid (art. 3.87 §11) | Stemmingen: schriftelijk besluit sluit pas als alle mede-eigenaars akkoord zijn; één tegenstem verwerpt |
+| Keuringsplichten (lift KB 9/3/2003, AREI, verwarming, EPC, asbest) | Documenten › Keuringen: vervaldata en herinneringen; de intervallen zijn standaardwaarden, de statuten of het keuringsorganisme kunnen strenger zijn |
 | Kennisgeving bij inzage door de raad | Documenten: automatische melding aan de syndicus en logboekvermelding bij het openen van stukken "enkel syndicus" |

@@ -44,6 +44,7 @@ async function pollWithResults(c: Context<AppEnv>, pollId: string) {
     eligible_voters: eligible?.n ?? 0,
     eligible_weight: poll.weighted ? (eligible?.w ?? b.total_shares) : (eligible?.n ?? 0),
     can_vote: !closed && poll.status === "open" && (!poll.owners_only || isOwner(b.role)),
+    written_progress: poll.written ? await (async () => { const owners = (await c.env.DB.prepare("SELECT DISTINCT uo.user_id FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = ?").bind(b.id).all()).results.map((r: any) => r.user_id); return { total: owners.length, agreed: owners.filter((o: string) => votes.some((v) => v.user_id === o && options[0] && v.option_id === options[0].id)).length, disagreed: owners.filter((o: string) => votes.some((v) => v.user_id === o && options[1] && v.option_id === options[1].id)).length }; })() : null,
   };
 }
 
@@ -51,7 +52,7 @@ polls.get("/:buildingId/polls", requireBuilding(), async (c) => {
   const b = c.get("building");
   const user = c.get("user");
   const rows = await c.env.DB.prepare(
-    `SELECT p.id, p.title, p.description, p.weighted, p.anonymous, p.multiple, p.owners_only, p.required_majority, p.opens_at, p.closes_at,
+    `SELECT p.id, p.title, p.description, p.weighted, p.anonymous, p.multiple, p.owners_only, p.required_majority, p.opens_at, p.closes_at, p.written, p.outcome,
             CASE WHEN p.status='closed' OR (p.closes_at IS NOT NULL AND p.closes_at < strftime('%Y-%m-%dT%H:%M:%fZ','now')) THEN 'closed' ELSE p.status END AS status,
             p.created_at, u.name AS created_by_name,
             (SELECT COUNT(DISTINCT user_id) FROM poll_votes WHERE poll_id = p.id) AS total_voters,
@@ -72,16 +73,18 @@ const pollSchema = z.object({
   required_majority: z.enum(["simple", "two_thirds", "four_fifths", "unanimous", "none"]).default("simple"),
   closes_at: z.string().datetime().optional().nullable(),
   status: z.enum(["draft", "open"]).default("open"),
+  written: z.boolean().default(false), // schriftelijke besluitvorming art. 3.87 §11: eenparigheid van alle mede-eigenaars
 });
 
 polls.post("/:buildingId/polls", requireBuilding("syndicus", "raad"), async (c) => {
   const b = c.get("building");
   const user = c.get("user");
   const body = pollSchema.parse(await c.req.json());
+  if (body.written) { body.options = ["Akkoord", "Niet akkoord"]; body.required_majority = "unanimous"; body.anonymous = false; body.multiple = false; body.owners_only = true; body.weighted = true; }
   const id = uid();
   await c.env.DB.batch([
-    c.env.DB.prepare("INSERT INTO polls (id, building_id, created_by, title, description, weighted, anonymous, multiple, owners_only, required_majority, closes_at, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
-      .bind(id, b.id, user.id, body.title, body.description ?? null, +body.weighted, +body.anonymous, +body.multiple, +body.owners_only, body.required_majority, body.closes_at ?? null, body.status),
+    c.env.DB.prepare("INSERT INTO polls (id, building_id, created_by, title, description, weighted, anonymous, multiple, owners_only, required_majority, closes_at, status, written) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      .bind(id, b.id, user.id, body.title, body.description ?? null, +body.weighted, +body.anonymous, +body.multiple, +body.owners_only, body.required_majority, body.closes_at ?? null, body.status, +body.written),
     ...body.options.map((label, i) => c.env.DB.prepare("INSERT INTO poll_options (id, poll_id, label, position) VALUES (?,?,?,?)").bind(uid(), id, label, i)),
   ]);
   await audit(c.env, b.id, user.id, "poll.create", "poll", id, { title: body.title });
@@ -134,8 +137,27 @@ polls.post("/:buildingId/polls/:pollId/vote", requireBuilding(), async (c) => {
     c.env.DB.prepare("DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?").bind(poll.id, user.id),
     ...option_ids.map((o) => c.env.DB.prepare("INSERT INTO poll_votes (id, poll_id, option_id, user_id, weight) VALUES (?,?,?,?,?)").bind(uid(), poll.id, o, user.id, weight)),
   ]);
+  if (poll.written) await settleWritten(c.env, b.id, poll.id);
   return c.json(await pollWithResults(c, poll.id));
 });
+
+/**
+ * Schriftelijke besluitvorming (art. 3.87 §11): aangenomen zodra ALLE stemgerechtigde mede-eigenaars "Akkoord" stemden;
+ * verworpen zodra één mede-eigenaar "Niet akkoord" stemt. Een aangenomen besluit wordt een beslist agendapunt (zonder vergadering).
+ */
+async function settleWritten(env: AppEnv["Bindings"], buildingId: string, pollId: string) {
+  const poll = await env.DB.prepare("SELECT * FROM polls WHERE id = ?").bind(pollId).first<any>();
+  if (!poll || poll.status !== "open") return;
+  const owners = (await env.DB.prepare("SELECT DISTINCT uo.user_id FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = ?").bind(buildingId).all()).results.map((r: any) => r.user_id as string);
+  const votes = (await env.DB.prepare("SELECT v.user_id, o.position FROM poll_votes v JOIN poll_options o ON o.id = v.option_id WHERE v.poll_id = ?").bind(pollId).all()).results as any[];
+  const rejected = votes.some((v) => v.position === 1);
+  const allAgreed = owners.length > 0 && owners.every((o) => votes.some((v) => v.user_id === o && v.position === 0));
+  if (!rejected && !allAgreed) return;
+  const outcome = rejected ? "rejected" : "adopted";
+  await env.DB.prepare("UPDATE polls SET status = 'closed', outcome = ? WHERE id = ?").bind(outcome, pollId).run();
+  if (outcome === "adopted") await env.DB.prepare("INSERT INTO agenda_items (id, building_id, submitted_by, title, description, required_majority, status, decision, poll_id, voted_at) VALUES (?,?,?,?,?,'unanimous','decided',?,?,?)").bind(uid(), buildingId, poll.created_by, poll.title, poll.description ?? null, `Schriftelijk en eenparig aangenomen door alle ${owners.length} mede-eigenaars (art. 3.87 §11 BW), zonder algemene vergadering.`, pollId, new Date().toISOString()).run();
+  await notifyBuilding(env, { buildingId, type: "written_decision", title: `Schriftelijk besluit ${outcome === "adopted" ? "aangenomen" : "verworpen"}: ${poll.title}`, body: outcome === "adopted" ? "Alle mede-eigenaars stemden akkoord; het besluit is genomen zonder vergadering." : "Minstens één mede-eigenaar ging niet akkoord; het punt kan op een algemene vergadering geagendeerd worden.", link: `/b/${buildingId}/polls/${pollId}` });
+}
 
 /** Export van de stemresultaten als CSV (syndicus/raad). */
 polls.get("/:buildingId/polls/:pollId/export.csv", requireBuilding("syndicus", "raad", "commissaris"), async (c) => {

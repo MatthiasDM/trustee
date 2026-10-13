@@ -23,9 +23,9 @@ posts.get("/:buildingId/posts", requireBuilding(), async (c) => {
   if (type) { conds.push("p.type = ?"); params.push(type); }
   if (status) { conds.push("p.status = ?"); params.push(status); }
   const rows = await c.env.DB.prepare(
-    `SELECT p.*, u.name AS author_name, bm.role AS author_role,
+    `SELECT p.*, u.name AS author_name, bm.role AS author_role, s.name AS supplier_name,
             (SELECT COUNT(*) FROM comments c2 WHERE c2.post_id = p.id) AS comment_count
-     FROM posts p JOIN users u ON u.id = p.author_id LEFT JOIN building_members bm ON bm.user_id = p.author_id AND bm.building_id = p.building_id
+     FROM posts p JOIN users u ON u.id = p.author_id LEFT JOIN building_members bm ON bm.user_id = p.author_id AND bm.building_id = p.building_id LEFT JOIN suppliers s ON s.id = p.supplier_id
      WHERE ${conds.join(" AND ")} ORDER BY p.pinned DESC, p.updated_at DESC LIMIT 300`
   ).bind(...params).all();
   return c.json(rows.results);
@@ -44,13 +44,13 @@ const postSchema = z.object({
 posts.post("/:buildingId/posts", requireBuilding(), async (c) => {
   const b = c.get("building");
   const user = c.get("user");
-  const body = postSchema.parse(await c.req.json());
+  const body = postSchema.extend({ location: z.string().max(120).nullable().optional() }).parse(await c.req.json());
   if (body.type === "announcement" && !isBoard(b.role)) throw new HttpError(403, "Enkel de syndicus of raad kan mededelingen plaatsen");
   if (body.pinned && !isManager(b.role)) body.pinned = false;
   const id = uid();
   await c.env.DB.batch([
-    c.env.DB.prepare("INSERT INTO posts (id, building_id, author_id, type, title, body, priority, visibility, pinned) VALUES (?,?,?,?,?,?,?,?,?)")
-      .bind(id, b.id, user.id, body.type, body.title, body.body, body.priority, body.visibility, +body.pinned),
+    c.env.DB.prepare("INSERT INTO posts (id, building_id, author_id, type, title, body, priority, visibility, pinned, location) VALUES (?,?,?,?,?,?,?,?,?,?)")
+      .bind(id, b.id, user.id, body.type, body.title, body.body, body.priority, body.visibility, +body.pinned, body.location ?? null),
     ...body.attachments.map((d) => c.env.DB.prepare("INSERT OR IGNORE INTO post_attachments (post_id, document_id) VALUES (?, ?)").bind(id, d)),
   ]);
   await audit(c.env, b.id, user.id, `post.create.${body.type}`, "post", id, { title: body.title });
@@ -72,15 +72,16 @@ posts.get("/:buildingId/posts/:postId", requireBuilding(), async (c) => {
   const b = c.get("building");
   const user = c.get("user");
   const post = await c.env.DB.prepare(
-    `SELECT p.*, u.name AS author_name, bm.role AS author_role FROM posts p JOIN users u ON u.id = p.author_id LEFT JOIN building_members bm ON bm.user_id = p.author_id AND bm.building_id = p.building_id
+    `SELECT p.*, u.name AS author_name, bm.role AS author_role, s.name AS supplier_name, s.email AS supplier_email, s.phone AS supplier_phone, au.name AS assignee_name FROM posts p JOIN users u ON u.id = p.author_id LEFT JOIN building_members bm ON bm.user_id = p.author_id AND bm.building_id = p.building_id LEFT JOIN suppliers s ON s.id = p.supplier_id LEFT JOIN users au ON au.id = p.assignee_id
      WHERE p.id = ? AND p.building_id = ? AND ${postVisibility(b.role, user.id)}`
-  ).bind(c.req.param("postId"), b.id).first();
+  ).bind(c.req.param("postId"), b.id).first<any>();
   if (!post) throw new HttpError(404, "Bericht niet gevonden");
+  const ledger = post.supplier_name && isBoard(b.role) ? (await c.env.DB.prepare("SELECT je.id, je.date, je.description, (SELECT SUM(debit) FROM journal_lines x JOIN accounts a ON a.id = x.account_id WHERE x.entry_id = je.id AND a.class = 6) AS amount FROM journal_entries je WHERE je.building_id = ? AND je.counterparty = ? AND je.status = 'posted' AND je.date >= ? ORDER BY je.date DESC LIMIT 10").bind(b.id, post.supplier_name, post.created_at.slice(0, 10)).all()).results : [];
   const comments = await c.env.DB.prepare(
     "SELECT c.*, u.name AS author_name, bm.role AS author_role FROM comments c JOIN users u ON u.id = c.author_id LEFT JOIN building_members bm ON bm.user_id = c.author_id AND bm.building_id = ? WHERE c.post_id = ? ORDER BY c.created_at"
   ).bind(b.id, c.req.param("postId")).all();
   const attachments = await c.env.DB.prepare("SELECT d.id, d.name, d.size, d.mime FROM post_attachments pa JOIN documents d ON d.id = pa.document_id WHERE pa.post_id = ?").bind(c.req.param("postId")).all();
-  return c.json({ post, comments: comments.results, attachments: attachments.results });
+  return c.json({ post, comments: comments.results, attachments: attachments.results, ledger });
 });
 
 posts.patch("/:buildingId/posts/:postId", requireBuilding(), async (c) => {
@@ -88,10 +89,13 @@ posts.patch("/:buildingId/posts/:postId", requireBuilding(), async (c) => {
   const user = c.get("user");
   const post = await c.env.DB.prepare("SELECT author_id, title FROM posts WHERE id = ? AND building_id = ?").bind(c.req.param("postId"), b.id).first<any>();
   if (!post) throw new HttpError(404, "Bericht niet gevonden");
-  const body = z.object({ title: z.string().min(3).max(200).optional(), body: z.string().min(1).max(20000).optional(), status: z.enum(["open", "answered", "in_progress", "resolved", "closed"]).optional(), priority: z.enum(["low", "normal", "high", "urgent"]).optional(), pinned: z.boolean().optional() }).parse(await c.req.json());
+  const body = z.object({ title: z.string().min(3).max(200).optional(), body: z.string().min(1).max(20000).optional(), status: z.enum(["open", "answered", "in_progress", "resolved", "closed"]).optional(), priority: z.enum(["low", "normal", "high", "urgent"]).optional(), pinned: z.boolean().optional(),
+    supplier_id: z.string().nullable().optional(), assignee_id: z.string().nullable().optional(), due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), cost_estimate: z.number().min(0).nullable().optional(), location: z.string().max(120).nullable().optional() }).parse(await c.req.json());
   const isAuthor = post.author_id === user.id;
   if (!isAuthor && !isBoard(b.role)) throw new HttpError(403, "Geen rechten");
   if (body.pinned !== undefined && !isManager(b.role)) delete body.pinned;
+  if (!isBoard(b.role)) { delete body.supplier_id; delete body.assignee_id; delete body.due_date; delete body.cost_estimate; }
+  if (body.status === "resolved") (body as any).resolved_at = new Date().toISOString();
   const fields = Object.entries(body).filter(([, v]) => v !== undefined).map(([k, v]) => [k, typeof v === "boolean" ? +v : v]);
   if (fields.length) {
     await c.env.DB.prepare(`UPDATE posts SET ${fields.map(([k]) => `${k} = ?`).join(", ")}, updated_at = ? WHERE id = ?`).bind(...fields.map(([, v]) => v), now(), c.req.param("postId")).run();
@@ -134,6 +138,17 @@ posts.post("/:buildingId/posts/:postId/comments", requireBuilding(), async (c) =
   }
   await notifyBuilding(c.env, { buildingId: b.id, type: "comment", title: `${markAnswer ? "Antwoord" : "Reactie"} op: ${post.title}`, body: `${user.name}: ${body.slice(0, 160)}`, link: `/b/${b.id}/posts/${post.id}`, userIds, email: markAnswer });
   return c.json({ id }, 201);
+});
+
+/** Bijlage (foto, bestek) koppelen aan een bericht; het document zelf wordt via Documenten geüpload. */
+posts.post("/:buildingId/posts/:postId/attachments", requireBuilding(), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  const post = await c.env.DB.prepare("SELECT author_id FROM posts WHERE id = ? AND building_id = ?").bind(c.req.param("postId"), b.id).first<any>();
+  if (!post) throw new HttpError(404, "Bericht niet gevonden");
+  if (post.author_id !== user.id && !isBoard(b.role)) throw new HttpError(403, "Geen rechten");
+  const { document_id } = z.object({ document_id: z.string() }).parse(await c.req.json());
+  await c.env.DB.prepare("INSERT OR IGNORE INTO post_attachments (post_id, document_id) VALUES (?, ?)").bind(c.req.param("postId"), document_id).run();
+  return c.json({ ok: true });
 });
 
 posts.delete("/:buildingId/posts/:postId/comments/:commentId", requireBuilding(), async (c) => {

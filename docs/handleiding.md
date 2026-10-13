@@ -22,6 +22,8 @@ Het dashboard opent met de **organen van de VME**: de volgende algemene vergader
 
 ## Algemene vergadering
 
+- **Een AV afdwingen (1/5).** Elke mede-eigenaar kan een *verzoek tot algemene vergadering* starten; anderen ondertekenen mee. Zodra de ondertekenaars samen minstens 1/5 van de aandelen hebben, krijgt de syndicus een melding met de wettelijke termijn van 30 dagen om bijeen te roepen; roept hij niet op, dan mag een ondertekenaar het zelf doen.
+- **Schriftelijke besluitvorming.** Onder *Stemmingen* kan de syndicus of de raad een *schriftelijk besluit* starten: enkel "Akkoord" of "Niet akkoord", en enkel geldig als alle mede-eigenaars akkoord gaan. Zodra iedereen gestemd heeft, sluit het automatisch: aangenomen besluiten komen bij de beslissingen, een enkel "Niet akkoord" verwerpt het en dan hoort het punt op een AV.
 - **Agendapunt indienen.** Elke mede-eigenaar kan een punt voorstellen voor de volgende AV, met de meerderheid die ervoor nodig is. De uiterste datum (3 weken vóór de AV-periode) staat bovenaan. Later ingediende punten schuiven door naar de volgende AV.
 - **Agenda.** Syndicus en raad zetten voorstellen op de agenda van een geplande vergadering en bepalen de volgorde. Bij elk punt kunnen ze een **stemming** openen en na afloop de **beslissing** noteren.
 - **Aanwezigheid en volmacht.** Laat weten of je komt, een volmacht geeft of afwezig bent. Kies bij een volmacht wie voor jou stemt: een andere mede-eigenaar, nooit de syndicus. Niemand mag meer dan drie volmachten dragen (tenzij alle stemmen samen hoogstens 10 % zijn); Trustee bewaakt dat. Voeg de vergadering toe aan je agenda met de .ics-knop.
@@ -41,12 +43,14 @@ Het dashboard opent met de **organen van de VME**: de volgende algemene vergader
 - **Melding**: schade, defect of overlast. Kies een prioriteit; de syndicus wordt direct verwittigd en houdt de status bij (open, in behandeling, opgelost).
 - **Privé aan de syndicus**: vink dit aan als het bericht niet voor alle leden bedoeld is.
 - **Mededeling**: enkel syndicus en raad; iedereen krijgt push en e-mail.
+- **Opvolging van meldingen (tickets)**: bij een melding geef je de plaats op en voeg je foto's of offertes toe (ze komen ook onder Documenten). Syndicus en raad wijzen de melding toe aan een leverancier en een interne opvolger, zetten een streefdatum en een geraamde kost, en zien de boekingen bij die leverancier sinds de melding. De melder ziet leverancier en streefdatum en krijgt een melding bij elke statuswijziging.
 
 ## Documenten
 
 - Mappen voor statuten, verslagen, boekhouding, offertes, verzekeringen en contracten. Zoek over alle documenten.
 - **Zichtbaarheid**: iedereen, enkel eigenaars, raad + syndicus, of enkel syndicus. Raad en commissaris zien alles, zoals de wet voorschrijft.
 - **Controle**: raad en commissaris noteren bij een document een opmerking, een bevinding (syndicus en raad krijgen e-mail) of "nagezien, in orde". Ze kunnen de documenten zelf niet wijzigen.
+- **Keuringen & attesten** (tabblad onder Documenten): liftkeuring, brandblussers, elektrische keuring, verwarmingsonderhoud, EPC, asbestattest, verzekeringen, met interval en volgende vervaldag. Syndicus en raad krijgen 60 dagen vooraf en bij overschrijding een melding; registreer de nieuwe keuring met het attest als document en de teller loopt opnieuw.
 - **Kennisgeving**: opent een lid van de raad (of de commissaris) een stuk dat als "enkel syndicus" gemarkeerd is, dan krijgt de syndicus automatisch een melding en staat de inzage in het activiteitenlog. Dat is de wettelijke kennisgeving uit art. 3.90; de inzage zelf wordt nooit tegengehouden.
 - Versies: een nieuwe versie uploaden bewaart het versienummer.
 
@@ -67,6 +71,8 @@ De boekhouding volgt het wettelijke rekeningenstelsel voor VME's (KB 12 juli 201
 - **Draaitabel**: kosten en opbrengsten per rekening, rubriek of klasse, per maand, kwartaal of jaar; export naar CSV.
 - **Jaarrekening (PDF)**: op *Overzicht* maakt de syndicus een voorlopige jaarrekening; bij het afsluiten van het boekjaar wordt de definitieve automatisch bewaard onder *Documenten › Boekhouding*. Inhoud: resultatenrekening, balans, kas en kapitaal, begroting tegenover werkelijkheid, afrekening per kavel.
 - **Afrekeningen versturen**: op *Afrekening* maakt de syndicus voor elke kavel een individuele PDF met kostenaandeel, voorschotten, saldo en betaalinstructie. Elke eigenaar ziet enkel zijn eigen afrekening bij Documenten en krijgt een melding.
+- **Leveranciers**: adresboek met IBAN, btw-nummer, contact, standaard kostenrekening en verdeelsleutel, contracteinddatum. Bij het boeken kies je een leverancier en de rekeningen staan vooraf ingevuld; bankverrichtingen van een gekende IBAN worden herkend; meldingen kunnen aan een leverancier toegewezen worden; per leverancier zie je de uitgaven van de laatste 12 maanden.
+- **Periodiek**: terugkerende kosten (ereloon syndicus, verzekering, onderhoudscontract, overboeking naar het reservekapitaal) met frequentie en eerste datum; de cron boekt ze automatisch, of je boekt ze met één klik vooraf.
 - **Opvolging** (syndicus, raad, commissaris): openstaande voorschotten per kavel met het aantal dagen over de vervaldag. De syndicus stuurt een herinnering, aanmaning of ingebrekestelling als PDF-brief (zichtbaar voor de eigenaar) met optionele aanmaningskost die op de kavel geboekt wordt. Automatische opvolging kan aan: de cron stuurt dan dagelijks herinneringen na X dagen en aanmaningen na Y dagen.
 - **Controle**: de commissaris stelt zijn verslag op (periode, omvang, vaststellingen, besluit, advies) en maakt het definitief. Het verslag wordt een PDF onder Documenten, alle leden krijgen een melding en het punt "verslag commissaris en kwijting" wordt automatisch als agendapunt voorgesteld voor de AV.
 - **Overdrachtsdossier bij verkoop** (art. 3.94): de syndicus maakt het vanuit *Mede-eigenaars & organen › Kavels* (knop *Overdracht*); een eigenaar vraagt het voor zijn eigen kavel aan op *Mijn afrekening*. Het PDF bevat werk- en reservekapitaal, achterstallen, opgevraagde en voorziene bijdragen, beslissingen over werken, lopende procedures, de notulen van de laatste drie jaar, de laatste jaarrekeningen en de organen. Het is enkel zichtbaar voor de eigenaar van die kavel en de organen. Vul onder *Instellingen › Gebouw* de lopende procedures en de verzekeringen in.
@@ -117,6 +123,9 @@ Huurders en andere bewoners zijn geen lid van de VME en stemmen niet, maar mogen
 | Jaarrekening en afrekeningen genereren, herinneringen sturen | – | – | – | – | ✔ |
 | Openstaande saldi en verstuurde brieven zien | – | – | ✔ | ✔ | ✔ |
 | Controleverslag opstellen en definitief maken | – | – | – | ✔ | (opstellen) |
+| Verzoek tot AV starten of ondertekenen | ✔ | – | ✔ | ✔ | – |
+| Leveranciers, periodieke boekingen, keuringen beheren | – | – | keuringen | – | ✔ |
+| Melding toewijzen aan leverancier | – | – | ✔ | – | ✔ |
 | Bericht aan alle leden | – | – | – | – | ✔ |
 
 ## Privacy en veiligheid

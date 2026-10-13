@@ -304,6 +304,7 @@ ledger.get("/:buildingId/ledger/bank-transactions", async (c) => {
   if (status !== "unmatched") return c.json(txs);
   const callLines = (await c.env.DB.prepare("SELECT ccl.ogm, ccl.unit_id, ccl.amount, cc.fund, un.label FROM contribution_call_lines ccl JOIN contribution_calls cc ON cc.id = ccl.call_id JOIN units un ON un.id = ccl.unit_id WHERE cc.building_id = ?").bind(b.id).all()).results as any[];
   const openInvoices = (await c.env.DB.prepare(`SELECT je.id, je.counterparty, je.description, je.date, (SELECT SUM(credit - debit) FROM journal_lines x JOIN accounts a ON a.id = x.account_id WHERE x.entry_id = je.id AND a.code = '440') AS amount FROM journal_entries je WHERE je.building_id = ? AND je.status = 'posted' AND je.template_code IN ('supplier_invoice','asset_purchase') ORDER BY je.date DESC LIMIT 200`).bind(b.id).all()).results as any[];
+  const suppliers = (await c.env.DB.prepare("SELECT s.id, s.name, s.iban, a.code AS account_code, s.default_cost_key_id FROM suppliers s LEFT JOIN accounts a ON a.id = s.default_account_id WHERE s.building_id = ? AND s.active = 1").bind(b.id).all()).results as any[];
   const ownersByIban = (await c.env.DB.prepare("SELECT DISTINCT bt.counterparty_iban AS iban, jl.unit_id FROM bank_transactions bt JOIN journal_entries je ON je.id = bt.entry_id JOIN journal_lines jl ON jl.entry_id = je.id WHERE bt.building_id = ? AND jl.unit_id IS NOT NULL AND bt.counterparty_iban IS NOT NULL").bind(b.id).all()).results as any[];
   for (const t of txs) {
     t.suggestion = null;
@@ -312,7 +313,9 @@ ledger.get("/:buildingId/ledger/bank-transactions", async (c) => {
     else if (t.amount > 0 && t.counterparty_iban && ownersByIban.find((o) => o.iban === t.counterparty_iban)) { const o = ownersByIban.find((o) => o.iban === t.counterparty_iban); t.suggestion = { kind: "owner_payment", unit_id: o.unit_id, confidence: "medium", reason: "Zelfde IBAN als een eerdere bijdrage van deze kavel" }; }
     else if (t.amount < 0) {
       const inv = openInvoices.find((i) => Math.abs(round2(i.amount) - round2(-t.amount)) < 0.005 && (!t.counterparty_name || !i.counterparty || t.counterparty_name.toLowerCase().includes(i.counterparty.toLowerCase().split(" ")[0])));
+      const sup = suppliers.find((x) => (t.counterparty_iban && x.iban && x.iban === t.counterparty_iban) || (t.counterparty_name && x.name && t.counterparty_name.toLowerCase().includes(x.name.toLowerCase().split(" ")[0])));
       if (inv) t.suggestion = { kind: "supplier_payment", entry_id: inv.id, counterparty: inv.counterparty, confidence: "high", reason: `Bedrag en naam komen overeen met factuur ${inv.description}` };
+      else if (sup && sup.account_code) t.suggestion = { kind: "direct_expense", account_code: sup.account_code, cost_key_id: sup.default_cost_key_id, supplier: sup.name, confidence: "medium", reason: `Leverancier ${sup.name} herkend${t.counterparty_iban === sup.iban ? " op IBAN" : ""}; standaardrekening ${sup.account_code}` };
       else if (/bank|kosten|fee|beheer/i.test(t.communication ?? "") && Math.abs(t.amount) < 50) t.suggestion = { kind: "bank_fee", confidence: "low", reason: "Lijkt op bankkosten" };
       else t.suggestion = { kind: "direct_expense", confidence: "low", reason: "Kies een kostenrekening" };
     } else if (t.amount > 0 && /interest|intrest|rente/i.test(t.communication ?? "")) t.suggestion = { kind: "interest", confidence: "medium", reason: "Interesten" };

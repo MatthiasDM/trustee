@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Banknote, BellRing, BookOpen, BookText, Calculator, ClipboardCheck, FileSpreadsheet, Landmark, Package, PenLine, Receipt, Settings2, UserSquare2 } from "lucide-react";
+import { Banknote, BellRing, BookOpen, BookText, Building, Calculator, Repeat, ClipboardCheck, FileSpreadsheet, Landmark, Package, PenLine, Receipt, Settings2, UserSquare2 } from "lucide-react";
 import { PageHeader, Spinner } from "../components/ui";
 import { useFetch } from "../components/Layout";
 import { useT } from "../lib/i18n";
@@ -19,6 +19,8 @@ import { SettingsTab } from "../ledger/SettingsTab";
 import { FollowUpTab } from "../ledger/FollowUpTab";
 import { AuditTab } from "../ledger/AuditTab";
 import { CashbookTab } from "../ledger/CashbookTab";
+import { SuppliersTab } from "../ledger/SuppliersTab";
+import { RecurringTab } from "../ledger/RecurringTab";
 
 export function LedgerPage() {
   const { b, fys, accounts, banks, keys } = useLedgerBase(); const t = useT();
@@ -39,7 +41,7 @@ export function LedgerPage() {
     ...(!simple || b.isBoard ? [{ v: "journal", l: simple ? "Boekingen" : "Dagboek", I: BookOpen }] : []),
     ...(b.isManager ? [{ v: "book", l: "Boeken", I: PenLine }] : []),
     { v: "bank", l: "Bank", I: Landmark }, { v: "calls", l: "Oproepen", I: Receipt }, { v: "mine", l: b.isBoard ? "Afrekening" : "Mijn afrekening", I: UserSquare2 },
-    ...(b.isBoard ? [{ v: "followup", l: "Opvolging", I: BellRing }] : []),
+    ...(b.isBoard ? [{ v: "followup", l: "Opvolging", I: BellRing }, { v: "suppliers", l: "Leveranciers", I: Building }, { v: "recurring", l: "Periodiek", I: Repeat }] : []),
     ...(simple ? [] : [{ v: "assets", l: "Vaste activa", I: Package }]), { v: "budget", l: "Begroting", I: Banknote }, ...(simple ? [] : [{ v: "reports", l: "Draaitabel", I: FileSpreadsheet }]), { v: "audit", l: "Controle", I: ClipboardCheck },
     ...(b.isBoard ? [{ v: "settings", l: "Instellingen", I: Settings2 }] : []),
   ].filter((t) => b.isBoard || !["bank", "assets"].includes(t.v));
@@ -57,6 +59,8 @@ export function LedgerPage() {
     {tab === "budget" && <BudgetTab fy={fy} accounts={accounts.data ?? []} />}
     {tab === "reports" && <ReportsTab fy={fy} />}
     {tab === "followup" && <FollowUpTab />}
+    {tab === "suppliers" && <SuppliersTab accounts={accounts.data ?? []} keys={keys.data ?? []} />}
+    {tab === "recurring" && <RecurringTab accounts={accounts.data ?? []} banks={banks.data ?? []} keys={keys.data ?? []} />}
     {tab === "audit" && <AuditTab fys={list} />}
     {tab === "settings" && <SettingsTab fys={list} banks={banks.data ?? []} keys={keys.data ?? []} accounts={accounts.data ?? []} mode={mode.data!} reload={() => { fys.reload(); reloadAll(); keys.reload(); mode.reload(); }} />}
   </div>;

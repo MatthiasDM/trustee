@@ -4,6 +4,9 @@ import { ChevronRight, ClipboardCheck, Download, Eye, File, FileImage, FileSprea
 import { toast } from "sonner";
 import { useBuilding, useFetch } from "../components/Layout";
 import { DocCommentsDialog } from "../components/DocComments";
+import { ComplianceTab } from "../components/ComplianceTab";
+import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { ShieldCheck } from "lucide-react";
 import { Empty, ErrorBox, Field, PageHeader, Spinner } from "../components/ui";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -25,6 +28,7 @@ export function DocumentsPage() {
   const b = useBuilding(); const t = useT();
   const [sp, setSp] = useSearchParams();
   const folderId = sp.get("folder") ?? "root";
+  const view = sp.get("tab") === "compliance" ? "compliance" : "docs";
   const [q, setQ] = useState("");
   const folders = useFetch<FolderT[]>(`/api/buildings/${b.id}/folders`);
   const docs = useFetch<Doc[]>(`/api/buildings/${b.id}/documents?${q ? `q=${encodeURIComponent(q)}` : `folder=${folderId}`}`);
@@ -38,6 +42,8 @@ export function DocumentsPage() {
 
   return <div>
     <PageHeader title={t("Documenten")} subtitle={b.role === "commissaris" ? "Je hebt inzage in alle stukken en kan opmerkingen en bevindingen noteren (art. 3.91 BW). Bij stukken \"enkel syndicus\" wordt de syndicus automatisch van je inzage verwittigd." : b.role === "raad" ? "De raad heeft inzage- en kopierecht in alle beheersdocumenten (art. 3.90 BW). Open je een stuk \"enkel syndicus\", dan geldt dat als kennisgeving: de syndicus krijgt automatisch een melding." : t("Statuten, verslagen, afrekeningen, offertes en meer.")} actions={<>{b.isBoard && <Button variant="outline" onClick={() => setNewFolder(true)}><FolderPlus />{t("Map")}</Button>}{b.isOwner && <Button onClick={() => setUpload(true)}><Upload />{t("Uploaden")}</Button>}</>} />
+    <Tabs value={view} onValueChange={(v) => setSp(v === "compliance" ? { tab: "compliance" } : {})} className="mb-4"><TabsList><TabsTrigger value="docs"><Folder />{t("Documenten")}</TabsTrigger><TabsTrigger value="compliance"><ShieldCheck />Keuringen & attesten</TabsTrigger></TabsList></Tabs>
+    {view === "compliance" ? <ComplianceTab /> : <>
     <div className="mb-4 flex flex-wrap items-center gap-3">
       <nav className="flex min-w-0 flex-1 items-center gap-1 text-sm"><button className="flex items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-accent cursor-pointer" onClick={() => go("root")}><Folder className="size-4 text-muted-foreground" />{t("Alle documenten")}</button>{crumbs.map((f) => <span key={f.id} className="flex items-center gap-1"><ChevronRight className="size-4 text-muted-foreground" /><button className="rounded-md px-1.5 py-1 hover:bg-accent cursor-pointer" onClick={() => go(f.id)}>{f.name}</button></span>)}</nav>
       <div className="relative w-full sm:w-72"><Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" /><Input className="pl-8" placeholder={t("Zoeken in alle documenten…")} value={q} onChange={(e) => setQ(e.target.value)} /></div>
@@ -56,6 +62,7 @@ export function DocumentsPage() {
         {(b.isManager || b.role === "raad") && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm"><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => setEdit(d)}><Pencil />Bewerken</DropdownMenuItem><DropdownMenuItem variant="destructive" onClick={() => del(d)}><Trash2 />Verwijderen</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}
       </div>)}
     </div>}
+    </>}
     <UploadModal open={upload} onClose={() => setUpload(false)} folders={folders.data ?? []} folderId={folderId} onDone={() => { setUpload(false); docs.reload(); toast.success("Document geüpload"); }} canSetVisibility={b.isBoard} />
     <Dialog open={newFolder} onOpenChange={setNewFolder}><DialogContent><DialogHeader><DialogTitle>Nieuwe map</DialogTitle></DialogHeader><FolderForm parentId={folderId === "root" ? null : folderId} onDone={() => { setNewFolder(false); folders.reload(); }} /></DialogContent></Dialog>
     <Dialog open={!!preview} onOpenChange={(o) => !o && setPreview(null)}><DialogContent className="sm:max-w-4xl"><DialogHeader><DialogTitle className="truncate pr-8">{preview?.name}</DialogTitle></DialogHeader>{preview && (preview.mime.startsWith("image/") ? <img src={`/api/buildings/${b.id}/documents/${preview.id}/download?inline=1`} alt={preview.name} className="max-h-[75vh] w-full rounded-lg object-contain" /> : <iframe title={preview.name} src={`/api/buildings/${b.id}/documents/${preview.id}/download?inline=1`} className="h-[75vh] w-full rounded-lg border" sandbox="" />)}<div className="flex justify-end"><Button variant="outline" size="sm" asChild><a href={`/api/buildings/${b.id}/documents/${preview?.id}/download`}><Download />Downloaden</a></Button></div></DialogContent></Dialog>

@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { api } from "../lib/api";
 import { AccountSelect, NONE, type Account, type BankAccount, type CostKey } from "./shared";
 import { DocumentPicker } from "./DocumentPicker";
+import type { Supplier } from "./SuppliersTab";
 import type { Unit } from "../../shared/types";
 
 interface TemplateField { key: string; label: string; type: string; required?: boolean; default?: string; filter?: string; hint?: string }
@@ -19,6 +20,7 @@ export function BookTab({ accounts, banks, keys, onPosted, simple = false }: { a
   const b = useBuilding();
   const templates = useFetch<Template[]>(`/api/buildings/${b.id}/ledger/templates`);
   const units = useFetch<{ units: Unit[] }>(`/api/buildings/${b.id}/units`);
+  const suppliers = useFetch<Supplier[]>(`/api/buildings/${b.id}/suppliers`);
   const [sel, setSel] = useState<Template | null>(null);
   const [v, setV] = useState<Record<string, any>>({});
   const [error, setError] = useState<unknown>(null); const [busy, setBusy] = useState(false);
@@ -32,7 +34,7 @@ export function BookTab({ accounts, banks, keys, onPosted, simple = false }: { a
     switch (f.type) {
       case "amount": return <Input type="number" step="0.01" min="0.01" required={f.required} value={v[f.key] ?? ""} onChange={(e) => set(e.target.value)} />;
       case "date": return <Input type="date" required={f.required} value={v[f.key] ?? ""} onChange={(e) => set(e.target.value)} />;
-      case "text": return <Input required={f.required} value={v[f.key] ?? ""} onChange={(e) => set(e.target.value)} />;
+      case "text": return f.key === "counterparty" && suppliers.data?.length ? <div className="flex gap-2"><Input required={f.required} value={v[f.key] ?? ""} onChange={(e) => set(e.target.value)} list="supplier-names" /><datalist id="supplier-names">{suppliers.data.filter((x) => x.active).map((x) => <option key={x.id} value={x.name} />)}</datalist><Select onValueChange={(id) => { const x = suppliers.data!.find((y) => y.id === id); if (x) setV({ ...v, counterparty: x.name, expense_code: x.default_account_code ?? v.expense_code, cost_key_id: x.default_cost_key_id ?? v.cost_key_id }); }}><SelectTrigger className="w-44"><SelectValue placeholder="Leverancier…" /></SelectTrigger><SelectContent>{suppliers.data.filter((x) => x.active).map((x) => <SelectItem key={x.id} value={x.id}>{x.name}</SelectItem>)}</SelectContent></Select></div> : <Input required={f.required} value={v[f.key] ?? ""} onChange={(e) => set(e.target.value)} />;
       case "account": return <AccountSelect accounts={accounts} filter={f.filter} value={v[f.key] ?? ""} onChange={set} />;
       case "unit": return <Select value={v[f.key] ?? NONE} onValueChange={(x) => set(x === NONE ? "" : x)}><SelectTrigger className="w-full"><SelectValue placeholder="Kavel" /></SelectTrigger><SelectContent><SelectItem value={NONE}>— kavel —</SelectItem>{(units.data?.units ?? []).map((u) => <SelectItem key={u.id} value={u.id}>{u.label}{u.owners?.length ? ` · ${u.owners.map((o) => o.name).join(", ")}` : ""}</SelectItem>)}</SelectContent></Select>;
       case "cost_key": return <Select value={v[f.key] ?? NONE} onValueChange={(x) => set(x === NONE ? "" : x)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={NONE}>Standaard (volgens aandelen)</SelectItem>{keys.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent></Select>;

@@ -1,6 +1,7 @@
 import { b64u } from "./util";
 
-const ITER = 210_000;
+// Cloudflare Workers staat maximaal 100.000 PBKDF2-iteraties toe (NotSupportedError daarboven); lokaal wordt dat niet afgedwongen.
+const ITER = 100_000;
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(16));

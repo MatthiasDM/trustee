@@ -1,11 +1,11 @@
 
 -- Demo-data. Alle accounts: wachtwoord "wachtwoord123"
 INSERT OR IGNORE INTO users (id, email, name, password_hash) VALUES
- ('u-syndicus','syndicus@demo.be','Sofie Vermeulen','pbkdf2$210000$zajLBZQZ-SMahZ37CGgFWw$V__EUa9oKtjbXv0Uuo5vJ7Avu2SUJ4u56FWHkV2YIyU'),
- ('u-jan','jan@demo.be','Jan Peeters','pbkdf2$210000$zajLBZQZ-SMahZ37CGgFWw$V__EUa9oKtjbXv0Uuo5vJ7Avu2SUJ4u56FWHkV2YIyU'),
- ('u-marie','marie@demo.be','Marie Claes','pbkdf2$210000$zajLBZQZ-SMahZ37CGgFWw$V__EUa9oKtjbXv0Uuo5vJ7Avu2SUJ4u56FWHkV2YIyU'),
- ('u-ahmed','ahmed@demo.be','Ahmed El Idrissi','pbkdf2$210000$zajLBZQZ-SMahZ37CGgFWw$V__EUa9oKtjbXv0Uuo5vJ7Avu2SUJ4u56FWHkV2YIyU'),
- ('u-lotte','lotte@demo.be','Lotte De Smet','pbkdf2$210000$zajLBZQZ-SMahZ37CGgFWw$V__EUa9oKtjbXv0Uuo5vJ7Avu2SUJ4u56FWHkV2YIyU');
+ ('u-syndicus','syndicus@demo.be','Sofie Vermeulen','pbkdf2$100000$P7OIeGk7Cgf9Bvy9uZ96XA$tGbYTPphHM7IzS8VqHAFisL79rB7hf1r924CebNcPW4'),
+ ('u-jan','jan@demo.be','Jan Peeters','pbkdf2$100000$P7OIeGk7Cgf9Bvy9uZ96XA$tGbYTPphHM7IzS8VqHAFisL79rB7hf1r924CebNcPW4'),
+ ('u-marie','marie@demo.be','Marie Claes','pbkdf2$100000$P7OIeGk7Cgf9Bvy9uZ96XA$tGbYTPphHM7IzS8VqHAFisL79rB7hf1r924CebNcPW4'),
+ ('u-ahmed','ahmed@demo.be','Ahmed El Idrissi','pbkdf2$100000$P7OIeGk7Cgf9Bvy9uZ96XA$tGbYTPphHM7IzS8VqHAFisL79rB7hf1r924CebNcPW4'),
+ ('u-lotte','lotte@demo.be','Lotte De Smet','pbkdf2$100000$P7OIeGk7Cgf9Bvy9uZ96XA$tGbYTPphHM7IzS8VqHAFisL79rB7hf1r924CebNcPW4');
 INSERT OR IGNORE INTO orgs (id, name, slug, plan) VALUES ('org-demo','Syndicus Vermeulen bv','syndicus-vermeulen','pro');
 INSERT OR IGNORE INTO org_members (org_id, user_id, role) VALUES ('org-demo','u-syndicus','owner');
 INSERT OR IGNORE INTO buildings (id, org_id, name, address, city, postal_code, enterprise_number, total_shares) VALUES

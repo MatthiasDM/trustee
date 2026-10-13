@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { B, Client, as, uniq } from "./client";
+import { B, BASE, Client, as, uniq } from "./client";
 
 describe("Beveiliging: rate limiting, uploads, sessies", () => {
   it("blokkeert na 10 foute logins op hetzelfde account, andere accounts blijven werken", async () => {
@@ -41,7 +41,7 @@ describe("Beveiliging: rate limiting, uploads, sessies", () => {
     expect((await s.post(`/api/buildings/${B}/mandates`, { organ: "raad", user_id: "u-lotte", start_date: "2026-01-01", end_date: "2027-01-01" })).status).toBe(400);
   });
   it("cron draait zonder fouten en registreert zijn status (enkel in de testomgeving aanroepbaar)", async () => {
-    const r = await fetch("http://127.0.0.1:5199/api/admin/run-cron", { method: "POST" }); expect(r.status).toBe(200);
+    const r = await fetch(`${BASE}/api/admin/run-cron`, { method: "POST" }); expect(r.status).toBe(200);
     const log = await r.json(); expect(log.ok).toBe(true);
     const s = await as("syndicus"); const b = await s.get(`/api/buildings/${B}/backups`); expect(b.data.last_cron?.ok).toBe(true);
   });

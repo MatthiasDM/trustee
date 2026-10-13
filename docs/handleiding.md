@@ -34,6 +34,7 @@ Het dashboard opent met de **organen van de VME**: de volgende algemene vergader
 ## Stemmingen
 
 - Stemmingen zijn standaard **gewogen volgens je aandelen** (quotiteiten) en enkel voor mede-eigenaars. Peilingen kunnen ook ongewogen en niet-bindend zijn.
+- Bij een stemming horen de **stukken waarover gestemd wordt**: de syndicus of de raad koppelt offertes, verslagen of andere documenten (bestaand uit *Documenten* of nieuw geüpload) en je opent ze rechtstreeks vanuit de stemming. Zo hoeft niemand meer "zie map Offertes" te schrijven.
 - Je ziet de vereiste meerderheid en, zodra je gestemd hebt of de stemming gesloten is, het resultaat met "gehaald / niet gehaald".
 - Je kan je stem wijzigen zolang de stemming open is.
 
@@ -103,11 +104,17 @@ Huurders en andere bewoners zijn geen lid van de VME en stemmen niet, maar mogen
 
 ## Rollen en rechten
 
+**Wie is mede-eigenaar?** Trustee leidt dat af uit de kavels: wie onder *Mede-eigenaars & organen › Kavels* als eigenaar van een kavel staat, is mede-eigenaar en stemgerechtigd, ongeacht zijn rol. Een professionele syndicus of een externe commissaris zonder kavel is dus géén mede-eigenaar: hij kan niet stemmen, geen aanwezigheid melden of volmacht geven, geen agendapunt "indienen" (de syndicus agendeert zelf) en geen AV eisen. Bezit de syndicus of commissaris wél een kavel, dan heeft hij daarvoor dezelfde rechten als elke andere mede-eigenaar; alleen volmachten dragen blijft voor de syndicus uitgesloten. Leden met rol *eigenaar* of *raad* gelden ook als mede-eigenaar zolang hun kavel nog niet gekoppeld is, maar wegen pas mee in gewogen stemmingen zodra dat gebeurd is.
+
+
 | | Mede-eigenaar | Huurder | Raad | Commissaris | Syndicus |
 |---|---|---|---|---|---|
 | Stemmen (gewogen) | ✔ | – | ✔ | ✔ als mede-eigenaar | ✔ als mede-eigenaar |
-| Agendapunt indienen | ✔ | – | ✔ | ✔ | ✔ |
-| Agenderen, stemming openen | – | – | ✔ | – | ✔ |
+| Aanwezigheid melden, volmacht geven | ✔ | – | ✔ | ✔ als mede-eigenaar | – (woont de AV ambtshalve bij) |
+| Volmacht dragen | ✔ | – | ✔ | ✔ als mede-eigenaar | nooit |
+| Agendapunt indienen | ✔ | – | ✔ | ✔ als mede-eigenaar | agendeert zelf |
+| AV eisen (1/5), mee ondertekenen | ✔ | – | ✔ | ✔ als mede-eigenaar | – |
+| Agenderen, stemming openen, documenten aan een stemming koppelen | – | – | ✔ | – | ✔ |
 | Vragen en meldingen | ✔ | ✔ | ✔ | ✔ | ✔ |
 | Mededeling plaatsen | – | – | ✔ | – | ✔ |
 | Documenten zien | iedereen / eigenaars | iedereen | alles | alles | alles |

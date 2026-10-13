@@ -38,3 +38,12 @@ test("syndicus agendeert het punt, registreert de stemming en genereert notulen"
   await nd.getByRole("button", { name: "Ontwerp bewaren" }).click();
   await expect(page.getByText("Ontwerp bewaard")).toBeVisible();
 });
+
+test("syndicus zonder kavel ziet geen aanwezigheids- of volmachtknoppen, wel 'Punt agenderen'", async ({ page }) => {
+  await login(page, "syndicus@demo.be");
+  await page.goto("/b/b-zeezicht/meetings");
+  await expect(page.getByRole("button", { name: "Punt agenderen" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Agendapunt indienen" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Volmacht" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Verzoek starten" })).toHaveCount(0);
+});

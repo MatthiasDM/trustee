@@ -74,7 +74,7 @@ buildings.get("/:buildingId", requireBuilding(), async (c) => {
             (SELECT COUNT(*) FROM polls WHERE building_id = ?1 AND status = 'open') AS open_polls,
             (SELECT COUNT(*) FROM meetings WHERE building_id = ?1 AND starts_at > strftime('%Y-%m-%dT%H:%M:%fZ','now')) AS upcoming_meetings`
   ).bind(b.id).first();
-  return c.json({ ...row, role: b.role, stats });
+  return c.json({ ...row, role: b.role, units_owned: b.units, stats });
 });
 
 buildings.patch("/:buildingId", requireBuilding("syndicus"), async (c) => {

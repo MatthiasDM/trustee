@@ -13,7 +13,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { api, fmtDate } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { MAJORITY_LABELS, type AgendaItem } from "../../shared/types";
+import { MAJORITY_LABELS, type AgendaItem, type PollDocument } from "../../shared/types";
+import { DocumentRefs } from "./DocumentRefs";
 
 const STATUS: Record<string, { label: string; variant: any }> = { proposed: { label: "Voorgesteld", variant: "info" }, scheduled: { label: "Geagendeerd", variant: "secondary" }, decided: { label: "Beslist", variant: "success" }, deferred: { label: "Uitgesteld", variant: "warning" }, withdrawn: { label: "Ingetrokken", variant: "outline" } };
 
@@ -34,7 +35,7 @@ export function AgendaSection({ meetings }: { meetings: { id: string; title: str
     <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
       <div><h2 className="flex items-center gap-2 font-semibold"><Gavel className="size-4 text-primary" />Agendapunten voor de algemene vergadering</h2>
         <p className="text-sm text-muted-foreground">Elke mede-eigenaar kan punten indienen. De syndicus moet ze agenderen (art. 3.87 §3 BW).{data.deadline && <> Indienen voor de gewone AV tot <strong>{fmtDate(data.deadline)}</strong> (3 weken vóór de AV-periode die start op {fmtDate(data.periodStart)}); latere voorstellen schuiven door naar de volgende AV.</>}</p></div>
-      {b.isOwner && <Button onClick={() => setPropose(true)}><ListPlus />Agendapunt indienen</Button>}
+      {(b.isOwner || b.isManager || b.role === "raad") && <Button onClick={() => setPropose(true)}><ListPlus />{b.isOwner ? "Agendapunt indienen" : "Punt agenderen"}</Button>}
     </div>
     {proposed.length > 0 && <div className="mb-4"><h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Voorgesteld, nog te agenderen ({proposed.length})</h3>
       <ul className="divide-y rounded-lg border">{proposed.map((i) => <li key={i.id} className="flex flex-wrap items-center gap-2 px-3 py-2.5 text-sm">
@@ -93,9 +94,11 @@ function ProposeForm({ onDone }: { onDone: () => void }) {
 function PollFromItemForm({ item, onDone }: { item: AgendaItem; onDone: () => void }) {
   const b = useBuilding();
   const [options, setOptions] = useState("Voor\nTegen\nOnthouding"); const [closes, setCloses] = useState(""); const [error, setError] = useState<unknown>(null);
-  return <form className="grid gap-4" onSubmit={async (e: FormEvent) => { e.preventDefault(); setError(null); try { await api.post(`/api/buildings/${b.id}/agenda/${item.id}/poll`, { options: options.split("\n").map((s) => s.trim()).filter(Boolean), closes_at: closes ? new Date(closes).toISOString() : null }); toast.success("Stemming geopend"); onDone(); } catch (err) { setError(err); } }}>
+  const [docIds, setDocIds] = useState<string[]>([]); const [docs, setDocs] = useState<PollDocument[]>([]);
+  return <form className="grid gap-4" onSubmit={async (e: FormEvent) => { e.preventDefault(); setError(null); try { await api.post(`/api/buildings/${b.id}/agenda/${item.id}/poll`, { options: options.split("\n").map((s) => s.trim()).filter(Boolean), closes_at: closes ? new Date(closes).toISOString() : null, document_ids: docIds }); toast.success("Stemming geopend"); onDone(); } catch (err) { setError(err); } }}>
     <Field label="Opties (één per lijn)"><Textarea value={options} onChange={(e) => setOptions(e.target.value)} /></Field>
     <Field label="Sluit op (optioneel)"><Input type="datetime-local" value={closes} onChange={(e) => setCloses(e.target.value)} /></Field>
+    <Field label="Documenten bij deze stemming" hint="Bv. de offertes waarover gestemd wordt."><DocumentRefs value={docIds} docs={docs} onChange={(ids, ds) => { setDocIds(ids); setDocs(ds); }} /></Field>
     <ErrorBox error={error} /><DialogFooter><Button>Stemming openen</Button></DialogFooter>
   </form>;
 }

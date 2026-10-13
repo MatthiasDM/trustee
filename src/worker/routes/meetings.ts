@@ -4,7 +4,7 @@ import type { AppEnv } from "../env";
 import { requireAuth, requireBuilding } from "../lib/auth";
 import { HttpError, patchOf, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
-import { isBoard, isOwner } from "../lib/auth";
+import { isBoard, isCoOwner } from "../lib/auth";
 import { attendance, majorityReached, MAJ, renderMinutesHtml, validateProxy } from "../lib/meeting";
 
 const meetings = new Hono<AppEnv>();
@@ -75,6 +75,7 @@ meetings.put("/:buildingId/meetings/:meetingId/rsvp", requireBuilding(), async (
   const { status, proxy_user_id } = z.object({ status: z.enum(["attending", "proxy", "absent"]), proxy_user_id: z.string().nullable().optional() }).parse(await c.req.json());
   const m = await c.env.DB.prepare("SELECT id FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first();
   if (!m) throw new HttpError(404, "Vergadering niet gevonden");
+  if (!isCoOwner(b)) throw new HttpError(403, "Enkel mede-eigenaars melden hun aanwezigheid of geven een volmacht; de syndicus woont de AV ambtshalve bij");
   if (status === "proxy") { if (!proxy_user_id) throw new HttpError(400, "Kies wie je volmacht krijgt"); await validateProxy(c.env, b.id, c.req.param("meetingId"), user.id, proxy_user_id); }
   await c.env.DB.prepare("INSERT INTO meeting_rsvps (meeting_id, user_id, status, proxy_user_id, updated_at) VALUES (?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(meeting_id, user_id) DO UPDATE SET status = excluded.status, proxy_user_id = excluded.proxy_user_id, updated_at = excluded.updated_at")
     .bind(c.req.param("meetingId"), user.id, status, status === "proxy" ? proxy_user_id ?? null : null).run();
@@ -95,10 +96,10 @@ meetings.get("/:buildingId/meetings/:meetingId/attendance", requireBuilding(), a
   return c.json(isBoard(b.role) ? a : { quorum: a.quorum, rows: [] });
 });
 
-/** Stemgerechtigde leden (voor volmachten): mede-eigenaars, niet de syndicus, niet huurders. */
+/** Stemgerechtigde leden (voor volmachten): mede-eigenaars (kavelbezitters), nooit de syndicus, geen huurders. */
 meetings.get("/:buildingId/meetings/:meetingId/proxy-candidates", requireBuilding(), async (c) => {
   const b = c.get("building"); const user = c.get("user");
-  const rows = (await c.env.DB.prepare("SELECT bm.user_id, u.name, (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = ? AND r.status = 'proxy' AND r.proxy_user_id = bm.user_id) AS proxies FROM building_members bm JOIN users u ON u.id = bm.user_id WHERE bm.building_id = ? AND bm.role NOT IN ('syndicus','huurder') AND bm.user_id != ? ORDER BY u.name").bind(c.req.param("meetingId"), b.id, user.id).all()).results;
+  const rows = (await c.env.DB.prepare("SELECT bm.user_id, u.name, (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = ? AND r.status = 'proxy' AND r.proxy_user_id = bm.user_id) AS proxies FROM building_members bm JOIN users u ON u.id = bm.user_id WHERE bm.building_id = ? AND bm.role NOT IN ('syndicus','huurder') AND bm.user_id != ? AND (bm.role IN ('eigenaar','raad') OR EXISTS (SELECT 1 FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = bm.building_id AND uo.user_id = bm.user_id)) ORDER BY u.name").bind(c.req.param("meetingId"), b.id, user.id).all()).results;
   return c.json(rows);
 });
 
@@ -197,7 +198,7 @@ meetings.get("/:buildingId/meeting-requests", requireBuilding(), async (c) => {
 });
 meetings.post("/:buildingId/meeting-requests", requireBuilding(), async (c) => {
   const b = c.get("building"); const user = c.get("user");
-  if (!isOwner(b.role)) throw new HttpError(403, "Enkel mede-eigenaars kunnen een vergadering vragen");
+  if (!isCoOwner(b)) throw new HttpError(403, "Enkel mede-eigenaars kunnen een vergadering vragen");
   const { subject, body } = z.object({ subject: z.string().min(3).max(200), body: z.string().max(5000).optional() }).parse(await c.req.json());
   const id = uid();
   await c.env.DB.batch([c.env.DB.prepare("INSERT INTO meeting_requests (id, building_id, subject, body, created_by) VALUES (?,?,?,?,?)").bind(id, b.id, subject, body ?? null, user.id), c.env.DB.prepare("INSERT INTO meeting_request_signatures (request_id, user_id) VALUES (?,?)").bind(id, user.id)]);
@@ -206,7 +207,7 @@ meetings.post("/:buildingId/meeting-requests", requireBuilding(), async (c) => {
 });
 meetings.post("/:buildingId/meeting-requests/:id/sign", requireBuilding(), async (c) => {
   const b = c.get("building"); const user = c.get("user");
-  if (!isOwner(b.role)) throw new HttpError(403, "Enkel mede-eigenaars kunnen ondertekenen");
+  if (!isCoOwner(b)) throw new HttpError(403, "Enkel mede-eigenaars kunnen ondertekenen");
   const req = await c.env.DB.prepare("SELECT * FROM meeting_requests WHERE id = ? AND building_id = ?").bind(c.req.param("id"), b.id).first<any>();
   if (!req || req.status === "cancelled" || req.status === "fulfilled") throw new HttpError(400, "Dit verzoek is niet meer open");
   await c.env.DB.prepare("INSERT OR IGNORE INTO meeting_request_signatures (request_id, user_id) VALUES (?,?)").bind(req.id, user.id).run();

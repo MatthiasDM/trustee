@@ -1,9 +1,10 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
-import { isBoard, isManager, isOwner, requireAuth, requireBuilding } from "../lib/auth";
+import { isBoard, isCoOwner, requireAuth, requireBuilding } from "../lib/auth";
 import { HttpError, now, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
+import { documentVisibility } from "./documents";
 
 const polls = new Hono<AppEnv>();
 polls.use("*", requireAuth);
@@ -12,6 +13,26 @@ polls.use("*", requireAuth);
 async function voteWeight(db: D1Database, buildingId: string, userId: string): Promise<number> {
   const r = await db.prepare("SELECT COALESCE(SUM(un.shares * uo.share_pct / 100.0), 0) AS w FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = ? AND uo.user_id = ?").bind(buildingId, userId).first<{ w: number }>();
   return r?.w ?? 0;
+}
+
+/** Gekoppelde documenten (referenties) van een stemming, gefilterd op wat deze gebruiker mag zien. */
+async function pollDocuments(c: Context<AppEnv>, pollId: string) {
+  const b = c.get("building"); const user = c.get("user");
+  return (await c.env.DB.prepare(`SELECT d.id, d.name, d.category, d.size, d.mime FROM poll_documents pd JOIN documents d ON d.id = pd.document_id WHERE pd.poll_id = ? AND ${documentVisibility(b.role, user.id, "d")} ORDER BY pd.position`).bind(pollId).all()).results;
+}
+
+/** Controleert dat documenten tot het gebouw horen en vervangt de koppelingen van een stemming. */
+async function setPollDocuments(c: Context<AppEnv>, pollId: string, ids: string[]) {
+  const b = c.get("building");
+  const unique = [...new Set(ids)];
+  if (unique.length) {
+    const found = (await c.env.DB.prepare(`SELECT id FROM documents WHERE building_id = ? AND id IN (${unique.map(() => "?").join(",")})`).bind(b.id, ...unique).all<{ id: string }>()).results.map((r) => r.id);
+    if (found.length !== unique.length) throw new HttpError(400, "Een gekoppeld document bestaat niet in dit gebouw");
+  }
+  await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM poll_documents WHERE poll_id = ?").bind(pollId),
+    ...unique.map((d, i) => c.env.DB.prepare("INSERT INTO poll_documents (poll_id, document_id, position) VALUES (?,?,?)").bind(pollId, d, i)),
+  ]);
 }
 
 async function pollWithResults(c: Context<AppEnv>, pollId: string) {
@@ -32,7 +53,7 @@ async function pollWithResults(c: Context<AppEnv>, pollId: string) {
   const voterIds = new Set(votes.map((v) => v.user_id));
   const totalWeight = [...voterIds].reduce((s, id) => s + (votes.find((v) => v.user_id === id)?.weight ?? 0), 0);
   const eligible = poll.owners_only
-    ? await c.env.DB.prepare("SELECT COUNT(DISTINCT bm.user_id) AS n, COALESCE((SELECT SUM(shares) FROM units WHERE building_id = ?1 AND id IN (SELECT unit_id FROM unit_owners)),0) AS w FROM building_members bm WHERE bm.building_id = ?1 AND bm.role != 'huurder'").bind(b.id).first<any>()
+    ? await c.env.DB.prepare("SELECT (SELECT COUNT(DISTINCT uo.user_id) FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = ?1) AS n, COALESCE((SELECT SUM(shares) FROM units WHERE building_id = ?1 AND id IN (SELECT unit_id FROM unit_owners)),0) AS w").bind(b.id).first<any>()
     : await c.env.DB.prepare("SELECT COUNT(*) AS n, COUNT(*) AS w FROM building_members WHERE building_id = ?").bind(b.id).first<any>();
   return {
     ...poll,
@@ -43,7 +64,8 @@ async function pollWithResults(c: Context<AppEnv>, pollId: string) {
     total_weight: totalWeight,
     eligible_voters: eligible?.n ?? 0,
     eligible_weight: poll.weighted ? (eligible?.w ?? b.total_shares) : (eligible?.n ?? 0),
-    can_vote: !closed && poll.status === "open" && (!poll.owners_only || isOwner(b.role)),
+    can_vote: !closed && poll.status === "open" && (!poll.owners_only || isCoOwner(b)) && (!poll.weighted || b.units > 0),
+    documents: await pollDocuments(c, pollId),
     written_progress: poll.written ? await (async () => { const owners = (await c.env.DB.prepare("SELECT DISTINCT uo.user_id FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = ?").bind(b.id).all()).results.map((r: any) => r.user_id); return { total: owners.length, agreed: owners.filter((o: string) => votes.some((v) => v.user_id === o && options[0] && v.option_id === options[0].id)).length, disagreed: owners.filter((o: string) => votes.some((v) => v.user_id === o && options[1] && v.option_id === options[1].id)).length }; })() : null,
   };
 }
@@ -74,6 +96,7 @@ const pollSchema = z.object({
   closes_at: z.string().datetime().optional().nullable(),
   status: z.enum(["draft", "open"]).default("open"),
   written: z.boolean().default(false), // schriftelijke besluitvorming art. 3.87 §11: eenparigheid van alle mede-eigenaars
+  document_ids: z.array(z.string()).max(20).default([]), // referenties naar stukken in Documenten (offertes, verslagen, ...)
 });
 
 polls.post("/:buildingId/polls", requireBuilding("syndicus", "raad"), async (c) => {
@@ -87,6 +110,7 @@ polls.post("/:buildingId/polls", requireBuilding("syndicus", "raad"), async (c) 
       .bind(id, b.id, user.id, body.title, body.description ?? null, +body.weighted, +body.anonymous, +body.multiple, +body.owners_only, body.required_majority, body.closes_at ?? null, body.status, +body.written),
     ...body.options.map((label, i) => c.env.DB.prepare("INSERT INTO poll_options (id, poll_id, label, position) VALUES (?,?,?,?)").bind(uid(), id, label, i)),
   ]);
+  if (body.document_ids.length) await setPollDocuments(c, id, body.document_ids);
   await audit(c.env, b.id, user.id, "poll.create", "poll", id, { title: body.title });
   if (body.status === "open") {
     await notifyBuilding(c.env, { buildingId: b.id, type: "poll", title: `Nieuwe stemming: ${body.title}`, body: body.closes_at ? `Stemmen kan tot ${new Date(body.closes_at).toLocaleString("nl-BE", { timeZone: "Europe/Brussels" })}.` : "Breng nu je stem uit.", link: `/b/${b.id}/polls/${id}`, roles: body.owners_only ? ["syndicus", "raad", "eigenaar", "commissaris"] : undefined, excludeUserId: user.id });
@@ -98,10 +122,12 @@ polls.get("/:buildingId/polls/:pollId", requireBuilding(), async (c) => c.json(a
 
 polls.patch("/:buildingId/polls/:pollId", requireBuilding("syndicus", "raad"), async (c) => {
   const b = c.get("building");
-  const body = z.object({ status: z.enum(["draft", "open", "closed"]).optional(), closes_at: z.string().datetime().nullable().optional(), title: z.string().min(3).max(200).optional(), description: z.string().max(10000).nullable().optional() }).parse(await c.req.json());
+  const body = z.object({ status: z.enum(["draft", "open", "closed"]).optional(), closes_at: z.string().datetime().nullable().optional(), title: z.string().min(3).max(200).optional(), description: z.string().max(10000).nullable().optional(), document_ids: z.array(z.string()).max(20).optional() }).parse(await c.req.json());
   const poll = await c.env.DB.prepare("SELECT * FROM polls WHERE id = ? AND building_id = ?").bind(c.req.param("pollId"), b.id).first<any>();
   if (!poll) throw new HttpError(404, "Stemming niet gevonden");
-  const fields = Object.entries(body).filter(([, v]) => v !== undefined);
+  const { document_ids, ...rest } = body;
+  if (document_ids) await setPollDocuments(c, poll.id, document_ids);
+  const fields = Object.entries(rest).filter(([, v]) => v !== undefined);
   if (fields.length) await c.env.DB.prepare(`UPDATE polls SET ${fields.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ?`).bind(...fields.map(([, v]) => v), poll.id).run();
   if (body.status === "open" && poll.status === "draft") {
     await notifyBuilding(c.env, { buildingId: b.id, type: "poll", title: `Nieuwe stemming: ${body.title ?? poll.title}`, body: "Breng nu je stem uit.", link: `/b/${b.id}/polls/${poll.id}`, excludeUserId: c.get("user").id });
@@ -124,14 +150,14 @@ polls.post("/:buildingId/polls/:pollId/vote", requireBuilding(), async (c) => {
   const poll = await c.env.DB.prepare("SELECT * FROM polls WHERE id = ? AND building_id = ?").bind(c.req.param("pollId"), b.id).first<any>();
   if (!poll) throw new HttpError(404, "Stemming niet gevonden");
   if (poll.status !== "open" || (poll.closes_at && poll.closes_at < now())) throw new HttpError(400, "Deze stemming is gesloten");
-  if (poll.owners_only && !isOwner(b.role)) throw new HttpError(403, "Enkel mede-eigenaars mogen stemmen");
+  if (poll.owners_only && !isCoOwner(b)) throw new HttpError(403, "Enkel mede-eigenaars mogen stemmen");
   if (!poll.multiple && option_ids.length > 1) throw new HttpError(400, "Slechts één keuze toegestaan");
   const valid = (await c.env.DB.prepare("SELECT id FROM poll_options WHERE poll_id = ?").bind(poll.id).all<{ id: string }>()).results.map((o) => o.id);
   if (option_ids.some((o) => !valid.includes(o))) throw new HttpError(400, "Ongeldige optie");
   let weight = 1;
   if (poll.weighted) {
     weight = await voteWeight(c.env.DB, b.id, user.id);
-    if (weight <= 0 && !isManager(b.role)) throw new HttpError(403, "Je hebt geen kavels (quotiteiten) in dit gebouw en kan niet gewogen stemmen");
+    if (weight <= 0) throw new HttpError(403, "Je hebt geen kavels (quotiteiten) in dit gebouw en kan niet gewogen stemmen");
   }
   await c.env.DB.batch([
     c.env.DB.prepare("DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?").bind(poll.id, user.id),

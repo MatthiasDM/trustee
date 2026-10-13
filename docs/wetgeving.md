@@ -118,6 +118,16 @@ Wat een individuele mede-eigenaar **niet** kan: de syndicus instructies geven bu
 - Bij het afsluiten van het boekjaar wordt de jaarrekening (balans, resultatenrekening, kas en kapitaal, afrekening per kavel) als PDF bewaard; samen met het verslag van de commissaris vormt ze de basis voor de goedkeuring van de rekeningen en de kwijting door de AV.
 - Betalingsopvolging: herinnering, aanmaning en ingebrekestelling. Aanmaningskosten mogen enkel aangerekend worden als het reglement van interne orde dat voorziet; de kosten van gerechtelijke invordering vallen ten laste van de in gebreke blijvende mede-eigenaar (art. 3.89 en de rechtspraak daarover).
 
+## Wie geldt in Trustee als mede-eigenaar
+
+De wet kent rechten toe aan de *mede-eigenaar* (titularis van een zakelijk recht op een kavel), niet aan een functie. Trustee leidt de hoedanigheid van mede-eigenaar daarom af uit het kavelregister (`unit_owners`), niet uit de rol in het gebouw:
+
+- **Mede-eigenaar** = iemand die eigenaar is van minstens één kavel in het gebouw. Leden met rol *eigenaar* of *raad* gelden ook zonder gekoppelde kavel als mede-eigenaar (raadsleden zijn per definitie mede-eigenaars, art. 3.90 §1), maar hebben pas stemgewicht zodra een kavel gekoppeld is.
+- **Syndicus en commissaris** zijn functies. Zonder kavel zijn zij geen mede-eigenaar: geen stemrecht, geen aanwezigheidsmelding of volmacht, geen agendapunt "indienen" (de syndicus agendeert zelf, art. 3.87 §3), geen verzoek tot AV (art. 3.87 §2). Met kavel hebben zij die rechten wel, behalve dat de syndicus nooit een volmacht mag dragen (art. 3.87 §7).
+- **Huurders** zijn nooit mede-eigenaar.
+
+Code: `isCoOwner()` in `src/worker/lib/auth.ts`; `isOwner()` blijft enkel de leesfilter voor stukken "enkel eigenaars".
+
 ## Termijnen en limieten die Trustee afdwingt
 
 | Regel | Waar in Trustee |

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Check, CheckCircle2, Download, Plus, Trash2, Vote, X, XCircle } from "lucide-react";
+import { ArrowLeft, Check, CheckCircle2, Download, Paperclip, Plus, Trash2, Vote, X, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useBuilding, useFetch } from "../components/Layout";
 import { Empty, ErrorBox, Field, PageHeader, Spinner, StatusBadge } from "../components/ui";
@@ -13,7 +13,8 @@ import { Separator } from "../components/ui/separator";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { api, fmtDateTime } from "../lib/api";
-import { MAJORITY_LABELS, type Poll } from "../../shared/types";
+import { MAJORITY_LABELS, type Poll, type PollDocument } from "../../shared/types";
+import { DocumentRefList, DocumentRefs } from "../components/DocumentRefs";
 import { cn } from "@/lib/utils";
 import { useT } from "../lib/i18n";
 
@@ -38,10 +39,11 @@ function NewPollModal({ onClose, onDone }: { onClose: () => void; onDone: (id: s
   const b = useBuilding();
   const [f, setF] = useState({ title: "", description: "", weighted: true, anonymous: false, multiple: false, owners_only: true, required_majority: "simple", closes_at: "", status: "open", written: false });
   const [options, setOptions] = useState(["Ja", "Nee", "Onthouding"]);
+  const [docIds, setDocIds] = useState<string[]>([]); const [docs, setDocs] = useState<PollDocument[]>([]);
   const [error, setError] = useState<unknown>(null); const [busy, setBusy] = useState(false);
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setBusy(true); setError(null);
-    try { const r = await api.post<{ id: string }>(`/api/buildings/${b.id}/polls`, { ...f, options: options.filter((o) => o.trim()), closes_at: f.closes_at ? new Date(f.closes_at).toISOString() : null }); onDone(r.id); } catch (err) { setError(err); } finally { setBusy(false); }
+    try { const r = await api.post<{ id: string }>(`/api/buildings/${b.id}/polls`, { ...f, options: options.filter((o) => o.trim()), document_ids: docIds, closes_at: f.closes_at ? new Date(f.closes_at).toISOString() : null }); onDone(r.id); } catch (err) { setError(err); } finally { setBusy(false); }
   };
   const Check_ = ({ k, label }: { k: "weighted" | "anonymous" | "multiple" | "owners_only"; label: string }) => <label className="flex items-center gap-2 py-1 text-sm"><Checkbox checked={f[k]} onCheckedChange={(v) => setF({ ...f, [k]: !!v })} />{label}</label>;
   return <Dialog open onOpenChange={(o) => !o && onClose()}><DialogContent className="sm:max-w-2xl">
@@ -49,6 +51,7 @@ function NewPollModal({ onClose, onDone }: { onClose: () => void; onDone: (id: s
     <form onSubmit={submit} className="grid gap-4">
       <Field label="Onderwerp / agendapunt"><Input required value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="bv. Goedkeuring offerte dakrenovatie (€ 48.500)" /></Field>
       <Field label="Toelichting"><Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
+      <Field label="Documenten bij deze stemming" hint="Offertes, verslagen of andere stukken waarover gestemd wordt; stemmers openen ze rechtstreeks vanuit de stemming."><DocumentRefs value={docIds} docs={docs} onChange={(ids, ds) => { setDocIds(ids); setDocs(ds); }} /></Field>
       <label className="flex items-start gap-2 rounded-lg border bg-muted/30 p-3 text-sm"><Checkbox checked={f.written} onCheckedChange={(v) => setF({ ...f, written: !!v })} /><span><span className="font-medium">Schriftelijke besluitvorming</span> (art. 3.87 §11 BW): besluit zonder vergadering, enkel geldig als <strong>alle</strong> mede-eigenaars "Akkoord" stemmen. Eén "Niet akkoord" verwerpt het; het punt kan dan op een AV. Opties en meerderheid worden vastgelegd.</span></label>
       {!f.written && <Field label="Opties"><div className="grid gap-2">{options.map((o, i) => <div key={i} className="flex gap-2"><Input value={o} onChange={(e) => setOptions(options.map((x, j) => j === i ? e.target.value : x))} />{options.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => setOptions(options.filter((_, j) => j !== i))}><X /></Button>}</div>)}<Button type="button" variant="outline" size="sm" className="w-fit" onClick={() => setOptions([...options, ""])}><Plus />Optie</Button></div></Field>}
       {!f.written && <div className="grid gap-4 sm:grid-cols-2">
@@ -69,6 +72,7 @@ export function PollDetailPage() {
   const nav = useNavigate();
   const { data: p, loading, reload, setData } = useFetch<Poll & { can_vote: boolean }>(`/api/buildings/${b.id}/polls/${pollId}`);
   const [sel, setSel] = useState<string[]>([]); const [error, setError] = useState<unknown>(null);
+  const [editDocs, setEditDocs] = useState<{ ids: string[]; docs: PollDocument[] } | null>(null);
   if (loading || !p) return <Spinner />;
   const voted = (p.my_votes ?? []).length > 0;
   const showResults = p.options?.some((o) => o.votes !== undefined);
@@ -85,6 +89,11 @@ export function PollDetailPage() {
       <div className="flex items-start justify-between gap-3"><h1 className="text-xl font-semibold tracking-tight">{p.title}</h1><StatusBadge status={p.status} /></div>
       <div className="mt-1.5 text-xs text-muted-foreground">{p.weighted ? "Gewogen volgens quotiteiten" : "1 stem per persoon"} · {MAJORITY_LABELS[p.required_majority]} · {p.anonymous ? "anoniem" : "namen zichtbaar"} · door {p.created_by_name}{p.closes_at ? ` · sluit ${fmtDateTime(p.closes_at)}` : ""}</div>
       {p.description && <p className="mt-4 text-sm leading-relaxed whitespace-pre-wrap">{p.description}</p>}
+      {((p.documents?.length ?? 0) > 0 || (b.isBoard && p.status !== "closed")) && <div className="mt-4 rounded-lg border bg-muted/30 p-3">
+        <div className="mb-1.5 flex items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-sm font-medium"><Paperclip className="size-4 text-muted-foreground" />Documenten bij deze stemming</div>{b.isBoard && p.status !== "closed" && !editDocs && <Button size="sm" variant="ghost" onClick={() => setEditDocs({ ids: (p.documents ?? []).map((d) => d.id), docs: p.documents ?? [] })}>Wijzigen</Button>}</div>
+        {editDocs ? <div className="grid gap-2"><DocumentRefs value={editDocs.ids} docs={editDocs.docs} onChange={(ids, docs) => setEditDocs({ ids, docs })} /><div className="flex gap-2"><Button size="sm" onClick={async () => { await api.patch(`/api/buildings/${b.id}/polls/${p.id}`, { document_ids: editDocs.ids }); setEditDocs(null); reload(); toast.success("Documenten bijgewerkt"); }}>Opslaan</Button><Button size="sm" variant="outline" onClick={() => setEditDocs(null)}>Annuleren</Button></div></div>
+          : p.documents?.length ? <DocumentRefList docs={p.documents} /> : <p className="text-sm text-muted-foreground">Nog geen documenten gekoppeld.</p>}
+      </div>}
       {(p as any).written === 1 && (p as any).written_progress && <div className={`mt-4 rounded-lg border p-3 text-sm ${(p as any).outcome === "adopted" ? "border-emerald-300 bg-emerald-50/50 dark:bg-emerald-950/20" : (p as any).outcome === "rejected" ? "border-red-300 bg-red-50/50 dark:bg-red-950/20" : "bg-muted/30"}`}><div className="font-medium">Schriftelijke besluitvorming (art. 3.87 §11)</div><div className="text-muted-foreground">{(p as any).written_progress.agreed} van {(p as any).written_progress.total} mede-eigenaars akkoord{(p as any).written_progress.disagreed ? `, ${(p as any).written_progress.disagreed} niet akkoord` : ""}. {(p as any).outcome === "adopted" ? "Eenparig aangenomen: het besluit is genomen zonder vergadering en staat bij de beslissingen." : (p as any).outcome === "rejected" ? "Verworpen: niet alle mede-eigenaars gaan akkoord; agendeer het punt op een AV." : "Geldig zodra iedereen akkoord is."}</div></div>}
 
       <div className="mt-6 grid gap-2">{p.options?.map((o) => {

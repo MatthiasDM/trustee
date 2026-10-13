@@ -97,7 +97,7 @@ export function useBuilding() {
   const { buildingId } = useParams();
   const { buildings } = useAuth();
   const b = buildings.find((x) => x.id === buildingId);
-  return { id: buildingId!, role: b?.role ?? "eigenaar", name: b?.name ?? "", isManager: b?.role === "syndicus", isBoard: b?.role === "syndicus" || b?.role === "raad" || b?.role === "commissaris", isOwner: b?.role !== "huurder" };
+  return { id: buildingId!, role: b?.role ?? "eigenaar", name: b?.name ?? "", isManager: b?.role === "syndicus", isBoard: b?.role === "syndicus" || b?.role === "raad" || b?.role === "commissaris", isOwner: (b?.units ?? 0) > 0 || b?.role === "eigenaar" || b?.role === "raad" || !b };
 }
 
 export function useFetch<T>(url: string | null, deps: unknown[] = []) {

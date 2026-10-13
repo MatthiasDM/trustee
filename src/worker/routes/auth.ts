@@ -58,11 +58,12 @@ auth.get("/me", async (c) => {
   if (!user) return c.json({ user: null });
   const orgs = await c.env.DB.prepare("SELECT o.id, o.name, o.plan, om.role FROM org_members om JOIN orgs o ON o.id = om.org_id WHERE om.user_id = ?").bind(user.id).all();
   const buildings = await c.env.DB.prepare(
-    `SELECT b.id, b.name, b.address, b.city, b.org_id, o.name AS org_name, bm.role
+    `SELECT b.id, b.name, b.address, b.city, b.org_id, o.name AS org_name, bm.role,
+            (SELECT COUNT(*) FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = b.id AND uo.user_id = ?1) AS units
      FROM building_members bm JOIN buildings b ON b.id = bm.building_id JOIN orgs o ON o.id = b.org_id
      WHERE bm.user_id = ?1
      UNION
-     SELECT b.id, b.name, b.address, b.city, b.org_id, o.name AS org_name, 'syndicus' AS role
+     SELECT b.id, b.name, b.address, b.city, b.org_id, o.name AS org_name, 'syndicus' AS role, 0 AS units
      FROM org_members om JOIN buildings b ON b.org_id = om.org_id JOIN orgs o ON o.id = b.org_id
      WHERE om.user_id = ?1 AND b.id NOT IN (SELECT building_id FROM building_members WHERE user_id = ?1)
      ORDER BY 2`

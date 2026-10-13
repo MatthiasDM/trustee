@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
-import { isBoard, isOwner, requireAuth, requireBuilding } from "../lib/auth";
+import { isBoard, isCoOwner, requireAuth, requireBuilding } from "../lib/auth";
 import { HttpError, now, patchOf, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 
@@ -45,7 +45,7 @@ const itemSchema = z.object({
 /** Elke mede-eigenaar kan een agendapunt indienen (art. 3.87 §3). */
 agenda.post("/:buildingId/agenda", requireBuilding(), async (c) => {
   const b = c.get("building"); const user = c.get("user");
-  if (!isOwner(b.role)) throw new HttpError(403, "Enkel mede-eigenaars kunnen agendapunten indienen");
+  if (!isCoOwner(b) && !["syndicus", "raad"].includes(b.role)) throw new HttpError(403, "Enkel mede-eigenaars kunnen agendapunten indienen; de syndicus en de raad agenderen zelf");
   const body = itemSchema.parse(await c.req.json());
   const id = uid();
   const scheduled = !!body.meeting_id && isBoard(b.role);
@@ -92,7 +92,7 @@ agenda.post("/:buildingId/agenda/:itemId/poll", requireBuilding("syndicus", "raa
   const item = await c.env.DB.prepare("SELECT * FROM agenda_items WHERE id = ? AND building_id = ?").bind(c.req.param("itemId"), b.id).first<any>();
   if (!item) throw new HttpError(404, "Agendapunt niet gevonden");
   if (item.poll_id) throw new HttpError(400, "Er is al een stemming gekoppeld");
-  const body = z.object({ options: z.array(z.string().min(1)).min(2).default(["Voor", "Tegen", "Onthouding"]), closes_at: z.string().datetime().nullable().optional(), anonymous: z.boolean().default(false), status: z.enum(["draft", "open"]).default("open") }).parse(await c.req.json().catch(() => ({})));
+  const body = z.object({ options: z.array(z.string().min(1)).min(2).default(["Voor", "Tegen", "Onthouding"]), closes_at: z.string().datetime().nullable().optional(), anonymous: z.boolean().default(false), status: z.enum(["draft", "open"]).default("open"), document_ids: z.array(z.string()).max(20).default([]) }).parse(await c.req.json().catch(() => ({})));
   const pollId = uid();
   await c.env.DB.batch([
     c.env.DB.prepare("INSERT INTO polls (id, building_id, created_by, title, description, weighted, anonymous, multiple, owners_only, required_majority, closes_at, status) VALUES (?,?,?,?,?,1,?,0,1,?,?,?)")
@@ -100,6 +100,11 @@ agenda.post("/:buildingId/agenda/:itemId/poll", requireBuilding("syndicus", "raa
     ...body.options.map((label, i) => c.env.DB.prepare("INSERT INTO poll_options (id, poll_id, label, position) VALUES (?,?,?,?)").bind(uid(), pollId, label, i)),
     c.env.DB.prepare("UPDATE agenda_items SET poll_id = ?, updated_at = ? WHERE id = ?").bind(pollId, now(), item.id),
   ]);
+  if (body.document_ids.length) {
+    const ids = [...new Set(body.document_ids)];
+    const found = (await c.env.DB.prepare(`SELECT id FROM documents WHERE building_id = ? AND id IN (${ids.map(() => "?").join(",")})`).bind(b.id, ...ids).all<{ id: string }>()).results.map((r) => r.id);
+    await c.env.DB.batch(found.map((d, i) => c.env.DB.prepare("INSERT INTO poll_documents (poll_id, document_id, position) VALUES (?,?,?)").bind(pollId, d, i)));
+  }
   await audit(c.env, b.id, user.id, "agenda.poll", "agenda_item", item.id, { pollId });
   if (body.status === "open") await notifyBuilding(c.env, { buildingId: b.id, type: "poll", title: `Stemming over agendapunt: ${item.title}`, body: "Breng je stem uit.", link: `/b/${b.id}/polls/${pollId}`, roles: ["syndicus", "raad", "eigenaar", "commissaris"], excludeUserId: user.id });
   return c.json({ pollId }, 201);

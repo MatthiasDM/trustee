@@ -15,7 +15,7 @@ export interface Env {
 }
 
 export interface AuthUser { id: string; email: string; name: string; locale: string; is_superadmin: number; phone: string | null }
-export interface BuildingCtx { id: string; org_id: string; name: string; total_shares: number; role: string }
+export interface BuildingCtx { id: string; org_id: string; name: string; total_shares: number; role: string; units: number }
 
 export type Vars = { user: AuthUser; building: BuildingCtx; sessionId: string };
 export type AppEnv = { Bindings: Env; Variables: Vars };

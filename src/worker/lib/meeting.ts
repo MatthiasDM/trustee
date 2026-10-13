@@ -34,6 +34,10 @@ export async function validateProxy(env: Env, buildingId: string, meetingId: str
   if (!holder) throw new HttpError(400, "Volmachtdrager is geen lid van dit gebouw");
   if (holder.role === "syndicus") throw new HttpError(400, "De syndicus mag geen volmachten dragen (art. 3.87 §7 BW)");
   if (holder.role === "huurder") throw new HttpError(400, "Een huurder is niet stemgerechtigd en kan geen volmacht dragen");
+  if (!["eigenaar", "raad"].includes(holder.role)) {
+    const owns = await env.DB.prepare("SELECT 1 FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = ? AND uo.user_id = ?").bind(buildingId, holderId).first();
+    if (!owns) throw new HttpError(400, `${holder.name} is geen mede-eigenaar (bezit geen kavel) en kan geen volmacht dragen`);
+  }
   const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM meeting_rsvps WHERE meeting_id = ? AND status = 'proxy' AND proxy_user_id = ? AND user_id != ?").bind(meetingId, holderId, grantorId).first<{ n: number }>();
   if ((count?.n ?? 0) >= 3) {
     const total = (await env.DB.prepare("SELECT COALESCE(SUM(shares),0) AS s FROM units WHERE building_id = ?").bind(buildingId).first<any>())?.s ?? 0;

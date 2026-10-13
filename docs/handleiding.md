@@ -8,6 +8,14 @@ Trustee is het platform van jouw vereniging van mede-eigenaars (VME). Het volgt 
 2. **App installeren.** Open Trustee in je browser en kies *Zet op beginscherm* (iPhone: deel-knop; Android: menu). Zo werkt de app als een echte app, met push-meldingen.
 3. **Meldingen aanzetten.** Ga naar *Instellingen* en zet *Push-meldingen op dit toestel* aan. Per gebouw kies je of je ook e-mails wil.
 
+## Taal
+
+Trustee is beschikbaar in het Nederlands, Frans en Engels. Kies je taal onder *Instellingen › Profiel*; nieuwe gebruikers krijgen de taal van hun browser. De handleiding, het wettelijk kader en de gegenereerde documenten (notulen, jaarrekening, brieven) zijn voorlopig enkel in het Nederlands; meldingen per e-mail en push ook.
+
+## Kantoorportaal (syndicuskantoor)
+
+Beheer je meerdere gebouwen, dan vind je in de zijbalk *Kantoor: &lt;naam&gt;*: alle gebouwen met hun cijfers (kavels, leden, open meldingen, werk- en reservekapitaal), een lijst met actiepunten over alle gebouwen heen (dringende meldingen, vervallen voorschotten, notulen die nog niet definitief zijn, boekjaren die afgesloten moeten worden, ontbrekende commissaris, aflopende mandaten, te verwerken bankverrichtingen, voorgestelde agendapunten, onbeantwoorde vragen) en het beheer van de medewerkers van het kantoor. Medewerkers hebben syndicusrechten in alle gebouwen van de organisatie.
+
 ## Overzicht
 
 Het dashboard opent met de **organen van de VME**: de volgende algemene vergadering, wie in de raad zit, wie de rekeningen controleert en wie syndicus is, telkens met het einde van het mandaat. Daaronder zie je recente mededelingen, open stemmingen, komende vergaderingen en nieuwe documenten.

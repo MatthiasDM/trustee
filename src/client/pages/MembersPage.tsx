@@ -14,12 +14,13 @@ import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { api, fmtDate } from "../lib/api";
 import { ROLE_LABELS, type Member, type Unit } from "../../shared/types";
+import { useT } from "../lib/i18n";
 
 const NONE = "__none__";
 const RoleSelect = ({ value, onChange, size }: { value: string; onChange: (v: string) => void; size?: "sm" | "default" }) => <Select value={value} onValueChange={onChange}><SelectTrigger size={size} className="w-full"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(ROLE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select>;
 
 export function MembersPage() {
-  const b = useBuilding();
+  const b = useBuilding(); const t = useT();
   const members = useFetch<{ members: Member[]; invites: any[] }>(`/api/buildings/${b.id}/members`);
   const units = useFetch<{ units: Unit[]; total_shares: number; sum_shares: number }>(`/api/buildings/${b.id}/units`);
   const [sp, setSp] = useSearchParams();
@@ -29,8 +30,8 @@ export function MembersPage() {
   const reload = () => { members.reload(); units.reload(); };
   const ok = units.data && units.data.sum_shares === units.data.total_shares;
   return <div>
-    <PageHeader title="Mede-eigenaars & organen" subtitle="De leden van de VME, hun kavels en quotiteiten, en de mandaten die de algemene vergadering toekent." actions={b.isManager && <>{tab === "units" && <Button variant="outline" onClick={() => setUnitModal("new")}><Plus />Kavel</Button>}<Button onClick={() => setInvite(true)}><UserPlus />Uitnodigen</Button></>} />
-    <Tabs value={tab} onValueChange={setTab} className="mb-4"><TabsList><TabsTrigger value="members"><Users />Leden ({members.data?.members.length ?? 0})</TabsTrigger><TabsTrigger value="units"><Home />Kavels ({units.data?.units.length ?? 0})</TabsTrigger><TabsTrigger value="mandates"><Gavel />Mandaten</TabsTrigger></TabsList></Tabs>
+    <PageHeader title={t("Mede-eigenaars & organen")} subtitle={t("De leden van de VME, hun kavels en quotiteiten, en de mandaten die de algemene vergadering toekent.")} actions={b.isManager && <>{tab === "units" && <Button variant="outline" onClick={() => setUnitModal("new")}><Plus />Kavel</Button>}<Button onClick={() => setInvite(true)}><UserPlus />{t("Uitnodigen")}</Button></>} />
+    <Tabs value={tab} onValueChange={setTab} className="mb-4"><TabsList><TabsTrigger value="members"><Users />{t("Leden")} ({members.data?.members.length ?? 0})</TabsTrigger><TabsTrigger value="units"><Home />{t("Kavels")} ({units.data?.units.length ?? 0})</TabsTrigger><TabsTrigger value="mandates"><Gavel />{t("Mandaten")}</TabsTrigger></TabsList></Tabs>
     {tab === "mandates" && <MandatesTab members={members.data?.members ?? []} meetings={meetingsQ.data ?? []} />}
     {tab === "members" && (members.loading ? <Spinner /> : <>
       <div className="divide-y rounded-xl border bg-card shadow-xs">{members.data?.members.map((m) => <div key={m.user_id} className="flex items-center gap-3 px-4 py-3">

@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
 import { api, fmtDate, fmtSize } from "../lib/api";
 import { DOC_CATEGORIES, type Doc, type Folder as FolderT } from "../../shared/types";
+import { useT } from "../lib/i18n";
 
 const VIS: Record<string, string> = { all: "Iedereen", owners_only: "Enkel eigenaars", raad: "Raad + syndicus", syndicus: "Enkel syndicus" };
 const ROOT = "__root__";
@@ -21,7 +22,7 @@ const canPreview = (d: Doc) => /^(application\/pdf|image\/|text\/html)/.test(d.m
 const FileIcon = ({ mime }: { mime: string }) => { const I = mime.includes("pdf") ? FileText : mime.startsWith("image/") ? FileImage : mime.includes("sheet") || mime.includes("excel") || mime.includes("csv") ? FileSpreadsheet : File; return <I className="size-5 text-muted-foreground" />; };
 
 export function DocumentsPage() {
-  const b = useBuilding();
+  const b = useBuilding(); const t = useT();
   const [sp, setSp] = useSearchParams();
   const folderId = sp.get("folder") ?? "root";
   const [q, setQ] = useState("");
@@ -36,12 +37,12 @@ export function DocumentsPage() {
   const delFolder = async (f: FolderT) => { if (!confirm(`Map "${f.name}" verwijderen?`)) return; try { await api.del(`/api/buildings/${b.id}/folders/${f.id}`); folders.reload(); } catch (e) { toast.error((e as Error).message); } };
 
   return <div>
-    <PageHeader title="Documenten" subtitle={b.role === "commissaris" ? "Je hebt inzage in alle stukken en kan opmerkingen en bevindingen noteren (art. 3.91 BW). Bij stukken \"enkel syndicus\" wordt de syndicus automatisch van je inzage verwittigd." : b.role === "raad" ? "De raad heeft inzage- en kopierecht in alle beheersdocumenten (art. 3.90 BW). Open je een stuk \"enkel syndicus\", dan geldt dat als kennisgeving: de syndicus krijgt automatisch een melding." : "Statuten, verslagen, afrekeningen, offertes en meer."} actions={<>{b.isBoard && <Button variant="outline" onClick={() => setNewFolder(true)}><FolderPlus />Map</Button>}{b.isOwner && <Button onClick={() => setUpload(true)}><Upload />Uploaden</Button>}</>} />
+    <PageHeader title={t("Documenten")} subtitle={b.role === "commissaris" ? "Je hebt inzage in alle stukken en kan opmerkingen en bevindingen noteren (art. 3.91 BW). Bij stukken \"enkel syndicus\" wordt de syndicus automatisch van je inzage verwittigd." : b.role === "raad" ? "De raad heeft inzage- en kopierecht in alle beheersdocumenten (art. 3.90 BW). Open je een stuk \"enkel syndicus\", dan geldt dat als kennisgeving: de syndicus krijgt automatisch een melding." : t("Statuten, verslagen, afrekeningen, offertes en meer.")} actions={<>{b.isBoard && <Button variant="outline" onClick={() => setNewFolder(true)}><FolderPlus />{t("Map")}</Button>}{b.isOwner && <Button onClick={() => setUpload(true)}><Upload />{t("Uploaden")}</Button>}</>} />
     <div className="mb-4 flex flex-wrap items-center gap-3">
-      <nav className="flex min-w-0 flex-1 items-center gap-1 text-sm"><button className="flex items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-accent cursor-pointer" onClick={() => go("root")}><Folder className="size-4 text-muted-foreground" />Alle documenten</button>{crumbs.map((f) => <span key={f.id} className="flex items-center gap-1"><ChevronRight className="size-4 text-muted-foreground" /><button className="rounded-md px-1.5 py-1 hover:bg-accent cursor-pointer" onClick={() => go(f.id)}>{f.name}</button></span>)}</nav>
-      <div className="relative w-full sm:w-72"><Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" /><Input className="pl-8" placeholder="Zoeken in alle documenten…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      <nav className="flex min-w-0 flex-1 items-center gap-1 text-sm"><button className="flex items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-accent cursor-pointer" onClick={() => go("root")}><Folder className="size-4 text-muted-foreground" />{t("Alle documenten")}</button>{crumbs.map((f) => <span key={f.id} className="flex items-center gap-1"><ChevronRight className="size-4 text-muted-foreground" /><button className="rounded-md px-1.5 py-1 hover:bg-accent cursor-pointer" onClick={() => go(f.id)}>{f.name}</button></span>)}</nav>
+      <div className="relative w-full sm:w-72"><Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" /><Input className="pl-8" placeholder={t("Zoeken in alle documenten…")} value={q} onChange={(e) => setQ(e.target.value)} /></div>
     </div>
-    {folders.loading || docs.loading ? <Spinner /> : !children.length && !docs.data?.length ? <Empty icon={<Folder />} title={q ? "Geen resultaten" : "Deze map is leeg"} hint={q ? undefined : "Upload documenten of maak een submap aan."} /> :
+    {folders.loading || docs.loading ? <Spinner /> : !children.length && !docs.data?.length ? <Empty icon={<Folder />} title={q ? t("Geen resultaten") : t("Deze map is leeg")} hint={q ? undefined : "Upload documenten of maak een submap aan."} /> :
     <div className="divide-y rounded-xl border bg-card shadow-xs">
       {!q && children.map((f) => <div key={f.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50"><button className="flex flex-1 items-center gap-3 text-left cursor-pointer" onClick={() => go(f.id)}><Folder className="size-5 fill-primary/15 text-primary" /><span className="text-sm font-medium">{f.name}</span>{f.visibility !== "all" && <Badge variant="secondary"><Lock />{VIS[f.visibility]}</Badge>}</button>{b.isManager && <Button variant="ghost" size="icon-sm" onClick={() => delFolder(f)}><Trash2 /></Button>}</div>)}
       {(docs.data ?? []).map((d) => <div key={d.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50">

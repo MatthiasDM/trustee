@@ -15,19 +15,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { api, fmtDateTime } from "../lib/api";
 import { MAJORITY_LABELS, type Poll } from "../../shared/types";
 import { cn } from "@/lib/utils";
+import { useT } from "../lib/i18n";
 
 export function PollsPage() {
-  const b = useBuilding();
+  const b = useBuilding(); const t = useT();
   const polls = useFetch<any[]>(`/api/buildings/${b.id}/polls`);
   const [open, setOpen] = useState(false);
   const nav = useNavigate();
   return <div>
-    <PageHeader title="Stemmingen & peilingen" subtitle="Gewogen stemmen volgens quotiteiten, of eenvoudige peilingen." actions={b.isBoard && <Button onClick={() => setOpen(true)}><Plus />Nieuwe stemming</Button>} />
-    {polls.loading ? <Spinner /> : !polls.data?.length ? <Empty icon={<Vote />} title="Nog geen stemmingen" /> :
+    <PageHeader title={t("Stemmingen & peilingen")} subtitle={t("Gewogen stemmen volgens quotiteiten, of eenvoudige peilingen.")} actions={b.isBoard && <Button onClick={() => setOpen(true)}><Plus />{t("Nieuwe stemming")}</Button>} />
+    {polls.loading ? <Spinner /> : !polls.data?.length ? <Empty icon={<Vote />} title={t("Nog geen stemmingen")} /> :
       <div className="divide-y rounded-xl border bg-card shadow-xs">{polls.data.map((p) => <Link key={p.id} to={`/b/${b.id}/polls/${p.id}`} className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-muted/50">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><Vote className="size-4" /></div>
         <div className="min-w-0 flex-1"><div className="text-sm font-medium">{p.title}</div><div className="mt-0.5 text-xs text-muted-foreground">{p.weighted ? "Gewogen" : "1 stem p.p."} · {MAJORITY_LABELS[p.required_majority as keyof typeof MAJORITY_LABELS]} · {p.total_voters} gestemd{p.closes_at ? ` · sluit ${fmtDateTime(p.closes_at)}` : ""}</div></div>
-        <div className="flex items-center gap-2">{p.status === "open" && (p.voted ? <Badge variant="success"><Check />gestemd</Badge> : <Badge variant="warning">nog stemmen</Badge>)}<StatusBadge status={p.status} /></div>
+        <div className="flex items-center gap-2">{p.status === "open" && (p.voted ? <Badge variant="success"><Check />{t("gestemd")}</Badge> : <Badge variant="warning">{t("nog stemmen")}</Badge>)}<StatusBadge status={p.status} /></div>
       </Link>)}</div>}
     {open && <NewPollModal onClose={() => setOpen(false)} onDone={(id) => nav(`/b/${b.id}/polls/${id}`)} />}
   </div>;

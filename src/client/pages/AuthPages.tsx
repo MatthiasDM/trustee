@@ -7,6 +7,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
+import { useT } from "../lib/i18n";
 
 function AuthCard({ title, description, children, footer }: { title: string; description?: string; children: React.ReactNode; footer?: React.ReactNode }) {
   return <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
@@ -23,18 +24,19 @@ export function LoginPage() {
   const [sp] = useSearchParams();
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [error, setError] = useState<unknown>(null); const [busy, setBusy] = useState(false);
+  const t = useT();
   useEffect(() => { if (user) nav(sp.get("next") || "/", { replace: true }); }, [user]);
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setBusy(true); setError(null);
     try { await api.post("/api/auth/login", { email, password }); await refresh(); nav(sp.get("next") || "/"); } catch (err) { setError(err); } finally { setBusy(false); }
   };
-  return <AuthCard title="Aanmelden" description="Welkom terug bij je VME-platform." footer={<>Nog geen account? <Link className="font-medium text-primary hover:underline" to="/register">Registreer als syndicus</Link></>}>
+  return <AuthCard title={t("Aanmelden")} description={t("Welkom terug bij je VME-platform.")} footer={<>{t("Nog geen account?")} <Link className="font-medium text-primary hover:underline" to="/register">{t("Registreer als syndicus")}</Link></>}>
     <form onSubmit={submit} className="grid gap-4">
-      <Field label="E-mail"><Input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-      <Field label="Wachtwoord"><Input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+      <Field label={t("E-mail")}><Input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+      <Field label={t("Wachtwoord")}><Input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
       <ErrorBox error={error} />
-      <Button className="w-full" disabled={busy}>Aanmelden</Button>
-      <p className="text-center text-sm"><Link to="/forgot-password" className="text-muted-foreground hover:text-primary">Wachtwoord vergeten?</Link></p>
+      <Button className="w-full" disabled={busy}>{t("Aanmelden")}</Button>
+      <p className="text-center text-sm"><Link to="/forgot-password" className="text-muted-foreground hover:text-primary">{t("Wachtwoord vergeten?")}</Link></p>
     </form>
   </AuthCard>;
 }
@@ -44,18 +46,19 @@ export function RegisterPage() {
   const nav = useNavigate();
   const [f, setF] = useState({ name: "", email: "", password: "", orgName: "" });
   const [error, setError] = useState<unknown>(null); const [busy, setBusy] = useState(false);
+  const t = useT();
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setBusy(true); setError(null);
     try { await api.post("/api/auth/register", f); await refresh(); nav("/"); } catch (err) { setError(err); } finally { setBusy(false); }
   };
-  return <AuthCard title="Account aanmaken" description="Voor syndici en beheerders. Mede-eigenaars worden uitgenodigd door hun syndicus." footer={<>Al een account? <Link className="font-medium text-primary hover:underline" to="/login">Aanmelden</Link></>}>
+  return <AuthCard title={t("Account aanmaken")} description={t("Voor syndici en beheerders. Mede-eigenaars worden uitgenodigd door hun syndicus.")} footer={<>{t("Al een account?")} <Link className="font-medium text-primary hover:underline" to="/login">{t("Aanmelden")}</Link></>}>
     <form onSubmit={submit} className="grid gap-4">
-      <Field label="Naam kantoor / organisatie"><Input required value={f.orgName} onChange={(e) => setF({ ...f, orgName: e.target.value })} placeholder="bv. Syndicus Janssens bv" /></Field>
-      <Field label="Jouw naam"><Input required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
-      <Field label="E-mail"><Input type="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
-      <Field label="Wachtwoord" hint="Minstens 8 tekens"><Input type="password" autoComplete="new-password" minLength={8} required value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></Field>
+      <Field label={t("Naam kantoor / organisatie")}><Input required value={f.orgName} onChange={(e) => setF({ ...f, orgName: e.target.value })} placeholder="bv. Syndicus Janssens bv" /></Field>
+      <Field label={t("Jouw naam")}><Input required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+      <Field label={t("E-mail")}><Input type="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
+      <Field label={t("Wachtwoord")} hint={t("Minstens 8 tekens")}><Input type="password" autoComplete="new-password" minLength={8} required value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></Field>
       <ErrorBox error={error} />
-      <Button className="w-full" disabled={busy}>Account aanmaken</Button>
+      <Button className="w-full" disabled={busy}>{t("Account aanmaken")}</Button>
     </form>
   </AuthCard>;
 }
@@ -65,7 +68,7 @@ export function InvitePage() {
   const { user, refresh, loading } = useAuth();
   const nav = useNavigate();
   const [inv, setInv] = useState<any>(null); const [error, setError] = useState<unknown>(null);
-  const [f, setF] = useState({ name: "", password: "" }); const [busy, setBusy] = useState(false);
+  const [f, setF] = useState({ name: "", password: "" }); const [busy, setBusy] = useState(false); const t = useT();
   useEffect(() => { api.get<any>(`/api/auth/invite/${token}`).then((i) => { setInv(i); setF((p) => ({ ...p, name: i.name ?? "" })); }).catch(setError); }, [token]);
   if (error && !inv) return <AuthCard title="Uitnodiging"><ErrorBox error={error} /></AuthCard>;
   if (!inv || loading) return <Spinner />;
@@ -85,7 +88,7 @@ export function InvitePage() {
       : inv.has_account ? <div className="grid gap-3"><p className="text-sm">Er bestaat al een account voor {inv.email}. Meld je aan om de uitnodiging te accepteren.</p><Button asChild><Link to={`/login?next=/invite/${token}`}>Aanmelden</Link></Button></div>
       : <form onSubmit={(e) => { e.preventDefault(); accept(); }} className="grid gap-4">
           <Field label="E-mail"><Input value={inv.email} disabled /></Field>
-          <Field label="Jouw naam"><Input required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+          <Field label={t("Jouw naam")}><Input required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
           <Field label="Kies een wachtwoord"><Input type="password" minLength={8} required value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></Field>
           <ErrorBox error={error} /><Button disabled={busy}>Account aanmaken & toetreden</Button>
         </form>}

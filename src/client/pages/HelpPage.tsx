@@ -7,17 +7,19 @@ import handleiding from "../../../docs/handleiding.md?raw";
 import wetgeving from "../../../docs/wetgeving.md?raw";
 import { PageHeader } from "../components/ui";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { useLocale, useT } from "../lib/i18n";
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9à-ÿ]+/g, "-").replace(/(^-|-$)/g, "");
 
 export function HelpPage() {
-  const [sp, setSp] = useSearchParams();
+  const [sp, setSp] = useSearchParams(); const t = useT(); const locale = useLocale();
   const tab = sp.get("tab") === "wet" ? "wet" : "handleiding";
   const src = tab === "wet" ? wetgeving : handleiding;
   const toc = useMemo(() => src.split("\n").filter((l) => /^## /.test(l)).map((l) => l.replace(/^## /, "")), [src]);
   return <div>
-    <PageHeader title="Handleiding" subtitle="Hoe Trustee werkt en welke wettelijke regels het volgt." />
-    <Tabs value={tab} onValueChange={(v) => setSp(v === "wet" ? { tab: "wet" } : {})} className="mb-6"><TabsList><TabsTrigger value="handleiding"><BookOpen />Handleiding</TabsTrigger><TabsTrigger value="wet"><Scale />Wettelijk kader</TabsTrigger></TabsList></Tabs>
+    <PageHeader title={t("Handleiding")} subtitle={t("Hoe Trustee werkt en welke wettelijke regels het volgt.")} />
+    {locale !== "nl" && <p className="mb-4 rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">{t("De handleiding en het wettelijk kader zijn momenteel enkel in het Nederlands beschikbaar.")}</p>}
+    <Tabs value={tab} onValueChange={(v) => setSp(v === "wet" ? { tab: "wet" } : {})} className="mb-6"><TabsList><TabsTrigger value="handleiding"><BookOpen />{t("Handleiding")}</TabsTrigger><TabsTrigger value="wet"><Scale />{t("Wettelijk kader")}</TabsTrigger></TabsList></Tabs>
     <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
       <nav className="hidden lg:block"><div className="sticky top-6 rounded-xl border bg-card p-4 text-sm shadow-xs"><div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Inhoud</div><ul className="space-y-1">{toc.map((t) => <li key={t}><a href={`#${slug(t)}`} className="block rounded px-1.5 py-1 text-muted-foreground hover:bg-accent hover:text-foreground">{t}</a></li>)}</ul></div></nav>
       <article className="prose-trustee max-w-3xl rounded-xl border bg-card p-6 shadow-xs sm:p-8">

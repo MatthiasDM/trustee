@@ -2,7 +2,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "./styles.css";
-import { AuthProvider } from "./lib/auth";
+import { AuthProvider, useAuth } from "./lib/auth";
+import { I18nProvider } from "./lib/i18n";
 import { registerSW } from "./lib/push";
 import { AppShell } from "./components/Layout";
 import { ForgotPasswordPage, InvitePage, LoginPage, RegisterPage, ResetPasswordPage } from "./pages/AuthPages";
@@ -17,13 +18,16 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { HelpPage } from "./pages/HelpPage";
 import { LedgerPage } from "./pages/LedgerPage";
+import { OrgPage } from "./pages/OrgPage";
+
+function Localized({ children }: { children: React.ReactNode }) { const { user } = useAuth(); return <I18nProvider locale={user?.locale ?? (navigator.language.startsWith("fr") ? "fr" : navigator.language.startsWith("en") ? "en" : "nl")}>{children}</I18nProvider>; }
 
 registerSW();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <AuthProvider>
+      <AuthProvider><Localized>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
@@ -34,6 +38,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/" element={<HomePage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/help" element={<HelpPage />} />
+            <Route path="/org/:orgId" element={<OrgPage />} />
             <Route path="/b/:buildingId" element={<DashboardPage />} />
             <Route path="/b/:buildingId/documents" element={<DocumentsPage />} />
             <Route path="/b/:buildingId/posts" element={<PostsPage />} />
@@ -47,7 +52,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </AuthProvider>
+      </Localized></AuthProvider>
     </BrowserRouter>
   </React.StrictMode>
 );

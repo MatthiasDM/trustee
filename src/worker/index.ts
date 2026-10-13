@@ -16,6 +16,7 @@ import mandates, { ORGAN_RULES } from "./routes/mandates";
 import ledger, { postDueScheduled } from "./routes/ledger";
 import { runBackups } from "./lib/backup";
 import reports, { autoReminders } from "./routes/reports";
+import orgs from "./routes/orgs";
 import { notifyBuilding } from "./lib/notify";
 
 const app = new Hono<AppEnv>();
@@ -34,6 +35,7 @@ app.route("/api/buildings", mandates);
 app.route("/api/buildings", ledger);
 app.route("/api/buildings", reports);
 app.route("/api/notifications", notifications);
+app.route("/api/orgs", orgs);
 
 app.notFound((c) => c.json({ error: "Niet gevonden" }, 404));
 app.onError((err, c) => {

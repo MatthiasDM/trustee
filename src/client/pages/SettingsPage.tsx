@@ -13,6 +13,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { api, fmtDateTime, fmtSize } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { getPushSubscription, pushSupported, subscribePush, unsubscribePush } from "../lib/push";
+import { LOCALES, useT } from "../lib/i18n";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 
 function Row({ label, hint, checked, onChange }: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void }) {
   return <div className="flex items-center justify-between gap-4 py-2"><div><div className="text-sm font-medium">{label}</div>{hint && <div className="text-xs text-muted-foreground">{hint}</div>}</div><Switch checked={checked} onCheckedChange={onChange} /></div>;
@@ -28,7 +30,7 @@ export function SettingsPage() {
   const info = useFetch<any>(b.isManager ? `/api/buildings/${b.id}` : null);
   const audit = useFetch<any[]>(b.isBoard ? `/api/buildings/${b.id}/audit` : null);
   const [pushOn, setPushOn] = useState(false);
-  const [profile, setProfile] = useState({ name: user?.name ?? "", phone: user?.phone ?? "" });
+  const [profile, setProfile] = useState({ name: user?.name ?? "", phone: user?.phone ?? "", locale: user?.locale ?? "nl" }); const t = useT();
   const [pw, setPw] = useState({ current: "", next: "" }); const [pwErr, setPwErr] = useState<unknown>(null);
   const [bf, setBf] = useState<any>(null); const [broadcast, setBroadcast] = useState({ title: "", body: "" });
   useEffect(() => { getPushSubscription().then((s) => setPushOn(!!s)); }, []);
@@ -43,23 +45,23 @@ export function SettingsPage() {
   const setPref = async (k: "notify_email" | "notify_push", v: boolean) => { await api.patch(`/api/buildings/${b.id}/me/preferences`, { [k]: v }); prefs.setData({ ...prefs.data!, [k]: +v }); };
 
   return <div className="max-w-3xl space-y-6">
-    <PageHeader title="Instellingen" />
-    <Card><CardHeader><CardTitle>Meldingen</CardTitle><CardDescription>Hoe wil je op de hoogte gehouden worden?</CardDescription></CardHeader><CardContent>
+    <PageHeader title={t("Instellingen")} />
+    <Card><CardHeader><CardTitle>{t("Meldingen")}</CardTitle><CardDescription>Hoe wil je op de hoogte gehouden worden?</CardDescription></CardHeader><CardContent>
       {!pushSupported() ? <p className="text-sm text-muted-foreground">Push-meldingen worden niet ondersteund in deze browser. Op iPhone: voeg de app toe aan je beginscherm (Deel → Zet op beginscherm).</p> :
-        <Row label="Push-meldingen op dit toestel" hint="Werkt ook wanneer de app gesloten is" checked={pushOn} onChange={togglePush} />}
+        <Row label={t("Push-meldingen op dit toestel")} hint="Werkt ook wanneer de app gesloten is" checked={pushOn} onChange={togglePush} />}
       {pushOn && <Button size="sm" variant="outline" onClick={() => api.post("/api/notifications/push/test").then(() => toast.success("Testmelding verstuurd"))}>Test-push sturen</Button>}
       <Separator className="my-4" /><p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Voor {b.name}</p>
-      {prefs.data && <><Row label="E-mailmeldingen" checked={!!prefs.data.notify_email} onChange={(v) => setPref("notify_email", v)} /><Row label="Push-meldingen" checked={!!prefs.data.notify_push} onChange={(v) => setPref("notify_push", v)} /></>}
+      {prefs.data && <><Row label={t("E-mailmeldingen")} checked={!!prefs.data.notify_email} onChange={(v) => setPref("notify_email", v)} /><Row label={t("Push-meldingen")} checked={!!prefs.data.notify_push} onChange={(v) => setPref("notify_push", v)} /></>}
     </CardContent></Card>
 
-    <Card><CardHeader><CardTitle>Profiel</CardTitle></CardHeader><CardContent>
+    <Card><CardHeader><CardTitle>{t("Profiel")}</CardTitle></CardHeader><CardContent>
       <form className="grid gap-4" onSubmit={async (e: FormEvent) => { e.preventDefault(); await api.patch("/api/auth/me", profile); await refresh(); toast.success("Profiel opgeslagen"); }}>
-        <div className="grid gap-4 sm:grid-cols-2"><Field label="Naam"><Input value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} /></Field><Field label="Telefoon"><Input value={profile.phone ?? ""} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} /></Field></div>
-        <Field label="E-mail"><Input value={user?.email} disabled /></Field>
-        <Button className="w-fit">Opslaan</Button></form>
+        <div className="grid gap-4 sm:grid-cols-3"><Field label={t("Naam")}><Input value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} /></Field><Field label={t("Telefoon")}><Input value={profile.phone ?? ""} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} /></Field><Field label={t("Taal")}><Select value={profile.locale} onValueChange={(v) => setProfile({ ...profile, locale: v })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{LOCALES.map((l) => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}</SelectContent></Select></Field></div>
+        <Field label={t("E-mail")}><Input value={user?.email} disabled /></Field>
+        <Button className="w-fit">{t("Opslaan")}</Button></form>
       <Separator className="my-5" />
       <form className="grid gap-4" onSubmit={async (e: FormEvent) => { e.preventDefault(); setPwErr(null); try { await api.post("/api/auth/change-password", pw); setPw({ current: "", next: "" }); toast.success("Wachtwoord gewijzigd"); } catch (err) { setPwErr(err); } }}>
-        <h3 className="text-sm font-medium">Wachtwoord wijzigen</h3>
+        <h3 className="text-sm font-medium">{t("Wachtwoord wijzigen")}</h3>
         <div className="grid gap-4 sm:grid-cols-2"><Input type="password" placeholder="Huidig wachtwoord" autoComplete="current-password" required value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} /><Input type="password" placeholder="Nieuw wachtwoord" autoComplete="new-password" minLength={8} required value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} /></div>
         <ErrorBox error={pwErr} /><Button variant="outline" className="w-fit">Wijzigen</Button></form>
     </CardContent></Card>
@@ -87,9 +89,9 @@ export function SettingsPage() {
         <p className="mt-3 text-xs text-muted-foreground">Laatste achtergrondtaak: {backups.data.last_cron ? `${fmtDateTime(backups.data.last_cron.started_at)} · ${backups.data.last_cron.ok ? "geslaagd" : `mislukt: ${backups.data.last_cron.error}`} · ${backups.data.last_cron.duration_ms} ms` : "nog niet uitgevoerd"}</p></>}
     </CardContent></Card>}
 
-    <Card><CardHeader><CardTitle>Privacy (AVG)</CardTitle><CardDescription>Download al je gegevens of verwijder je account. Stemmen, boekingen en notulen blijven geanonimiseerd bewaard omdat de wet dat vereist.</CardDescription></CardHeader><CardContent className="grid gap-4">
-      <Button size="sm" variant="outline" className="w-fit" asChild><a href="/api/auth/me/export"><Download />Mijn gegevens downloaden (JSON)</a></Button>
-      <form className="grid gap-2 rounded-lg border border-destructive/30 p-3" onSubmit={async (e: FormEvent) => { e.preventDefault(); setDelErr(null); if (!confirm("Je account definitief verwijderen?")) return; try { await api.del("/api/auth/me", { password: delPw }); await logout(); nav("/login"); } catch (err) { setDelErr(err); } }}><div className="flex items-center gap-2 text-sm font-medium text-destructive"><ShieldAlert className="size-4" />Account verwijderen</div><div className="flex gap-2"><Input type="password" placeholder="Bevestig met je wachtwoord" required value={delPw} onChange={(e) => setDelPw(e.target.value)} /><Button variant="destructive">Verwijderen</Button></div><ErrorBox error={delErr} /></form>
+    <Card><CardHeader><CardTitle>{t("Privacy (AVG)")}</CardTitle><CardDescription>Download al je gegevens of verwijder je account. Stemmen, boekingen en notulen blijven geanonimiseerd bewaard omdat de wet dat vereist.</CardDescription></CardHeader><CardContent className="grid gap-4">
+      <Button size="sm" variant="outline" className="w-fit" asChild><a href="/api/auth/me/export"><Download />{t("Mijn gegevens downloaden (JSON)")}</a></Button>
+      <form className="grid gap-2 rounded-lg border border-destructive/30 p-3" onSubmit={async (e: FormEvent) => { e.preventDefault(); setDelErr(null); if (!confirm("Je account definitief verwijderen?")) return; try { await api.del("/api/auth/me", { password: delPw }); await logout(); nav("/login"); } catch (err) { setDelErr(err); } }}><div className="flex items-center gap-2 text-sm font-medium text-destructive"><ShieldAlert className="size-4" />{t("Account verwijderen")}</div><div className="flex gap-2"><Input type="password" placeholder="Bevestig met je wachtwoord" required value={delPw} onChange={(e) => setDelPw(e.target.value)} /><Button variant="destructive">Verwijderen</Button></div><ErrorBox error={delErr} /></form>
     </CardContent></Card>
 
     {b.isBoard && <Card><CardHeader><CardTitle>Activiteitenlog</CardTitle></CardHeader><CardContent>{audit.loading ? <Spinner /> : <ul className="max-h-80 divide-y overflow-y-auto text-xs">{(audit.data ?? []).map((a) => <li key={a.id} className="flex gap-3 py-2"><span className="shrink-0 tabular-nums text-muted-foreground">{fmtDateTime(a.created_at)}</span><span className="font-medium">{a.user_name ?? "systeem"}</span><span className="text-muted-foreground">{a.action}{a.meta ? ` · ${Object.values(JSON.parse(a.meta)).join(", ")}` : ""}</span></li>)}</ul>}</CardContent></Card>}

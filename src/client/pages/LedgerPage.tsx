@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Banknote, BellRing, BookOpen, BookText, Calculator, ClipboardCheck, FileSpreadsheet, Landmark, Package, PenLine, Receipt, Settings2, UserSquare2 } from "lucide-react";
 import { PageHeader, Spinner } from "../components/ui";
 import { useFetch } from "../components/Layout";
+import { useT } from "../lib/i18n";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { FySelect, useLedgerBase } from "../ledger/shared";
 import { OverviewTab } from "../ledger/OverviewTab";
@@ -20,7 +21,7 @@ import { AuditTab } from "../ledger/AuditTab";
 import { CashbookTab } from "../ledger/CashbookTab";
 
 export function LedgerPage() {
-  const { b, fys, accounts, banks, keys } = useLedgerBase();
+  const { b, fys, accounts, banks, keys } = useLedgerBase(); const t = useT();
   const mode = useFetch<{ setting: string; effective: "simple" | "double"; counted_units: number; double_required: boolean }>(`/api/buildings/${b.id}/ledger/mode`);
   const [sp, setSp] = useSearchParams();
   const tab = sp.get("tab") ?? "overview";
@@ -43,7 +44,7 @@ export function LedgerPage() {
     ...(b.isBoard ? [{ v: "settings", l: "Instellingen", I: Settings2 }] : []),
   ].filter((t) => b.isBoard || !["bank", "assets"].includes(t.v));
   return <div>
-    <PageHeader title="Boekhouding" subtitle={simple ? `Vereenvoudigde boekhouding (${mode.data?.counted_units} kavels, minder dan 20): ontvangsten, uitgaven, kaspositie en werk- en reservekapitaal. Alles blijft onderliggend volledig geboekt; schakel om naar dubbel boekhouden onder Instellingen.` : "Dubbel boekhouden volgens het KB van 12 juli 2012. De syndicus boekt, raad en commissaris controleren, elke mede-eigenaar ziet de cijfers en zijn eigen afrekening."} actions={list.length > 0 && <FySelect fys={list} value={fy?.id ?? ""} onChange={setFyId} />} />
+    <PageHeader title={t("Boekhouding")} subtitle={simple ? `Vereenvoudigde boekhouding (${mode.data?.counted_units} kavels, minder dan 20): ontvangsten, uitgaven, kaspositie en werk- en reservekapitaal. Alles blijft onderliggend volledig geboekt; schakel om naar dubbel boekhouden onder Instellingen.` : "Dubbel boekhouden volgens het KB van 12 juli 2012. De syndicus boekt, raad en commissaris controleren, elke mede-eigenaar ziet de cijfers en zijn eigen afrekening."} actions={list.length > 0 && <FySelect fys={list} value={fy?.id ?? ""} onChange={setFyId} />} />
     <Tabs value={tab} onValueChange={(v) => setSp(v === "overview" ? {} : { tab: v })} className="mb-6"><TabsList className="h-auto flex-wrap">{TABS.map((t) => <TabsTrigger key={t.v} value={t.v}><t.I />{t.l}</TabsTrigger>)}</TabsList></Tabs>
     {tab === "overview" && <OverviewTab buildingId={b.id} fy={fy} isBoard={b.isBoard} />}
     {tab === "cashbook" && <CashbookTab fy={fy} />}

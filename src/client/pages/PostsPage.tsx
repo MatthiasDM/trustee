@@ -16,12 +16,13 @@ import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { api, fmtDateTime, timeAgo } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import type { Comment, Post } from "../../shared/types";
+import { useT } from "../lib/i18n";
 
 const TYPE_ICON = { question: HelpCircle, announcement: Megaphone, incident: Wrench } as const;
 const TYPE_LABEL: Record<string, string> = { question: "Vraag", announcement: "Mededeling", incident: "Melding" };
 
 export function PostsPage() {
-  const b = useBuilding();
+  const b = useBuilding(); const t = useT();
   const [sp, setSp] = useSearchParams();
   const [type, setType] = useState(sp.get("type") ?? "all");
   const [status, setStatus] = useState("all");
@@ -29,12 +30,12 @@ export function PostsPage() {
   const newType = sp.get("new");
   const nav = useNavigate();
   return <div>
-    <PageHeader title="Vragen & meldingen" subtitle="Stel een vraag, meld een probleem of lees mededelingen van de syndicus." actions={<><Button variant="outline" onClick={() => setSp({ new: "question" })}><HelpCircle />Vraag</Button><Button variant="outline" onClick={() => setSp({ new: "incident" })}><Wrench />Melding</Button>{b.isBoard && <Button onClick={() => setSp({ new: "announcement" })}><Megaphone />Mededeling</Button>}</>} />
+    <PageHeader title={t("Vragen & meldingen")} subtitle={t("Stel een vraag, meld een probleem of lees mededelingen van de syndicus.")} actions={<><Button variant="outline" onClick={() => setSp({ new: "question" })}><HelpCircle />{t("Vraag")}</Button><Button variant="outline" onClick={() => setSp({ new: "incident" })}><Wrench />{t("Melding")}</Button>{b.isBoard && <Button onClick={() => setSp({ new: "announcement" })}><Megaphone />{t("Mededeling")}</Button>}</>} />
     <div className="mb-4 flex flex-wrap items-center gap-3">
-      <Tabs value={type} onValueChange={setType}><TabsList><TabsTrigger value="all">Alles</TabsTrigger><TabsTrigger value="announcement"><Megaphone />Mededelingen</TabsTrigger><TabsTrigger value="question"><HelpCircle />Vragen</TabsTrigger><TabsTrigger value="incident"><Wrench />Meldingen</TabsTrigger></TabsList></Tabs>
+      <Tabs value={type} onValueChange={setType}><TabsList><TabsTrigger value="all">{t("Alles")}</TabsTrigger><TabsTrigger value="announcement"><Megaphone />Mededelingen</TabsTrigger><TabsTrigger value="question"><HelpCircle />Vragen</TabsTrigger><TabsTrigger value="incident"><Wrench />Meldingen</TabsTrigger></TabsList></Tabs>
       <Select value={status} onValueChange={setStatus}><SelectTrigger size="sm" className="ml-auto"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Alle statussen</SelectItem>{Object.entries(STATUS_LABELS).filter(([k]) => k !== "draft").map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select>
     </div>
-    {posts.loading ? <Spinner /> : !posts.data?.length ? <Empty icon={<MessageSquare />} title="Nog geen berichten" hint="Wees de eerste om een vraag te stellen." /> :
+    {posts.loading ? <Spinner /> : !posts.data?.length ? <Empty icon={<MessageSquare />} title={t("Nog geen berichten")} hint="Wees de eerste om een vraag te stellen." /> :
       <div className="divide-y rounded-xl border bg-card shadow-xs">{posts.data.map((p) => { const I = TYPE_ICON[p.type]; return <Link key={p.id} to={`/b/${b.id}/posts/${p.id}`} className="flex gap-3 px-4 py-3.5 transition hover:bg-muted/50">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><I className="size-4" /></div>
         <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-1.5 text-sm font-medium">{p.pinned ? <Pin className="size-3.5 text-primary" /> : null}{p.title}{p.visibility === "syndicus" && <Badge variant="secondary"><Lock />privé</Badge>}</div>

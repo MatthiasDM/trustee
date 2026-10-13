@@ -8,11 +8,12 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { useT } from "../lib/i18n";
 
 export function HomePage() {
   const { buildings, orgs, user, refresh } = useAuth();
   const nav = useNavigate();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false); const t = useT();
   const [f, setF] = useState({ name: "", address: "", postal_code: "", city: "", enterprise_number: "", total_shares: 1000, org_id: orgs[0]?.id ?? "new" });
   const [error, setError] = useState<unknown>(null); const [busy, setBusy] = useState(false);
   const submit = async (e: FormEvent) => {
@@ -20,8 +21,8 @@ export function HomePage() {
     try { const r = await api.post<{ id: string }>("/api/buildings", { ...f, org_id: f.org_id === "new" ? undefined : f.org_id, total_shares: Number(f.total_shares) }); await refresh(); nav(`/b/${r.id}`); } catch (err) { setError(err); } finally { setBusy(false); }
   };
   return <div>
-    <PageHeader title={`Welkom, ${user?.name.split(" ")[0]}`} subtitle="Kies een gebouw (VME) om verder te gaan." actions={<Button onClick={() => setOpen(true)}><Plus />Nieuw gebouw</Button>} />
-    {buildings.length === 0 ? <Empty icon={<Building2 />} title="Je bent nog geen lid van een gebouw" hint={orgs.length ? "Maak je eerste VME aan om te starten." : "Wacht op een uitnodiging van je syndicus, of maak zelf een gebouw aan (zelfbeheer)."} action={<Button onClick={() => setOpen(true)}><Plus />Gebouw aanmaken</Button>} /> :
+    <PageHeader title={`${t("Welkom")}, ${user?.name.split(" ")[0]}`} subtitle={t("Kies een gebouw (VME) om verder te gaan.")} actions={<Button onClick={() => setOpen(true)}><Plus />{t("Nieuw gebouw")}</Button>} />
+    {buildings.length === 0 ? <Empty icon={<Building2 />} title={t("Je bent nog geen lid van een gebouw")} hint={orgs.length ? "Maak je eerste VME aan om te starten." : "Wacht op een uitnodiging van je syndicus, of maak zelf een gebouw aan (zelfbeheer)."} action={<Button onClick={() => setOpen(true)}><Plus />{t("Gebouw aanmaken")}</Button>} /> :
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{buildings.map((b) => <Link key={b.id} to={`/b/${b.id}`} className="group rounded-xl border bg-card p-5 shadow-xs transition hover:border-primary/50 hover:shadow-md">
         <div className="mb-3 flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><Building2 className="size-5" /></div>
         <div className="font-semibold group-hover:text-primary">{b.name}</div><div className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground"><MapPin className="size-3.5" />{b.address}{b.city ? `, ${b.city}` : ""}</div>

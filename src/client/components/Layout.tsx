@@ -14,11 +14,11 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { to: "", label: "Overzicht", icon: Home, end: true },
-  { to: "documents", label: "Documenten", icon: FileText },
-  { to: "posts", label: "Vragen & meldingen", icon: MessageSquare },
+  { to: "meetings", label: "Algemene vergadering", icon: Calendar },
   { to: "polls", label: "Stemmingen", icon: Vote },
-  { to: "meetings", label: "Vergaderingen", icon: Calendar },
-  { to: "members", label: "Leden & kavels", icon: Users },
+  { to: "posts", label: "Vragen & meldingen", icon: MessageSquare },
+  { to: "documents", label: "Documenten", icon: FileText },
+  { to: "members", label: "Mede-eigenaars & organen", icon: Users },
   { to: "settings", label: "Instellingen", icon: Settings },
 ];
 
@@ -54,7 +54,7 @@ export function AppShell() {
       <div className="mt-2 px-1"><RoleBadge role={current.role} /></div>
     </div>}
     <div className="flex-1 overflow-y-auto px-3 py-2">
-      <div className="mb-1 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{current ? "Gebouw" : "Navigatie"}</div>
+      <div className="mb-1 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{current ? "Jouw VME" : "Navigatie"}</div>
       {current ? NAV.map((n) => <NavLink key={n.to} end={n.end} to={`/b/${current.id}/${n.to}`} className={({ isActive }) => cn("flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors", isActive ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "hover:bg-accent/60")}><n.icon className="size-4" />{n.label}</NavLink>)
         : <NavLink to="/" className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm bg-sidebar-accent font-medium text-sidebar-accent-foreground"><Building2 className="size-4" />Mijn gebouwen</NavLink>}
       <div className="mt-4 mb-1 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Persoonlijk</div>

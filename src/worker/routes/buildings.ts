@@ -19,6 +19,8 @@ const buildingSchema = z.object({
   enterprise_number: z.string().max(40).optional().nullable(),
   total_shares: z.number().int().positive().default(1000),
   fiscal_year_start: z.string().max(5).optional().nullable(),
+  av_period_start: z.string().regex(/^\d{2}-\d{2}$/).optional().nullable(),
+  av_period_days: z.number().int().min(1).max(60).optional(),
 });
 
 /** Nieuw gebouw (VME) aanmaken binnen een org waar de gebruiker admin is. */
@@ -42,6 +44,7 @@ buildings.post("/", async (c) => {
   await c.env.DB.batch([
     c.env.DB.prepare("INSERT INTO buildings (id, org_id, name, address, city, postal_code, enterprise_number, total_shares, fiscal_year_start) VALUES (?,?,?,?,?,?,?,?,?)")
       .bind(id, orgId, body.name, body.address, body.city ?? null, body.postal_code ?? null, body.enterprise_number ?? null, body.total_shares, body.fiscal_year_start ?? null),
+    c.env.DB.prepare("UPDATE buildings SET av_period_start = ?, av_period_days = ? WHERE id = ?").bind(body.av_period_start ?? null, body.av_period_days ?? 15, id),
     c.env.DB.prepare("INSERT INTO building_members (building_id, user_id, role) VALUES (?, ?, 'syndicus')").bind(id, user.id),
     // standaard mappenstructuur
     ...["Statuten & basisakte", "Reglement van interne orde", "Verslagen algemene vergadering", "Boekhouding & afrekeningen", "Offertes & facturen", "Verzekeringen", "Contracten & onderhoud"].map((n) =>

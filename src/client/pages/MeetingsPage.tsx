@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Calendar, CalendarPlus, Check, FileText, MapPin, Pencil, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { useBuilding, useFetch } from "../components/Layout";
+import { AgendaSection, MeetingAgenda } from "../components/AgendaSection";
 import { Empty, ErrorBox, Field, PageHeader, Spinner } from "../components/ui";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -30,7 +31,8 @@ export function MeetingsPage() {
     <div className="min-w-0 flex-1">
       <div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-xs text-muted-foreground">{TYPE[m.type]}</div><h3 className="font-semibold">{m.title}</h3><div className="mt-1 flex flex-wrap gap-x-3 text-sm text-muted-foreground"><span className="flex items-center gap-1"><Calendar className="size-3.5" />{fmtDateTime(m.starts_at)}</span>{m.location && <span className="flex items-center gap-1"><MapPin className="size-3.5" />{m.location}</span>}</div></div>
         <div className="flex gap-1"><Button size="sm" variant="outline" asChild><a href={`/api/buildings/${b.id}/meetings/${m.id}/ics`}><CalendarPlus />.ics</a></Button>{b.isBoard && <Button size="sm" variant="outline" onClick={() => setEdit(m)}><Pencil />Bewerken</Button>}</div></div>
-      {m.agenda && <details className="mt-3 text-sm"><summary className="cursor-pointer text-primary">Agenda</summary><div className="mt-2 whitespace-pre-wrap text-muted-foreground">{m.agenda}</div></details>}
+      <MeetingAgenda meetingId={m.id} />
+      {m.agenda && <details className="mt-3 text-sm"><summary className="cursor-pointer text-primary">Toelichting / vrije agenda</summary><div className="mt-2 whitespace-pre-wrap text-muted-foreground">{m.agenda}</div></details>}
       {m.minutes_document_id && <a className="mt-3 inline-flex items-center gap-1.5 text-sm text-primary hover:underline" href={`/api/buildings/${b.id}/documents/${m.minutes_document_id}/download?inline=1`} target="_blank" rel="noreferrer"><FileText className="size-4" />Verslag: {m.minutes_name}</a>}
       {new Date(m.starts_at) >= now && b.isOwner && <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4 text-sm"><span className="text-muted-foreground">Aanwezig?</span>
         {[["attending", "Ja"], ["proxy", "Volmacht"], ["absent", "Nee"]].map(([s, l]) => <Button key={s} size="sm" variant={m.my_rsvp === s ? "default" : "outline"} onClick={() => rsvp(m.id, s)}>{s === "attending" ? <Check /> : s === "absent" ? <X /> : <Users />}{l}</Button>)}
@@ -38,7 +40,8 @@ export function MeetingsPage() {
     </div>
   </div>; };
   return <div>
-    <PageHeader title="Vergaderingen" subtitle="Algemene vergaderingen, agenda's, aanwezigheden en verslagen." actions={b.isBoard && <Button onClick={() => setOpen(true)}><CalendarPlus />Vergadering plannen</Button>} />
+    <PageHeader title="Algemene vergadering" subtitle="Het hoogste orgaan van de VME: mede-eigenaars beslissen, stemmen naar aandelen. Agenda, aanwezigheden en verslagen." actions={b.isBoard && <Button onClick={() => setOpen(true)}><CalendarPlus />Vergadering plannen</Button>} />
+    {!meetings.loading && <AgendaSection meetings={list} />}
     {meetings.loading ? <Spinner /> : !list.length ? <Empty icon={<Calendar />} title="Nog geen vergaderingen gepland" /> : <>
       <h2 className="mb-3 text-sm font-medium text-muted-foreground">Komende</h2>{upcoming.length ? <div className="mb-8 space-y-3">{upcoming.map((m) => <MeetingCard key={m.id} m={m} />)}</div> : <p className="mb-8 text-sm text-muted-foreground">Geen geplande vergaderingen.</p>}
       {past.length > 0 && <><h2 className="mb-3 text-sm font-medium text-muted-foreground">Voorbije</h2><div className="space-y-3">{past.map((m) => <MeetingCard key={m.id} m={m} />)}</div></>}</>}

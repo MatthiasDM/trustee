@@ -27,7 +27,7 @@ export function SettingsPage() {
   const [pw, setPw] = useState({ current: "", next: "" }); const [pwErr, setPwErr] = useState<unknown>(null);
   const [bf, setBf] = useState<any>(null); const [broadcast, setBroadcast] = useState({ title: "", body: "" });
   useEffect(() => { getPushSubscription().then((s) => setPushOn(!!s)); }, []);
-  useEffect(() => { if (info.data) setBf({ name: info.data.name, address: info.data.address, postal_code: info.data.postal_code ?? "", city: info.data.city ?? "", enterprise_number: info.data.enterprise_number ?? "", total_shares: info.data.total_shares }); }, [info.data]);
+  useEffect(() => { if (info.data) setBf({ name: info.data.name, address: info.data.address, postal_code: info.data.postal_code ?? "", city: info.data.city ?? "", enterprise_number: info.data.enterprise_number ?? "", total_shares: info.data.total_shares, av_period_start: info.data.av_period_start ?? "", av_period_days: info.data.av_period_days ?? 15 }); }, [info.data]);
 
   const togglePush = async (on: boolean) => {
     try {
@@ -60,11 +60,12 @@ export function SettingsPage() {
     </CardContent></Card>
 
     {b.isManager && bf && <Card><CardHeader><CardTitle>Gebouw (VME)</CardTitle></CardHeader><CardContent>
-      <form className="grid gap-4" onSubmit={async (e: FormEvent) => { e.preventDefault(); await api.patch(`/api/buildings/${b.id}`, { ...bf, total_shares: Number(bf.total_shares) }); await refresh(); toast.success("Gebouw opgeslagen"); }}>
+      <form className="grid gap-4" onSubmit={async (e: FormEvent) => { e.preventDefault(); await api.patch(`/api/buildings/${b.id}`, { ...bf, total_shares: Number(bf.total_shares), av_period_start: bf.av_period_start || null, av_period_days: Number(bf.av_period_days) }); await refresh(); toast.success("Gebouw opgeslagen"); }}>
         <Field label="Naam"><Input value={bf.name} onChange={(e) => setBf({ ...bf, name: e.target.value })} /></Field>
         <Field label="Adres"><Input value={bf.address} onChange={(e) => setBf({ ...bf, address: e.target.value })} /></Field>
         <div className="grid grid-cols-3 gap-3"><Field label="Postcode"><Input value={bf.postal_code} onChange={(e) => setBf({ ...bf, postal_code: e.target.value })} /></Field><Field label="Gemeente" className="col-span-2"><Input value={bf.city} onChange={(e) => setBf({ ...bf, city: e.target.value })} /></Field></div>
         <div className="grid grid-cols-2 gap-3"><Field label="Ondernemingsnummer"><Input value={bf.enterprise_number} onChange={(e) => setBf({ ...bf, enterprise_number: e.target.value })} /></Field><Field label="Totaal aandelen"><Input type="number" value={bf.total_shares} onChange={(e) => setBf({ ...bf, total_shares: e.target.value })} /></Field></div>
+        <div className="grid grid-cols-2 gap-3"><Field label="Start AV-periode (MM-DD)" hint="Periode uit het reglement van interne orde waarin de gewone AV plaatsvindt. Bepaalt de uiterste datum (3 weken vooraf) voor agendapunten van mede-eigenaars."><Input placeholder="03-01" pattern="\\d{2}-\\d{2}" value={bf.av_period_start} onChange={(e) => setBf({ ...bf, av_period_start: e.target.value })} /></Field><Field label="Duur AV-periode (dagen)"><Input type="number" min={1} max={60} value={bf.av_period_days} onChange={(e) => setBf({ ...bf, av_period_days: e.target.value })} /></Field></div>
         <Button className="w-fit">Opslaan</Button></form>
     </CardContent></Card>}
 

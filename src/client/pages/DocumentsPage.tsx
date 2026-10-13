@@ -1,8 +1,9 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ChevronRight, Download, File, FileImage, FileSpreadsheet, FileText, Folder, FolderPlus, Lock, MoreHorizontal, Pencil, Search, Trash2, Upload, UploadCloud } from "lucide-react";
+import { ChevronRight, ClipboardCheck, Download, File, FileImage, FileSpreadsheet, FileText, Folder, FolderPlus, Lock, MoreHorizontal, Pencil, Search, Trash2, Upload, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { useBuilding, useFetch } from "../components/Layout";
+import { DocCommentsDialog } from "../components/DocComments";
 import { Empty, ErrorBox, Field, PageHeader, Spinner } from "../components/ui";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -25,7 +26,7 @@ export function DocumentsPage() {
   const [q, setQ] = useState("");
   const folders = useFetch<FolderT[]>(`/api/buildings/${b.id}/folders`);
   const docs = useFetch<Doc[]>(`/api/buildings/${b.id}/documents?${q ? `q=${encodeURIComponent(q)}` : `folder=${folderId}`}`);
-  const [upload, setUpload] = useState(false); const [newFolder, setNewFolder] = useState(false); const [edit, setEdit] = useState<Doc | null>(null);
+  const [upload, setUpload] = useState(false); const [newFolder, setNewFolder] = useState(false); const [edit, setEdit] = useState<Doc | null>(null); const [review, setReview] = useState<Doc | null>(null);
   const current = folders.data?.find((f) => f.id === folderId);
   const children = useMemo(() => (folders.data ?? []).filter((f) => (f.parent_id ?? "root") === folderId), [folders.data, folderId]);
   const crumbs = useMemo(() => { const out: FolderT[] = []; let f = current; while (f) { out.unshift(f); f = folders.data?.find((x) => x.id === f!.parent_id); } return out; }, [current, folders.data]);
@@ -34,7 +35,7 @@ export function DocumentsPage() {
   const delFolder = async (f: FolderT) => { if (!confirm(`Map "${f.name}" verwijderen?`)) return; try { await api.del(`/api/buildings/${b.id}/folders/${f.id}`); folders.reload(); } catch (e) { toast.error((e as Error).message); } };
 
   return <div>
-    <PageHeader title="Documenten" subtitle="Statuten, verslagen, afrekeningen, offertes en meer." actions={<>{b.isBoard && <Button variant="outline" onClick={() => setNewFolder(true)}><FolderPlus />Map</Button>}{b.isOwner && <Button onClick={() => setUpload(true)}><Upload />Uploaden</Button>}</>} />
+    <PageHeader title="Documenten" subtitle={b.role === "commissaris" ? "Je hebt inzage in alle stukken en kan opmerkingen en bevindingen noteren (art. 3.91 BW)." : b.role === "raad" ? "De raad heeft inzage in alle beheersdocumenten (art. 3.90 BW)." : "Statuten, verslagen, afrekeningen, offertes en meer."} actions={<>{b.isBoard && <Button variant="outline" onClick={() => setNewFolder(true)}><FolderPlus />Map</Button>}{b.isOwner && <Button onClick={() => setUpload(true)}><Upload />Uploaden</Button>}</>} />
     <div className="mb-4 flex flex-wrap items-center gap-3">
       <nav className="flex min-w-0 flex-1 items-center gap-1 text-sm"><button className="flex items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-accent cursor-pointer" onClick={() => go("root")}><Folder className="size-4 text-muted-foreground" />Alle documenten</button>{crumbs.map((f) => <span key={f.id} className="flex items-center gap-1"><ChevronRight className="size-4 text-muted-foreground" /><button className="rounded-md px-1.5 py-1 hover:bg-accent cursor-pointer" onClick={() => go(f.id)}>{f.name}</button></span>)}</nav>
       <div className="relative w-full sm:w-72"><Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" /><Input className="pl-8" placeholder="Zoeken in alle documenten…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
@@ -48,11 +49,13 @@ export function DocumentsPage() {
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"><span>{DOC_CATEGORIES[d.category] ?? d.category}</span><span>·</span><span>{fmtSize(d.size)}</span><span>·</span><span>{fmtDate(d.created_at)}</span><span>·</span><span>{d.uploaded_by_name}</span>{d.version > 1 && <Badge variant="outline">v{d.version}</Badge>}{d.visibility !== "all" && <Badge variant="secondary"><Lock />{VIS[d.visibility]}</Badge>}</div>
           {d.description && <div className="mt-0.5 text-xs text-muted-foreground">{d.description}</div>}</div>
         <Button variant="ghost" size="icon-sm" asChild><a href={`/api/buildings/${b.id}/documents/${d.id}/download`} aria-label="Downloaden"><Download /></a></Button>
-        {b.isBoard && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm"><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => setEdit(d)}><Pencil />Bewerken</DropdownMenuItem><DropdownMenuItem variant="destructive" onClick={() => del(d)}><Trash2 />Verwijderen</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}
+        {b.isBoard && <Button variant="ghost" size="icon-sm" title="Controle / opmerkingen" onClick={() => setReview(d)}><ClipboardCheck /></Button>}
+        {(b.isManager || b.role === "raad") && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm"><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => setEdit(d)}><Pencil />Bewerken</DropdownMenuItem><DropdownMenuItem variant="destructive" onClick={() => del(d)}><Trash2 />Verwijderen</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}
       </div>)}
     </div>}
     <UploadModal open={upload} onClose={() => setUpload(false)} folders={folders.data ?? []} folderId={folderId} onDone={() => { setUpload(false); docs.reload(); toast.success("Document geüpload"); }} canSetVisibility={b.isBoard} />
     <Dialog open={newFolder} onOpenChange={setNewFolder}><DialogContent><DialogHeader><DialogTitle>Nieuwe map</DialogTitle></DialogHeader><FolderForm parentId={folderId === "root" ? null : folderId} onDone={() => { setNewFolder(false); folders.reload(); }} /></DialogContent></Dialog>
+    {review && <DocCommentsDialog doc={review} onClose={() => setReview(null)} />}
     <Dialog open={!!edit} onOpenChange={(o) => !o && setEdit(null)}><DialogContent><DialogHeader><DialogTitle>Document bewerken</DialogTitle></DialogHeader>{edit && <EditDocForm doc={edit} folders={folders.data ?? []} onDone={() => { setEdit(null); docs.reload(); }} />}</DialogContent></Dialog>
   </div>;
 }

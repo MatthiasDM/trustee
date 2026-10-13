@@ -12,8 +12,8 @@ const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
 
 /** SQL-filter op zichtbaarheid volgens rol. */
 function visibilityFilter(role: string): string {
-  if (isManager(role)) return "1=1";
-  if (isBoard(role)) return "visibility IN ('all','raad','owners_only')";
+  // Raad en commissaris hebben wettelijk inzagerecht in alle beheersdocumenten (art. 3.90 en 3.91 BW)
+  if (isManager(role) || isBoard(role)) return "1=1";
   if (isOwner(role)) return "visibility IN ('all','owners_only')";
   return "visibility = 'all'";
 }
@@ -144,6 +144,34 @@ docs.delete("/:buildingId/documents/:docId", requireBuilding("syndicus", "raad",
   await c.env.DOCS.delete(d.r2_key);
   await c.env.DB.prepare("DELETE FROM documents WHERE id = ?").bind(d.id).run();
   await audit(c.env, b.id, user.id, "document.delete", "document", d.id, { name: d.name });
+  return c.json({ ok: true });
+});
+
+// ---- Opmerkingen op documenten (controle door commissaris / raad; geen bewerking) ----
+docs.get("/:buildingId/documents/:docId/comments", requireBuilding(), async (c) => {
+  const d = await loadDoc(c);
+  const rows = await c.env.DB.prepare("SELECT dc.*, u.name AS author_name, bm.role AS author_role FROM document_comments dc JOIN users u ON u.id = dc.author_id LEFT JOIN building_members bm ON bm.user_id = dc.author_id AND bm.building_id = ? WHERE dc.document_id = ? ORDER BY dc.created_at").bind(c.get("building").id, d.id).all();
+  return c.json(rows.results);
+});
+
+docs.post("/:buildingId/documents/:docId/comments", requireBuilding("syndicus", "raad", "commissaris"), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  const d = await loadDoc(c);
+  const { body, kind } = z.object({ body: z.string().min(1).max(5000), kind: z.enum(["remark", "finding", "approved"]).default("remark") }).parse(await c.req.json());
+  const id = uid();
+  await c.env.DB.prepare("INSERT INTO document_comments (id, document_id, author_id, body, kind) VALUES (?,?,?,?,?)").bind(id, d.id, user.id, body, kind).run();
+  await audit(c.env, b.id, user.id, `document.comment.${kind}`, "document", d.id);
+  const labels = { remark: "Opmerking", finding: "Bevinding", approved: "Goedgekeurd" };
+  await notifyBuilding(c.env, { buildingId: b.id, type: "document_comment", title: `${labels[kind]} bij ${d.name}`, body: `${user.name}: ${body.slice(0, 160)}`, link: `/b/${b.id}/documents${d.folder_id ? `?folder=${d.folder_id}` : ""}`, roles: ["syndicus", "raad", "commissaris"], excludeUserId: user.id, email: kind === "finding" });
+  return c.json({ id }, 201);
+});
+
+docs.delete("/:buildingId/documents/:docId/comments/:commentId", requireBuilding(), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  const cm = await c.env.DB.prepare("SELECT author_id FROM document_comments WHERE id = ? AND document_id = ?").bind(c.req.param("commentId"), c.req.param("docId")).first<any>();
+  if (!cm) throw new HttpError(404, "Opmerking niet gevonden");
+  if (cm.author_id !== user.id && !isManager(b.role)) throw new HttpError(403, "Geen rechten");
+  await c.env.DB.prepare("DELETE FROM document_comments WHERE id = ?").bind(c.req.param("commentId")).run();
   return c.json({ ok: true });
 });
 

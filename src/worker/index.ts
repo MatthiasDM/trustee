@@ -11,6 +11,8 @@ import posts from "./routes/posts";
 import polls from "./routes/polls";
 import meetings from "./routes/meetings";
 import notifications from "./routes/notifications";
+import agenda from "./routes/agenda";
+import mandates, { ORGAN_RULES } from "./routes/mandates";
 import { notifyBuilding } from "./lib/notify";
 
 const app = new Hono<AppEnv>();
@@ -24,6 +26,8 @@ app.route("/api/buildings", documents);
 app.route("/api/buildings", posts);
 app.route("/api/buildings", polls);
 app.route("/api/buildings", meetings);
+app.route("/api/buildings", agenda);
+app.route("/api/buildings", mandates);
 app.route("/api/notifications", notifications);
 
 app.notFound((c) => c.json({ error: "Niet gevonden" }, 404));
@@ -51,6 +55,13 @@ export default {
       const upcoming = await env.DB.prepare("SELECT id, building_id, title, starts_at, location FROM meetings WHERE starts_at >= ? AND starts_at < ?").bind(from, to).all<any>();
       for (const m of upcoming.results) {
         await notifyBuilding(env, { buildingId: m.building_id, type: "meeting_reminder", title: `Morgen: ${m.title}`, body: `${new Date(m.starts_at).toLocaleString("nl-BE", { timeZone: "Europe/Brussels" })}${m.location ? ` — ${m.location}` : ""}`, link: `/b/${m.building_id}/meetings` });
+      }
+      // mandaten die binnen 60 dagen aflopen: één herinnering aan syndicus en raad (venster van 15 min)
+      const in60 = new Date(Date.now() + 60 * 86400_000).toISOString().slice(0, 10);
+      const expiring = await env.DB.prepare("SELECT m.*, u.name AS user_name FROM mandates m LEFT JOIN users u ON u.id = m.user_id WHERE m.end_date = ?").bind(in60).all<any>();
+      const minute = new Date().getUTCHours() * 60 + new Date().getUTCMinutes();
+      if (minute < 15) for (const m of expiring.results) {
+        await notifyBuilding(env, { buildingId: m.building_id, type: "mandate", title: `Mandaat loopt af over 60 dagen: ${ORGAN_RULES[m.organ as keyof typeof ORGAN_RULES].label}`, body: `${m.user_name ?? m.holder_name} — tot ${m.end_date}. Agendeer de herbenoeming op de algemene vergadering.`, link: `/b/${m.building_id}/members?tab=mandates`, roles: ["syndicus", "raad"] });
       }
       await env.DB.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(nowIso).run();
       await env.DB.prepare("DELETE FROM password_resets WHERE expires_at < ?").bind(nowIso).run();

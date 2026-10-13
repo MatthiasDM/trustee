@@ -40,6 +40,16 @@ INSERT OR IGNORE INTO polls (id, building_id, created_by, title, description, we
  ('poll-1','b-zeezicht','u-syndicus','Goedkeuring offerte dakrenovatie (€ 48.500)','Offerte van Dakwerken Devos voor volledige vernieuwing van de dakbedekking incl. isolatie. Zie map Offertes & facturen.',1,0,0,1,'two_thirds','open');
 INSERT OR IGNORE INTO poll_options (id, poll_id, label, position) VALUES ('po-1','poll-1','Ja, goedkeuren',0),('po-2','poll-1','Nee',1),('po-3','poll-1','Onthouding',2);
 INSERT OR IGNORE INTO poll_votes (id, poll_id, option_id, user_id, weight) VALUES ('pv-1','poll-1','po-1','u-jan',300);
+UPDATE buildings SET av_period_start='03-01', av_period_days=31 WHERE id='b-zeezicht';
+INSERT OR IGNORE INTO mandates (id, building_id, organ, user_id, holder_name, function_title, start_date, end_date) VALUES
+ ('md-1','b-zeezicht','syndicus','u-syndicus',NULL,NULL,date('now','-1 year'),date('now','+2 years')),
+ ('md-2','b-zeezicht','raad','u-jan',NULL,'Voorzitter',date('now','-6 months'),date('now','+6 months')),
+ ('md-3','b-zeezicht','commissaris',NULL,'Accountantskantoor Dewulf',NULL,date('now','-10 months'),date('now','+45 days'));
+INSERT OR IGNORE INTO agenda_items (id, building_id, meeting_id, submitted_by, title, description, required_majority, status, position, poll_id) VALUES
+ ('ag-1','b-zeezicht','m-1','u-syndicus','Goedkeuring verslag vorige AV',NULL,'simple','scheduled',1,NULL),
+ ('ag-2','b-zeezicht','m-1','u-syndicus','Jaarrekening 2025 en kwijting syndicus','Verslag van de commissaris van de rekeningen wordt toegevoegd.','simple','scheduled',2,NULL),
+ ('ag-3','b-zeezicht','m-1','u-syndicus','Dakrenovatie: goedkeuring offerte Dakwerken Devos','Zie stemming.','two_thirds','scheduled',3,'poll-1'),
+ ('ag-4','b-zeezicht',NULL,'u-marie','Fietsenstalling uitbreiden','Er is plaats tekort voor fietsen. Voorstel om de berging naast de inkom om te vormen.','two_thirds','proposed',0,NULL);
 INSERT OR IGNORE INTO meetings (id, building_id, title, type, starts_at, location, agenda, created_by) VALUES
  ('m-1','b-zeezicht','Jaarlijkse algemene vergadering 2026','av',strftime('%Y-%m-%dT18:30:00.000Z','now','+21 days'),'Inkomhal, gelijkvloers','1. Goedkeuring verslag vorige AV\n2. Jaarrekening 2025 en kwijting syndicus\n3. Begroting 2026\n4. Dakrenovatie: toelichting en stemming\n5. Varia','u-syndicus');
 `;

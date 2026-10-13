@@ -5,7 +5,7 @@ export type PostStatus = "open" | "answered" | "in_progress" | "resolved" | "clo
 export type Majority = "simple" | "two_thirds" | "four_fifths" | "unanimous" | "none";
 
 export const ROLE_LABELS: Record<Role, string> = {
-  syndicus: "Syndicus",
+  syndicus: "Syndicus (uitvoerend)",
   raad: "Raad van mede-eigendom",
   eigenaar: "Mede-eigenaar",
   huurder: "Huurder",
@@ -16,6 +16,7 @@ export const DOC_CATEGORIES: Record<string, string> = {
   statuten: "Statuten & basisakte",
   reglement: "Reglement van interne orde",
   verslag_av: "Verslagen algemene vergadering",
+  controleverslag: "Verslag commissaris / raad",
   boekhouding: "Boekhouding & afrekeningen",
   offerte: "Offertes",
   factuur: "Facturen",
@@ -43,4 +44,9 @@ export interface Comment { id: string; post_id: string; author_id: string; autho
 export interface PollOption { id: string; label: string; position: number; votes?: number; weight?: number; voters?: string[] }
 export interface Poll { id: string; title: string; description?: string | null; weighted: number; anonymous: number; multiple: number; owners_only: number; required_majority: Majority; opens_at: string; closes_at?: string | null; status: string; created_by: string; created_by_name?: string; created_at: string; options?: PollOption[]; my_votes?: string[]; total_weight?: number; total_voters?: number; eligible_weight?: number; eligible_voters?: number }
 export interface Meeting { id: string; title: string; type: string; starts_at: string; location?: string | null; agenda?: string | null; minutes_document_id?: string | null; rsvp_counts?: { attending: number; proxy: number; absent: number }; my_rsvp?: string | null }
+export type Organ = "syndicus" | "raad" | "commissaris";
+export const ORGAN_LABELS: Record<Organ, string> = { syndicus: "Syndicus", raad: "Raad van mede-eigendom", commissaris: "Commissaris van de rekeningen" };
+export interface AgendaItem { id: string; meeting_id: string | null; submitted_by: string; submitted_by_name: string; title: string; description?: string | null; required_majority: Majority; status: "proposed" | "scheduled" | "decided" | "deferred" | "withdrawn"; position: number; poll_id?: string | null; poll_status?: string | null; decision?: string | null; meeting_title?: string | null; meeting_starts_at?: string | null; created_at: string }
+export interface Mandate { id: string; organ: Organ; user_id?: string | null; user_name?: string | null; user_email?: string | null; holder_name?: string | null; function_title?: string | null; start_date: string; end_date: string; appointed_by_meeting_id?: string | null; meeting_title?: string | null; notes?: string | null }
+export interface DocComment { id: string; document_id: string; author_id: string; author_name: string; author_role?: Role; body: string; kind: "remark" | "finding" | "approved"; created_at: string }
 export interface Notification { id: string; building_id?: string | null; type: string; title: string; body?: string | null; link?: string | null; read_at?: string | null; created_at: string }

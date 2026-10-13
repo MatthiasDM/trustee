@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, Calendar, FileText, HelpCircle, Home, Megaphone, MessageSquare, Pin, Users, Vote, Wrench, AlertTriangle } from "lucide-react";
 import { useBuilding, useFetch } from "../components/Layout";
+import { OrgansCard } from "../components/OrgansCard";
 import { PageHeader, Spinner, Stat, StatusBadge, PriorityBadge } from "../components/ui";
 import { Button } from "../components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -27,6 +28,7 @@ export function DashboardPage() {
   return <div>
     <PageHeader title={info.data.name} subtitle={`${info.data.address}${info.data.city ? `, ${info.data.postal_code ?? ""} ${info.data.city}` : ""}${info.data.enterprise_number ? ` · KBO ${info.data.enterprise_number}` : ""}`}
       actions={<><Button variant="outline" asChild><Link to={`/b/${b.id}/posts?new=question`}><HelpCircle />Vraag stellen</Link></Button><Button asChild><Link to={`/b/${b.id}/posts?new=incident`}><AlertTriangle />Melding maken</Link></Button></>} />
+    <OrgansCard />
     <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
       <Stat label="Leden" value={s.members ?? 0} icon={<Users />} /><Stat label="Kavels" value={s.units ?? 0} icon={<Home />} /><Stat label="Documenten" value={s.documents ?? 0} icon={<FileText />} />
       <Stat label="Open vragen" value={s.open_posts ?? 0} icon={<MessageSquare />} /><Stat label="Open stemmingen" value={s.open_polls ?? 0} icon={<Vote />} /><Stat label="Vergaderingen" value={s.upcoming_meetings ?? 0} icon={<Calendar />} />

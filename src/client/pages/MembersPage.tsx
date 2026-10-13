@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from "react";
-import { AlertTriangle, CheckCircle2, Home, Pencil, Plus, Trash2, UserPlus, Users, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Gavel, Home, Pencil, Plus, Trash2, UserPlus, Users, X } from "lucide-react";
 import { toast } from "sonner";
+import { useSearchParams } from "react-router-dom";
 import { useBuilding, useFetch } from "../components/Layout";
+import { MandatesTab } from "../components/MandatesTab";
 import { Empty, ErrorBox, Field, PageHeader, RoleBadge, Spinner, UserAvatar } from "../components/ui";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -20,13 +22,16 @@ export function MembersPage() {
   const b = useBuilding();
   const members = useFetch<{ members: Member[]; invites: any[] }>(`/api/buildings/${b.id}/members`);
   const units = useFetch<{ units: Unit[]; total_shares: number; sum_shares: number }>(`/api/buildings/${b.id}/units`);
-  const [tab, setTab] = useState("members");
+  const [sp, setSp] = useSearchParams();
+  const tab = sp.get("tab") ?? "members"; const setTab = (t: string) => setSp(t === "members" ? {} : { tab: t });
+  const meetingsQ = useFetch<any[]>(`/api/buildings/${b.id}/meetings`);
   const [invite, setInvite] = useState(false); const [unitModal, setUnitModal] = useState<Unit | null | "new">(null);
   const reload = () => { members.reload(); units.reload(); };
   const ok = units.data && units.data.sum_shares === units.data.total_shares;
   return <div>
-    <PageHeader title="Leden & kavels" subtitle="Mede-eigenaars, raad van mede-eigendom, huurders en de verdeling van quotiteiten." actions={b.isManager && <>{tab === "units" && <Button variant="outline" onClick={() => setUnitModal("new")}><Plus />Kavel</Button>}<Button onClick={() => setInvite(true)}><UserPlus />Uitnodigen</Button></>} />
-    <Tabs value={tab} onValueChange={setTab} className="mb-4"><TabsList><TabsTrigger value="members"><Users />Leden ({members.data?.members.length ?? 0})</TabsTrigger><TabsTrigger value="units"><Home />Kavels ({units.data?.units.length ?? 0})</TabsTrigger></TabsList></Tabs>
+    <PageHeader title="Mede-eigenaars & organen" subtitle="De leden van de VME, hun kavels en quotiteiten, en de mandaten die de algemene vergadering toekent." actions={b.isManager && <>{tab === "units" && <Button variant="outline" onClick={() => setUnitModal("new")}><Plus />Kavel</Button>}<Button onClick={() => setInvite(true)}><UserPlus />Uitnodigen</Button></>} />
+    <Tabs value={tab} onValueChange={setTab} className="mb-4"><TabsList><TabsTrigger value="members"><Users />Leden ({members.data?.members.length ?? 0})</TabsTrigger><TabsTrigger value="units"><Home />Kavels ({units.data?.units.length ?? 0})</TabsTrigger><TabsTrigger value="mandates"><Gavel />Mandaten</TabsTrigger></TabsList></Tabs>
+    {tab === "mandates" && <MandatesTab members={members.data?.members ?? []} meetings={meetingsQ.data ?? []} />}
     {tab === "members" && (members.loading ? <Spinner /> : <>
       <div className="divide-y rounded-xl border bg-card shadow-xs">{members.data?.members.map((m) => <div key={m.user_id} className="flex items-center gap-3 px-4 py-3">
         <UserAvatar name={m.name} /><div className="min-w-0 flex-1"><div className="text-sm font-medium">{m.name}</div><div className="truncate text-xs text-muted-foreground">{b.isBoard ? `${m.email}${m.phone ? ` · ${m.phone}` : ""} · ` : ""}{m.units ? `Kavel ${m.units}` : "geen kavel"}</div></div>

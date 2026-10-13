@@ -55,6 +55,10 @@ De boekhouding volgt het wettelijke rekeningenstelsel voor VME's (KB 12 juli 201
 - **Vaste activa**: investeringen met een afschrijvingsplan; de afschrijvingen van toekomstige jaren staan klaar als geplande boekingen.
 - **Begroting**: gewone en buitengewone kosten per rubriek, naast vorig jaar en de werkelijke cijfers; na goedkeuring door de AV vergrendeld.
 - **Draaitabel**: kosten en opbrengsten per rekening, rubriek of klasse, per maand, kwartaal of jaar; export naar CSV.
+- **Jaarrekening (PDF)**: op *Overzicht* maakt de syndicus een voorlopige jaarrekening; bij het afsluiten van het boekjaar wordt de definitieve automatisch bewaard onder *Documenten › Boekhouding*. Inhoud: resultatenrekening, balans, kas en kapitaal, begroting tegenover werkelijkheid, afrekening per kavel.
+- **Afrekeningen versturen**: op *Afrekening* maakt de syndicus voor elke kavel een individuele PDF met kostenaandeel, voorschotten, saldo en betaalinstructie. Elke eigenaar ziet enkel zijn eigen afrekening bij Documenten en krijgt een melding.
+- **Opvolging** (syndicus, raad, commissaris): openstaande voorschotten per kavel met het aantal dagen over de vervaldag. De syndicus stuurt een herinnering, aanmaning of ingebrekestelling als PDF-brief (zichtbaar voor de eigenaar) met optionele aanmaningskost die op de kavel geboekt wordt. Automatische opvolging kan aan: de cron stuurt dan dagelijks herinneringen na X dagen en aanmaningen na Y dagen.
+- **Controle**: de commissaris stelt zijn verslag op (periode, omvang, vaststellingen, besluit, advies) en maakt het definitief. Het verslag wordt een PDF onder Documenten, alle leden krijgen een melding en het punt "verslag commissaris en kwijting" wordt automatisch als agendapunt voorgesteld voor de AV.
 - **Instellingen** (syndicus): boekjaren openen en afsluiten, bankrekeningen (werk- en reservekapitaal apart), verdeelsleutels, extra rekeningen.
 
 ## Mede-eigenaars & organen
@@ -99,6 +103,9 @@ Huurders en andere bewoners zijn geen lid van de VME en stemmen niet, maar mogen
 | Eigen afrekening zien | eigen kavels | – | alle kavels | alle kavels | alle kavels |
 | Boeken, bank, oproepen, begroting opstellen | – | – | – | – | ✔ |
 | Opmerking / bevinding bij boeking | – | – | ✔ | ✔ | ✔ |
+| Jaarrekening en afrekeningen genereren, herinneringen sturen | – | – | – | – | ✔ |
+| Openstaande saldi en verstuurde brieven zien | – | – | ✔ | ✔ | ✔ |
+| Controleverslag opstellen en definitief maken | – | – | – | ✔ | (opstellen) |
 | Bericht aan alle leden | – | – | – | – | ✔ |
 
 ## Privacy en veiligheid

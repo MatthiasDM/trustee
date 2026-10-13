@@ -38,6 +38,7 @@
     "clsx": "^2.1.1",
     "hono": "^4.13.13",
     "lucide-react": "^1.55.0",
+    "pdf-lib": "^1.17.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-markdown": "^10.1.0",

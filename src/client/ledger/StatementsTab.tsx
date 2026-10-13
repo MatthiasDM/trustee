@@ -1,6 +1,10 @@
 import { useFetch, useBuilding } from "../components/Layout";
 import { Spinner } from "../components/ui";
 import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { toast } from "sonner";
+import { api } from "../lib/api";
+import { Send } from "lucide-react";
 import { Money, type FiscalYear } from "./shared";
 
 /** Afrekening per kavel: aandeel in de kosten (via verdeelsleutels) tegenover opgeroepen en betaalde voorschotten. */
@@ -17,6 +21,6 @@ export function StatementsTab({ fy }: { fy: FiscalYear | null }) {
       {u.costs.length > 0 && <details className="mt-2 text-sm"><summary className="cursor-pointer text-primary">Detail kosten ({u.costs.length} rubrieken)</summary><table className="mt-2 w-full"><tbody>{u.costs.map((c: any) => <tr key={c.code} className="border-t"><td className="py-1"><span className="font-mono text-xs text-muted-foreground">{c.code}</span> {c.name}</td><td className="py-1 text-right tabular-nums">{c.amount.toFixed(2)}</td></tr>)}</tbody></table></details>}
       {u.opening_balance !== 0 && <p className="mt-1 text-xs text-muted-foreground">Openstaand saldo uit vorige boekjaren: <Money n={u.opening_balance} /></p>}
     </div>)}
-    {b.isBoard && <div className="text-right text-sm">Totaal verdeelde kosten: <Money n={data.total_cost} className="font-semibold" /></div>}
+    {b.isBoard && <div className="flex flex-wrap items-center justify-between gap-2 text-sm">{b.isManager ? <Button size="sm" onClick={async () => { if (!confirm("Voor elke kavel een individuele afrekening (PDF) aanmaken en de eigenaars verwittigen?")) return; const r = await api.post<any>(`/api/buildings/${b.id}/ledger/statements/${fy.id}/send`, { notify: true }); toast.success(`${r.sent} afrekeningen verstuurd`); }}><Send />Afrekeningen versturen (PDF per kavel)</Button> : <span />}<span>Totaal verdeelde kosten: <Money n={data.total_cost} className="font-semibold" /></span></div>}
   </div>;
 }

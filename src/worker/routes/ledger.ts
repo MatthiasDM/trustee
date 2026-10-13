@@ -6,6 +6,7 @@ import { HttpError, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 import { TEMPLATES, allocate, ensureChart, fiscalYearFor, keyWeights, ogm, ogmDigits, parseBankCsv, parseCoda, postEntry, reverseEntry, round2, templateByCode, type LineInput } from "../lib/ledger";
 import { classOf, normalSide } from "../lib/chart";
+import { generateAnnualReport } from "../lib/reports";
 
 const ledger = new Hono<AppEnv>();
 ledger.use("*", requireAuth);
@@ -54,7 +55,8 @@ ledger.post("/:buildingId/ledger/fiscal-years/:fyId/close", mgr, async (c) => {
   if (lines.length >= 2) entryId = await postEntry(c.env, b.id, user.id, { date: fy.end_date, description: `Afsluiting boekjaar ${fy.label}: overdracht resultaat`, source: "closing", lines });
   await c.env.DB.prepare("UPDATE fiscal_years SET status = 'closed', closed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), approved_meeting_id = ? WHERE id = ?").bind(approved_meeting_id ?? null, fy.id).run();
   await audit(c.env, b.id, user.id, "ledger.close_year", "fiscal_year", fy.id, { reserve, working });
-  return c.json({ ok: true, entryId, reserve, working });
+  const reportDocId = await generateAnnualReport(c.env, b.id, user.id, fy.id, false);
+  return c.json({ ok: true, entryId, reserve, working, reportDocId });
 });
 
 // ---------- Rekeningen ----------
@@ -383,24 +385,24 @@ ledger.post("/:buildingId/ledger/calls", mgr, async (c) => {
 });
 
 // ---------- Afrekening per kavel / eigenaar ----------
-async function ownerStatement(c: Context<AppEnv>, fyId: string, unitIds: string[] | null) {
-  const b = c.get("building");
-  const fy = await c.env.DB.prepare("SELECT * FROM fiscal_years WHERE id = ? AND building_id = ?").bind(fyId, b.id).first<any>();
+export async function ownerStatement(env: AppEnv["Bindings"], buildingId: string, fyId: string, unitIds: string[] | null) {
+  const b = { id: buildingId };
+  const fy = await env.DB.prepare("SELECT * FROM fiscal_years WHERE id = ? AND building_id = ?").bind(fyId, b.id).first<any>();
   if (!fy) throw new HttpError(404, "Boekjaar niet gevonden");
-  const units = (await c.env.DB.prepare("SELECT un.*, (SELECT GROUP_CONCAT(u.name, ', ') FROM unit_owners uo JOIN users u ON u.id = uo.user_id WHERE uo.unit_id = un.id) AS owners FROM units un WHERE un.building_id = ? ORDER BY un.label").bind(b.id).all()).results as any[];
+  const units = (await env.DB.prepare("SELECT un.*, (SELECT GROUP_CONCAT(u.name, ', ') FROM unit_owners uo JOIN users u ON u.id = uo.user_id WHERE uo.unit_id = un.id) AS owners FROM units un WHERE un.building_id = ? ORDER BY un.label").bind(b.id).all()).results as any[];
   // kosten per sleutel verdelen
-  const costLines = (await c.env.DB.prepare(`SELECT jl.cost_key_id, a.code, a.name, jl.memo, SUM(jl.debit - jl.credit) AS amount FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id JOIN accounts a ON a.id = jl.account_id WHERE je.fiscal_year_id = ? AND je.status = 'posted' AND a.class = 6 AND a.code NOT IN ('693') GROUP BY jl.cost_key_id, a.code, a.name, jl.memo`).bind(fy.id).all()).results as any[];
+  const costLines = (await env.DB.prepare(`SELECT jl.cost_key_id, a.code, a.name, jl.memo, SUM(jl.debit - jl.credit) AS amount FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id JOIN accounts a ON a.id = jl.account_id WHERE je.fiscal_year_id = ? AND je.status = 'posted' AND a.class = 6 AND a.code NOT IN ('693') GROUP BY jl.cost_key_id, a.code, a.name, jl.memo`).bind(fy.id).all()).results as any[];
   const keyCache = new Map<string | null, Map<string, number>>();
   const costByUnit = new Map<string, Map<string, { name: string; amount: number }>>();
   for (const cl of costLines) {
     const k = cl.cost_key_id ?? null;
-    if (!keyCache.has(k)) keyCache.set(k, await keyWeights(c.env, b.id, k));
+    if (!keyCache.has(k)) keyCache.set(k, await keyWeights(env, b.id, k));
     const parts = allocate(round2(cl.amount), keyCache.get(k)!);
     for (const [uid_, amt] of parts) { if (!costByUnit.has(uid_)) costByUnit.set(uid_, new Map()); const m = costByUnit.get(uid_)!; const cur = m.get(cl.code) ?? { name: cl.name, amount: 0 }; cur.amount = round2(cur.amount + amt); m.set(cl.code, cur); }
   }
   // oproepen en betalingen per kavel (410x)
-  const recv = (await c.env.DB.prepare(`SELECT jl.unit_id, a.fund, SUM(jl.debit) AS called, SUM(jl.credit) AS paid FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id JOIN accounts a ON a.id = jl.account_id WHERE je.fiscal_year_id = ? AND je.status = 'posted' AND a.code IN ('4100','4101') AND jl.unit_id IS NOT NULL GROUP BY jl.unit_id, a.fund`).bind(fy.id).all()).results as any[];
-  const openingBalances = (await c.env.DB.prepare(`SELECT jl.unit_id, SUM(jl.debit - jl.credit) AS bal FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id JOIN accounts a ON a.id = jl.account_id WHERE je.building_id = ? AND je.status = 'posted' AND a.code IN ('4100','4101') AND jl.unit_id IS NOT NULL AND je.date < ? GROUP BY jl.unit_id`).bind(b.id, fy.start_date).all()).results as any[];
+  const recv = (await env.DB.prepare(`SELECT jl.unit_id, a.fund, SUM(jl.debit) AS called, SUM(jl.credit) AS paid FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id JOIN accounts a ON a.id = jl.account_id WHERE je.fiscal_year_id = ? AND je.status = 'posted' AND a.code IN ('4100','4101') AND jl.unit_id IS NOT NULL GROUP BY jl.unit_id, a.fund`).bind(fy.id).all()).results as any[];
+  const openingBalances = (await env.DB.prepare(`SELECT jl.unit_id, SUM(jl.debit - jl.credit) AS bal FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id JOIN accounts a ON a.id = jl.account_id WHERE je.building_id = ? AND je.status = 'posted' AND a.code IN ('4100','4101') AND jl.unit_id IS NOT NULL AND je.date < ? GROUP BY jl.unit_id`).bind(b.id, fy.start_date).all()).results as any[];
   const out = units.filter((u) => !unitIds || unitIds.includes(u.id)).map((u) => {
     const costs = [...(costByUnit.get(u.id)?.entries() ?? [])].map(([code, v]) => ({ code, ...v })).sort((a, c2) => a.code.localeCompare(c2.code));
     const totalCost = round2(costs.reduce((s, x) => s + x.amount, 0));
@@ -415,9 +417,9 @@ async function ownerStatement(c: Context<AppEnv>, fyId: string, unitIds: string[
 }
 ledger.get("/:buildingId/ledger/statements/:fyId", async (c) => {
   const b = c.get("building"); const user = c.get("user");
-  if (isBoard(b.role)) return c.json(await ownerStatement(c, c.req.param("fyId"), null));
+  if (isBoard(b.role)) return c.json(await ownerStatement(c.env, b.id, c.req.param("fyId"), null));
   const mine = (await c.env.DB.prepare("SELECT unit_id FROM unit_owners WHERE user_id = ?").bind(user.id).all()).results.map((r: any) => r.unit_id);
-  return c.json(await ownerStatement(c, c.req.param("fyId"), mine));
+  return c.json(await ownerStatement(c.env, b.id, c.req.param("fyId"), mine));
 });
 
 // ---------- Begroting ----------
@@ -459,12 +461,12 @@ ledger.get("/:buildingId/ledger/reports/pivot/:fyId", async (c) => {
   return c.json(rows.map((r) => ({ ...r, net: round2(r.type === "asset" || r.type === "expense" ? r.debit - r.credit : r.credit - r.debit), group: r.code.slice(0, 3), quarter: `${r.period.slice(0, 4)}-Q${Math.ceil(parseInt(r.period.slice(5), 10) / 3)}` })));
 });
 /** Balans, resultatenrekening en kas- en kapitaalpositie op een datum. */
-ledger.get("/:buildingId/ledger/reports/summary", async (c) => {
-  const b = c.get("building");
-  const fyId = c.req.query("fy"); const until = c.req.query("until") ?? new Date().toISOString().slice(0, 10);
-  const fy = fyId ? await c.env.DB.prepare("SELECT * FROM fiscal_years WHERE id = ? AND building_id = ?").bind(fyId, b.id).first<any>() : null;
-  const bal = (await c.env.DB.prepare(`SELECT a.code, a.name, a.class, a.type, a.fund, SUM(jl.debit) AS debit, SUM(jl.credit) AS credit FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id JOIN accounts a ON a.id = jl.account_id WHERE je.building_id = ? AND je.status = 'posted' AND je.date <= ? GROUP BY a.code HAVING ABS(SUM(jl.debit) - SUM(jl.credit)) > 0.004 ORDER BY a.code`).bind(b.id, until).all()).results as any[];
-  const pl = fy ? (await c.env.DB.prepare(`SELECT a.code, a.name, a.class, a.type, a.fund, jl.memo, SUM(jl.debit) AS debit, SUM(jl.credit) AS credit FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id JOIN accounts a ON a.id = jl.account_id WHERE je.fiscal_year_id = ? AND je.status = 'posted' AND a.class IN (6,7) GROUP BY a.code, jl.memo ORDER BY a.code`).bind(fy.id).all()).results as any[] : [];
+ledger.get("/:buildingId/ledger/reports/summary", async (c) => c.json(await summary(c.env, c.get("building").id, c.req.query("fy") ?? null, c.req.query("until") ?? new Date().toISOString().slice(0, 10))));
+export async function summary(env: AppEnv["Bindings"], buildingId: string, fyId: string | null, until: string) {
+  const b = { id: buildingId };
+  const fy = fyId ? await env.DB.prepare("SELECT * FROM fiscal_years WHERE id = ? AND building_id = ?").bind(fyId, b.id).first<any>() : null;
+  const bal = (await env.DB.prepare(`SELECT a.code, a.name, a.class, a.type, a.fund, SUM(jl.debit) AS debit, SUM(jl.credit) AS credit FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id JOIN accounts a ON a.id = jl.account_id WHERE je.building_id = ? AND je.status = 'posted' AND je.date <= ? GROUP BY a.code HAVING ABS(SUM(jl.debit) - SUM(jl.credit)) > 0.004 ORDER BY a.code`).bind(b.id, until).all()).results as any[];
+  const pl = fy ? (await env.DB.prepare(`SELECT a.code, a.name, a.class, a.type, a.fund, jl.memo, SUM(jl.debit) AS debit, SUM(jl.credit) AS credit FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id JOIN accounts a ON a.id = jl.account_id WHERE je.fiscal_year_id = ? AND je.status = 'posted' AND a.class IN (6,7) GROUP BY a.code, jl.memo ORDER BY a.code`).bind(fy.id).all()).results as any[] : [];
   const assets = bal.filter((r) => r.type === "asset").map((r) => ({ ...r, amount: round2(r.debit - r.credit) }));
   const liabilities = bal.filter((r) => r.type === "liability" || r.type === "equity").map((r) => ({ ...r, amount: round2(r.credit - r.debit) }));
   const expenses = pl.filter((r) => r.type === "expense" && r.code !== "693"); const income = pl.filter((r) => r.type === "income" && r.code !== "793");
@@ -475,10 +477,10 @@ ledger.get("/:buildingId/ledger/reports/summary", async (c) => {
   const plResult = round2(totInc - totExp);
   // resultaat (nog niet overgedragen) hoort bij het passief zodat actief = passief
   const totAssets = sum(assets, (r) => r.amount), totLiab = sum(liabilities, (r) => r.amount);
-  return c.json({ until, fiscal_year: fy, balance: { assets, liabilities, total_assets: totAssets, total_liabilities: totLiab, unallocated_result: round2(totAssets - totLiab) },
+  return ({ until, fiscal_year: fy, balance: { assets, liabilities, total_assets: totAssets, total_liabilities: totLiab, unallocated_result: round2(totAssets - totLiab) },
     result: { expenses: expenses.map((r) => ({ ...r, amount: round2(r.debit - r.credit) })), income: income.map((r) => ({ ...r, amount: round2(r.credit - r.debit) })), total_expenses: totExp, total_income: totInc, result: plResult },
     cash: { reserve_bank: bank("550"), working_bank: bank("551"), other_bank: bank("552") + bank("570"), deposits: round2(assets.filter((r) => r.code.startsWith("53")).reduce((s, r) => s + r.amount, 0)), open_receivables: recvOpen, suppliers_open: round2(liabilities.filter((r) => r.code === "440").reduce((s, r) => s + r.amount, 0)), reserve_carried: round2(liabilities.filter((r) => r.code === "48901").reduce((s, r) => s + r.amount, 0)), working_carried: round2(liabilities.filter((r) => r.code === "48902").reduce((s, r) => s + r.amount, 0)) } });
-});
+}
 ledger.get("/:buildingId/ledger/reports/export.csv", async (c) => {
   const b = c.get("building");
   const fyId = c.req.query("fy");

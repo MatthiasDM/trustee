@@ -114,7 +114,9 @@ Wat een individuele mede-eigenaar **niet** kan: de syndicus instructies geven bu
 - "Handelingen" vullen de juiste rekeningen in; de syndicus geeft bedrag, datum en tegenpartij. Afschrijvingen worden vooraf ingepland en automatisch geboekt.
 - Kosten dragen een **verdeelsleutel** (aandelen, gelijk, of eigen gewichten); daaruit volgt de afrekening per kavel.
 - Oproepen van voorschotten krijgen per kavel een **gestructureerde mededeling**, zodat betalingen uit bankuittreksels (CSV of CODA) automatisch herkend worden.
-- Mede-eigenaars zien het overzicht, de rapporten en **enkel hun eigen afrekening**; achterstallen van anderen blijven privé.
+- Mede-eigenaars zien het overzicht, de rapporten en **enkel hun eigen afrekening**; achterstallen van anderen blijven privé. Individuele afrekeningen en herinneringsbrieven zijn documenten die aan één kavel hangen en enkel voor de eigenaars van die kavel en de organen zichtbaar zijn.
+- Bij het afsluiten van het boekjaar wordt de jaarrekening (balans, resultatenrekening, kas en kapitaal, afrekening per kavel) als PDF bewaard; samen met het verslag van de commissaris vormt ze de basis voor de goedkeuring van de rekeningen en de kwijting door de AV.
+- Betalingsopvolging: herinnering, aanmaning en ingebrekestelling. Aanmaningskosten mogen enkel aangerekend worden als het reglement van interne orde dat voorziet; de kosten van gerechtelijke invordering vallen ten laste van de in gebreke blijvende mede-eigenaar (art. 3.89 en de rechtspraak daarover).
 
 ## Termijnen en limieten die Trustee afdwingt
 

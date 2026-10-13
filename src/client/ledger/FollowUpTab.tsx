@@ -1,0 +1,37 @@
+import { useState } from "react";
+import { AlertTriangle, Bell, FileWarning, Send } from "lucide-react";
+import { toast } from "sonner";
+import { useBuilding, useFetch } from "../components/Layout";
+import { Empty, ErrorBox, Field, Spinner } from "../components/ui";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Badge } from "../components/ui/badge";
+import { Switch } from "../components/ui/switch";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { api, fmtDateTime } from "../lib/api";
+import { Money } from "./shared";
+
+const LEVELS: Record<number, string> = { 1: "Herinnering", 2: "Aanmaning", 3: "Ingebrekestelling" };
+
+/** Betalingsopvolging: openstaande voorschotten per kavel, herinneringen en automatische opvolging. */
+export function FollowUpTab() {
+  const b = useBuilding();
+  const { data, loading, reload } = useFetch<any>(`/api/buildings/${b.id}/ledger/overdue`);
+  const [target, setTarget] = useState<any>(null); const [level, setLevel] = useState("1"); const [fee, setFee] = useState("0"); const [error, setError] = useState<unknown>(null);
+  const [cfg, setCfg] = useState<any>(null);
+  if (loading || !data) return <Spinner />;
+  const c = cfg ?? data.config;
+  const saveCfg = async (patch: any) => { const next = { ...c, ...patch }; setCfg(next); await api.patch(`/api/buildings/${b.id}`, { reminder_auto: !!next.reminder_auto, reminder_days_1: +next.reminder_days_1, reminder_days_2: +next.reminder_days_2, reminder_fee_2: +next.reminder_fee_2 }); };
+  return <div className="space-y-6">
+    {b.isManager && <div className="rounded-xl border bg-card p-4 shadow-xs"><div className="flex flex-wrap items-center gap-3"><Bell className="size-4 text-primary" /><span className="font-medium">Automatische opvolging</span><Switch checked={!!c.reminder_auto} onCheckedChange={(v) => saveCfg({ reminder_auto: v })} /><span className="text-xs text-muted-foreground">De cron stuurt dagelijks herinneringen en aanmaningen; elke brief komt als document bij de eigenaar en in het logboek.</span></div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3"><Field label="Herinnering na (dagen na vervaldag)"><Input type="number" min={1} value={c.reminder_days_1} onChange={(e) => setCfg({ ...c, reminder_days_1: e.target.value })} onBlur={() => saveCfg({})} /></Field><Field label="Aanmaning na (dagen)"><Input type="number" min={1} value={c.reminder_days_2} onChange={(e) => setCfg({ ...c, reminder_days_2: e.target.value })} onBlur={() => saveCfg({})} /></Field><Field label="Aanmaningskost (€)" hint="Enkel als het reglement van interne orde dit voorziet; wordt geboekt op de kavel."><Input type="number" min={0} step="0.01" value={c.reminder_fee_2} onChange={(e) => setCfg({ ...c, reminder_fee_2: e.target.value })} onBlur={() => saveCfg({})} /></Field></div></div>}
+    <div><h3 className="mb-2 font-semibold">Openstaande voorschotten</h3>
+      {!data.units.length ? <Empty title="Alle voorschotten zijn betaald" /> : <div className="divide-y rounded-xl border bg-card shadow-xs">{data.units.map((u: any) => <div key={u.unit_id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm"><div className="min-w-0 flex-1"><div className="font-medium">Kavel {u.label} <span className="font-normal text-muted-foreground">· {u.owners || "geen eigenaar"}</span></div><div className="text-xs text-muted-foreground">{u.oldest_due ? `${u.days_overdue} dagen over de vervaldag` : "nog niet vervallen"}{u.last_level ? ` · laatste: ${LEVELS[u.last_level]} (${fmtDateTime(u.last_sent)})` : ""}</div></div>{u.days_overdue > 0 && <Badge variant={u.last_level >= 2 ? "red" : "warning"}><AlertTriangle />{u.days_overdue} d</Badge>}<Money n={u.outstanding} className="font-semibold" />{b.isManager && <Button size="sm" onClick={() => { setTarget(u); setLevel(String(Math.min(3, (u.last_level ?? 0) + 1))); setFee(String((u.last_level ?? 0) + 1 >= 2 ? c.reminder_fee_2 : 0)); }}><Send />Brief sturen</Button>}</div>)}</div>}</div>
+    {data.history.length > 0 && <div><h3 className="mb-2 font-semibold">Verstuurde brieven</h3><div className="divide-y rounded-xl border bg-card shadow-xs">{data.history.map((h: any) => <div key={h.id} className="flex flex-wrap items-center gap-3 px-4 py-2 text-sm"><FileWarning className="size-4 text-muted-foreground" /><span className="font-medium">{LEVELS[h.level]}</span><span>kavel {h.label}</span><span className="text-xs text-muted-foreground">{fmtDateTime(h.sent_at)} · {h.sent_by_name ?? "automatisch"}</span><Money n={h.outstanding} className="ml-auto" />{h.fee > 0 && <Badge variant="secondary">+ {h.fee.toFixed(2)} kosten</Badge>}{h.document_id && <Button size="sm" variant="ghost" asChild><a href={`/api/buildings/${b.id}/documents/${h.document_id}/download?inline=1`} target="_blank" rel="noreferrer">Brief</a></Button>}</div>)}</div></div>}
+    <Dialog open={!!target} onOpenChange={(o) => !o && setTarget(null)}><DialogContent><DialogHeader><DialogTitle>Brief sturen: kavel {target?.label}</DialogTitle><DialogDescription>Openstaand <Money n={target?.outstanding ?? 0} />. De brief wordt als PDF bij Documenten gezet (enkel zichtbaar voor de eigenaar) en per push en e-mail gemeld.</DialogDescription></DialogHeader>
+      <Field label="Niveau"><Select value={level} onValueChange={setLevel}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">1 · Herinnering (vriendelijk)</SelectItem><SelectItem value="2">2 · Aanmaning (15 dagen, kosten mogelijk)</SelectItem><SelectItem value="3">3 · Ingebrekestelling (laatste stap vóór invordering)</SelectItem></SelectContent></Select></Field>
+      <Field label="Kosten aanrekenen (€)" hint="Wordt geboekt als vordering op de kavel (4101) en opbrengst (740)."><Input type="number" min={0} step="0.01" value={fee} onChange={(e) => setFee(e.target.value)} /></Field>
+      <ErrorBox error={error} /><DialogFooter><Button onClick={async () => { setError(null); try { await api.post(`/api/buildings/${b.id}/ledger/reminders`, { unit_id: target.unit_id, level: +level, fee: +fee || 0 }); toast.success("Brief verstuurd"); setTarget(null); reload(); } catch (err) { setError(err); } }}><Send />Versturen</Button></DialogFooter></DialogContent></Dialog>
+  </div>;
+}

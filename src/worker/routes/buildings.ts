@@ -23,6 +23,10 @@ const buildingSchema = z.object({
   fiscal_year_start: z.string().max(5).optional().nullable(),
   av_period_start: z.string().regex(/^\d{2}-\d{2}$/).optional().nullable(),
   av_period_days: z.number().int().min(1).max(60).optional(),
+  reminder_auto: z.boolean().optional(),
+  reminder_days_1: z.number().int().min(1).max(90).optional(),
+  reminder_days_2: z.number().int().min(1).max(180).optional(),
+  reminder_fee_2: z.number().min(0).max(500).optional(),
 });
 
 /** Nieuw gebouw (VME) aanmaken binnen een org waar de gebruiker admin is. */
@@ -73,7 +77,7 @@ buildings.get("/:buildingId", requireBuilding(), async (c) => {
 buildings.patch("/:buildingId", requireBuilding("syndicus"), async (c) => {
   const b = c.get("building");
   const body = buildingSchema.partial().parse(await c.req.json());
-  const fields = Object.entries(body).filter(([, v]) => v !== undefined);
+  const fields = Object.entries(body).filter(([, v]) => v !== undefined).map(([k, v]) => [k, typeof v === "boolean" ? +v : v] as [string, unknown]);
   if (!fields.length) return c.json({ ok: true });
   await c.env.DB.prepare(`UPDATE buildings SET ${fields.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ?`).bind(...fields.map(([, v]) => v), b.id).run();
   await audit(c.env, b.id, c.get("user").id, "building.update", "building", b.id, body);

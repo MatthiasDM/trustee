@@ -11,16 +11,20 @@ docs.use("*", requireAuth);
 
 
 /** SQL-filter op zichtbaarheid volgens rol. */
-function visibilityFilter(role: string): string {
+function visibilityFilter(role: string, userId?: string, alias = ""): string {
+  const a = alias ? `${alias}.` : "";
   // Raad en commissaris hebben wettelijk inzagerecht in alle beheersdocumenten (art. 3.90 en 3.91 BW)
   if (isManager(role) || isBoard(role)) return "1=1";
-  if (isOwner(role)) return "visibility IN ('all','owners_only')";
-  return "visibility = 'all'";
+  // documenten van één kavel (afrekening, herinnering) enkel voor de eigenaars van die kavel
+  const unitScope = userId ? `(${a}unit_id IS NULL OR ${a}unit_id IN (SELECT uo.unit_id FROM unit_owners uo WHERE uo.user_id = '${userId.replace(/'/g, "")}'))` : `${a}unit_id IS NULL`;
+  if (isOwner(role)) return `(${a}visibility IN ('all','owners_only') AND ${unitScope})`;
+  return `(${a}visibility = 'all' AND ${a}unit_id IS NULL)`;
 }
 
 docs.get("/:buildingId/folders", requireBuilding(), async (c) => {
   const b = c.get("building");
-  const rows = await c.env.DB.prepare(`SELECT id, parent_id, name, visibility FROM folders WHERE building_id = ? AND ${visibilityFilter(b.role).replace("owners_only", "all")} ORDER BY name`).bind(b.id).all();
+  const folderVis = isBoard(b.role) ? "1=1" : "visibility = 'all'";
+  const rows = await c.env.DB.prepare(`SELECT id, parent_id, name, visibility FROM folders WHERE building_id = ? AND ${folderVis} ORDER BY name`).bind(b.id).all();
   return c.json(rows.results);
 });
 
@@ -52,15 +56,15 @@ docs.get("/:buildingId/documents", requireBuilding(), async (c) => {
   const folder = c.req.query("folder"); // 'root' | id | undefined (alles)
   const q = c.req.query("q");
   const category = c.req.query("category");
-  const conds = [`d.building_id = ?`, visibilityFilter(b.role).replace(/visibility/g, "d.visibility")];
+  const conds = [`d.building_id = ?`, visibilityFilter(b.role, c.get("user").id, "d")];
   const params: unknown[] = [b.id];
   if (folder === "root") conds.push("d.folder_id IS NULL");
   else if (folder) { conds.push("d.folder_id = ?"); params.push(folder); }
   if (q) { conds.push("(d.name LIKE ? OR d.description LIKE ?)"); params.push(`%${q}%`, `%${q}%`); }
   if (category) { conds.push("d.category = ?"); params.push(category); }
   const rows = await c.env.DB.prepare(
-    `SELECT d.id, d.folder_id, d.name, d.description, d.category, d.size, d.mime, d.visibility, d.version, d.created_at, u.name AS uploaded_by_name
-     FROM documents d LEFT JOIN users u ON u.id = d.uploaded_by WHERE ${conds.join(" AND ")} ORDER BY d.created_at DESC LIMIT 500`
+    `SELECT d.id, d.folder_id, d.name, d.description, d.category, d.size, d.mime, d.visibility, d.version, d.created_at, d.unit_id, un.label AS unit_label, u.name AS uploaded_by_name
+     FROM documents d LEFT JOIN units un ON un.id = d.unit_id LEFT JOIN users u ON u.id = d.uploaded_by WHERE ${conds.join(" AND ")} ORDER BY d.created_at DESC LIMIT 500`
   ).bind(...params).all();
   return c.json(rows.results);
 });
@@ -97,7 +101,7 @@ docs.post("/:buildingId/documents", requireBuilding("syndicus", "raad", "eigenaa
 
 async function loadDoc(c: any) {
   const b = c.get("building");
-  const d = await c.env.DB.prepare(`SELECT * FROM documents d WHERE d.id = ? AND d.building_id = ? AND ${visibilityFilter(b.role).replace(/visibility/g, "d.visibility")}`).bind(c.req.param("docId"), b.id).first();
+  const d = await c.env.DB.prepare(`SELECT * FROM documents d WHERE d.id = ? AND d.building_id = ? AND ${visibilityFilter(b.role, c.get("user").id, "d")}`).bind(c.req.param("docId"), b.id).first();
   if (!d) throw new HttpError(404, "Document niet gevonden");
   return d as any;
 }

@@ -12,10 +12,11 @@ export function rateLimit(opts: { name: string; limit: number; windowSec: number
     let extra: string | null = null;
     if (opts.keyFrom) { try { const body = await c.req.raw.clone().json(); extra = opts.keyFrom(c, body); } catch { extra = null; } }
     const bucket = Math.floor(Date.now() / 1000 / opts.windowSec);
-    const keys = [`rl:${opts.name}:ip:${ip}:${bucket}`, ...(extra ? [`rl:${opts.name}:id:${extra.toLowerCase()}:${bucket}`] : [])];
-    for (const key of keys) {
+    // per IP ruimer (kantoren en gebouwen delen vaak één adres), per account strikt
+    const keys: [string, number][] = [[`rl:${opts.name}:ip:${ip}:${bucket}`, opts.limit * 5], ...(extra ? [[`rl:${opts.name}:id:${extra.toLowerCase()}:${bucket}`, opts.limit] as [string, number]] : [])];
+    for (const [key, limit] of keys) {
       const cur = parseInt((await c.env.KV.get(key)) ?? "0", 10);
-      if (cur >= opts.limit) {
+      if (cur >= limit) {
         c.header("Retry-After", String(opts.windowSec));
         throw new HttpError(429, "Te veel pogingen. Probeer later opnieuw.");
       }

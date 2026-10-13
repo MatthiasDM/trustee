@@ -60,6 +60,6 @@ export function Stat({ label, value, icon }: { label: string; value: ReactNode; 
   const long = typeof value === "string" && value.length > 8;
   return <div className="flex min-w-0 items-center gap-3 rounded-xl border bg-card p-4 shadow-xs">
     {icon && <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary [&_svg]:size-4">{icon}</div>}
-    <div className="min-w-0"><div className={cn("font-semibold leading-tight tabular-nums break-words", long ? "text-lg" : "text-2xl")}>{value}</div><div className="text-xs leading-tight text-muted-foreground">{label}</div></div>
+    <div className="min-w-0"><div className={cn("font-semibold leading-tight tabular-nums", long ? "text-base xl:text-lg" : "text-2xl")}>{value}</div><div className="text-xs leading-tight text-muted-foreground">{label}</div></div>
   </div>;
 }

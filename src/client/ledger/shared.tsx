@@ -1,7 +1,7 @@
 import { useBuilding, useFetch } from "../components/Layout";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 
-export const eur = (n: number | null | undefined) => new Intl.NumberFormat("nl-BE", { style: "currency", currency: "EUR" }).format(n ?? 0);
+export const eur = (n: number | null | undefined) => new Intl.NumberFormat("nl-BE", { style: "currency", currency: "EUR" }).format(n ?? 0).replace(/\s/g, "\u00a0");
 export const NONE = "__none__";
 
 export interface FiscalYear { id: string; label: string; start_date: string; end_date: string; status: string }

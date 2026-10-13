@@ -15,6 +15,7 @@ import { MeetingsPage } from "./pages/MeetingsPage";
 import { MembersPage } from "./pages/MembersPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
+import { HelpPage } from "./pages/HelpPage";
 
 registerSW();
 
@@ -31,6 +32,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route element={<AppShell />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/help" element={<HelpPage />} />
             <Route path="/b/:buildingId" element={<DashboardPage />} />
             <Route path="/b/:buildingId/documents" element={<DocumentsPage />} />
             <Route path="/b/:buildingId/posts" element={<PostsPage />} />

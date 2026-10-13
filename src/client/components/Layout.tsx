@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate, useParams, Link } from "react-router-dom";
-import { Bell, Building2, Calendar, ChevronsUpDown, FileText, Home, LogOut, Menu, MessageSquare, Moon, Settings, Sun, Users, Vote } from "lucide-react";
+import { Bell, BookOpen, Building2, Calendar, ChevronsUpDown, FileText, Home, LogOut, Menu, MessageSquare, Moon, Settings, Sun, Users, Vote } from "lucide-react";
 import { Toaster } from "sonner";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
@@ -59,6 +59,7 @@ export function AppShell() {
         : <NavLink to="/" className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm bg-sidebar-accent font-medium text-sidebar-accent-foreground"><Building2 className="size-4" />Mijn gebouwen</NavLink>}
       <div className="mt-4 mb-1 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Persoonlijk</div>
       <NavLink to="/notifications" className={({ isActive }) => cn("flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors", isActive ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "hover:bg-accent/60")}><Bell className="size-4" />Meldingen{unread > 0 && <Badge className="ml-auto h-5 min-w-5 px-1.5">{unread}</Badge>}</NavLink>
+      <NavLink to="/help" className={({ isActive }) => cn("flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors", isActive ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "hover:bg-accent/60")}><BookOpen className="size-4" />Handleiding</NavLink>
     </div>
     <div className="border-t p-3">
       <DropdownMenu>

@@ -193,7 +193,7 @@ async function requestWithProgress(env: AppEnv["Bindings"], buildingId: string, 
 }
 meetings.get("/:buildingId/meeting-requests", requireBuilding(), async (c) => {
   const b = c.get("building");
-  const rows = (await c.env.DB.prepare("SELECT r.*, u.name AS created_by_name, ru.name AS resolved_by_name, m.title AS meeting_title, m.starts_at AS meeting_starts_at FROM meeting_requests r JOIN users u ON u.id = r.created_by LEFT JOIN users ru ON ru.id = r.resolved_by LEFT JOIN meetings m ON m.id = r.fulfilled_meeting_id WHERE r.building_id = ? ORDER BY r.created_at DESC").bind(b.id).all()).results as any[];
+  const rows = (await c.env.DB.prepare("SELECT r.*, u.name AS created_by_name, ru.name AS resolved_by_name, m.title AS meeting_title, m.starts_at AS meeting_starts_at, ai.status AS agenda_status FROM meeting_requests r JOIN users u ON u.id = r.created_by LEFT JOIN users ru ON ru.id = r.resolved_by LEFT JOIN meetings m ON m.id = r.fulfilled_meeting_id LEFT JOIN agenda_items ai ON ai.id = r.agenda_item_id WHERE r.building_id = ? ORDER BY r.created_at DESC").bind(b.id).all()).results as any[];
   return c.json(await Promise.all(rows.map((r) => requestWithProgress(c.env, b.id, r))));
 });
 meetings.post("/:buildingId/meeting-requests", requireBuilding(), async (c) => {
@@ -223,7 +223,7 @@ meetings.patch("/:buildingId/meeting-requests/:id", requireBuilding(), async (c)
   const b = c.get("building"); const user = c.get("user");
   const req = await c.env.DB.prepare("SELECT * FROM meeting_requests WHERE id = ? AND building_id = ?").bind(c.req.param("id"), b.id).first<any>();
   if (!req) throw new HttpError(404, "Niet gevonden");
-  const body = z.object({ status: z.enum(["fulfilled", "cancelled"]), fulfilled_meeting_id: z.string().nullable().optional(), note: z.string().max(1000).nullable().optional() }).parse(await c.req.json());
+  const body = z.object({ status: z.enum(["fulfilled", "cancelled"]), fulfilled_meeting_id: z.string().nullable().optional(), note: z.string().max(1000).nullable().optional(), required_majority: z.enum(["simple", "two_thirds", "four_fifths", "unanimous", "none"]).optional() }).parse(await c.req.json());
   if (req.status === "fulfilled" || req.status === "cancelled") throw new HttpError(400, "Dit verzoek is al afgehandeld");
   if (body.status === "cancelled" && req.created_by !== user.id && !isBoard(b.role)) throw new HttpError(403, "Geen rechten");
   if (body.status === "fulfilled") {
@@ -233,11 +233,24 @@ meetings.patch("/:buildingId/meeting-requests/:id", requireBuilding(), async (c)
     const m = await c.env.DB.prepare("SELECT id FROM meetings WHERE id = ? AND building_id = ?").bind(body.fulfilled_meeting_id, b.id).first();
     if (!m) throw new HttpError(400, "Vergadering niet gevonden");
   }
-  await c.env.DB.prepare("UPDATE meeting_requests SET status = ?, fulfilled_meeting_id = ?, resolved_at = ?, resolved_by = ?, resolution_note = ? WHERE id = ?")
-    .bind(body.status, body.status === "fulfilled" ? body.fulfilled_meeting_id : null, now(), user.id, body.note ?? null, req.id).run();
+  // Het onderwerp van het verzoek is de reden van de bijeenroeping en komt dus op de agenda van die vergadering,
+  // ingediend namens de mede-eigenaar die het verzoek startte. Nog geen vergadering → bestaand punt hergebruiken als het al geagendeerd was.
+  let agendaItemId: string | null = null;
+  if (body.status === "fulfilled") {
+    const existing = req.agenda_item_id ? await c.env.DB.prepare("SELECT id FROM agenda_items WHERE id = ? AND meeting_id = ?").bind(req.agenda_item_id, body.fulfilled_meeting_id).first() : null;
+    if (existing) agendaItemId = req.agenda_item_id;
+    else {
+      agendaItemId = uid();
+      const pos = (await c.env.DB.prepare("SELECT COALESCE(MAX(position), -1) + 1 AS p FROM agenda_items WHERE meeting_id = ?").bind(body.fulfilled_meeting_id).first<{ p: number }>())?.p ?? 0;
+      await c.env.DB.prepare("INSERT INTO agenda_items (id, building_id, meeting_id, submitted_by, title, description, required_majority, status, position) VALUES (?,?,?,?,?,?,?,?,?)")
+        .bind(agendaItemId, b.id, body.fulfilled_meeting_id, req.created_by, req.subject, [req.body, `Op verzoek van mede-eigenaars met minstens 1/5 van de aandelen (art. 3.87 §2 BW).`].filter(Boolean).join("\n\n"), body.required_majority ?? "simple", "scheduled", pos).run();
+    }
+  }
+  await c.env.DB.prepare("UPDATE meeting_requests SET status = ?, fulfilled_meeting_id = ?, resolved_at = ?, resolved_by = ?, resolution_note = ?, agenda_item_id = COALESCE(?, agenda_item_id) WHERE id = ?")
+    .bind(body.status, body.status === "fulfilled" ? body.fulfilled_meeting_id : null, now(), user.id, body.note ?? null, agendaItemId, req.id).run();
   await audit(c.env, b.id, user.id, body.status === "fulfilled" ? "meeting_request.fulfill" : "meeting_request.cancel", "meeting_request", req.id, { meeting_id: body.fulfilled_meeting_id ?? null });
   const signers = (await c.env.DB.prepare("SELECT user_id FROM meeting_request_signatures WHERE request_id = ?").bind(req.id).all<{ user_id: string }>()).results.map((r) => r.user_id).filter((id) => id !== user.id);
-  if (signers.length) await notifyBuilding(c.env, { userIds: signers, buildingId: b.id, type: "meeting_request", title: body.status === "fulfilled" ? `Verzoek ingewilligd: ${req.subject}` : `Verzoek ingetrokken: ${req.subject}`, body: body.status === "fulfilled" ? `${user.name} heeft een algemene vergadering bijeengeroepen voor dit verzoek.` : `${user.name} heeft het verzoek ingetrokken.${body.note ? ` Reden: ${body.note}` : ""}`, link: `/b/${b.id}/meetings` });
+  if (signers.length) await notifyBuilding(c.env, { userIds: signers, buildingId: b.id, type: "meeting_request", title: body.status === "fulfilled" ? `Verzoek ingewilligd: ${req.subject}` : `Verzoek ingetrokken: ${req.subject}`, body: body.status === "fulfilled" ? `${user.name} heeft een algemene vergadering bijeengeroepen; het onderwerp staat op de agenda.` : `${user.name} heeft het verzoek ingetrokken.${body.note ? ` Reden: ${body.note}` : ""}`, link: `/b/${b.id}/meetings` });
   return c.json({ ok: true });
 });
 

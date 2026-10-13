@@ -50,7 +50,8 @@ describe("Algemene vergadering: agenda, volmachten, quorum, stemming, notulen", 
     expect((await marie.patch(`/api/buildings/${B}/meeting-requests/${r.data.id}`, { status: "fulfilled", fulfilled_meeting_id: meetingId })).status).toBe(403);
     expect((await synd.patch(`/api/buildings/${B}/meeting-requests/${r.data.id}`, { status: "fulfilled" })).status).toBe(400); // zonder vergadering niet ingewilligd
     expect((await synd.patch(`/api/buildings/${B}/meeting-requests/${r.data.id}`, { status: "fulfilled", fulfilled_meeting_id: meetingId })).status).toBe(200);
-    const done = (await marie.get(`/api/buildings/${B}/meeting-requests`)).data.find((x: any) => x.id === r.data.id); expect(done.meeting_title).toBe("Test-AV"); expect(done.resolved_by_name).toBe("Sofie Vermeulen");
+    const done = (await marie.get(`/api/buildings/${B}/meeting-requests`)).data.find((x: any) => x.id === r.data.id); expect(done.meeting_title).toBe("Test-AV"); expect(done.resolved_by_name).toBe("Sofie Vermeulen"); expect(done.agenda_item_id).toBeTruthy();
+    const onAgenda = (await marie.get(`/api/buildings/${B}/agenda?meeting=${meetingId}`)).data.items.find((i: any) => i.id === done.agenda_item_id); expect(onAgenda.title).toBe("Test-verzoek"); expect(onAgenda.status).toBe("scheduled"); expect(onAgenda.submitted_by_name).toBe("Marie Claes");
     expect((await synd.patch(`/api/buildings/${B}/meeting-requests/${r.data.id}`, { status: "cancelled" })).status).toBe(400); // al afgehandeld
   });
   it("schriftelijke besluitvorming: één tegenstem verwerpt, eenparigheid neemt aan", async () => {

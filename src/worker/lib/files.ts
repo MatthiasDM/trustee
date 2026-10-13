@@ -19,5 +19,6 @@ export function validateUpload(file: File) {
 export function safeContentType(mime: string, name: string): string {
   const ext = (name.split(".").pop() ?? "").toLowerCase();
   const map: Record<string, string> = { pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", txt: "text/plain; charset=utf-8", csv: "text/csv; charset=utf-8", md: "text/plain; charset=utf-8" };
+  if (ext === "html" && mime === "text/html") return "text/html; charset=utf-8"; // enkel door Trustee gegenereerd (uploads van html worden geweigerd); wordt gesandboxt geserveerd
   return map[ext] ?? (mime && !/html|javascript|xml/i.test(mime) ? mime : "application/octet-stream");
 }

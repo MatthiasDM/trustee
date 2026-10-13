@@ -125,7 +125,7 @@ docs.get("/:buildingId/documents/:docId/download", requireBuilding(), async (c) 
   const obj = await c.env.DOCS.get(d.r2_key);
   if (!obj) throw new HttpError(404, "Bestand niet gevonden in opslag");
   const ct = safeContentType(d.mime, d.name);
-  const inline = c.req.query("inline") === "1" && /^(application\/pdf|image\/|text\/plain)/.test(ct);
+  const inline = c.req.query("inline") === "1" && /^(application\/pdf|image\/|text\/plain|text\/html)/.test(ct);
   const headers = new Headers();
   headers.set("Content-Type", ct);
   headers.set("etag", obj.httpEtag);

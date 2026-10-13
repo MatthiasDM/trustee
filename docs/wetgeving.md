@@ -24,6 +24,8 @@ Elke mede-eigenaar is van rechtswege lid van de VME. De VME heeft rechtspersoonl
 | Agendapunten | **Elke mede-eigenaar** mag punten indienen. De syndicus moet voorstellen agenderen die hij **minstens 3 weken vóór de eerste dag van de AV-periode** ontving. Latere voorstellen schuiven door naar de volgende AV. |
 | Volmachten | Maximaal 3 volmachten per persoon (meer enkel als eigen + gevolmachtigde stemmen samen ≤ 10 %). De syndicus mag geen volmachtdrager zijn. |
 | Quorum | Meer dan de helft van de mede-eigenaars aanwezig of vertegenwoordigd, die samen minstens de helft van de aandelen hebben; of meer dan 3/4 van de aandelen. Anders een tweede AV na minstens 15 dagen, zonder quorum. |
+| Notulen | De syndicus stelt de notulen op tijdens de vergadering, met per agendapunt de beslissing, de behaalde meerderheid en **de namen van wie tegenstemde of zich onthield**. Ze worden ondertekend door voorzitter, secretaris en de nog aanwezige mede-eigenaars en **binnen 30 dagen** aan alle stemgerechtigden bezorgd (art. 3.87 §12). De beslissingen komen in het register (art. 3.93 §4). |
+| Schriftelijke besluitvorming | De AV kan ook schriftelijk beslissen, maar enkel met eenparigheid van alle mede-eigenaars (art. 3.87 §11), behalve voor beslissingen bij authentieke akte. |
 
 ### Meerderheden (art. 3.88 §1)
 
@@ -128,4 +130,8 @@ Wat een individuele mede-eigenaar **niet** kan: de syndicus instructies geven bu
 | Mandaat loopt af | Herinnering aan syndicus en raad 60 dagen vooraf |
 | Journaalpost in evenwicht, onwijzigbaar | Boekhouding: weigering bij debet ≠ credit; correctie enkel via tegenboeking |
 | Syndicusmandaat max 3 jaar bij boekjaar sluiten | Boekhouding: afsluiten vereist dat alle geplande boekingen geboekt zijn; resultaat gaat naar 48901/48902 |
+| Volmachten: max. 3 per drager (tenzij ≤ 10 % van de stemmen), syndicus en huurder uitgesloten | Vergaderingen: volmacht geven wordt geweigerd als de regel geschonden wordt |
+| Quorum | Vergaderingen: aanwezigheid per kavel met automatische quorumtoets; tweede bijeenroeping zonder quorum |
+| Onthoudingen tellen niet mee | Stemming per agendapunt: meerderheid berekend op vóór + tegen |
+| Notulen met namen van tegenstemmers, verzending binnen 30 dagen | Notulen genereren, definitief maken, document in Verslagen AV, melding aan alle stemgerechtigden |
 | Kennisgeving bij inzage door de raad | Documenten: automatische melding aan de syndicus en logboekvermelding bij het openen van stukken "enkel syndicus" |

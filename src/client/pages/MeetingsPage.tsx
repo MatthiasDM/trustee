@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
-import { Calendar, CalendarPlus, Check, FileText, MapPin, Pencil, Users, X } from "lucide-react";
+import { Calendar, CalendarPlus, Check, FileText, MapPin, Pencil, ScrollText, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { useBuilding, useFetch } from "../components/Layout";
 import { AgendaSection, MeetingAgenda } from "../components/AgendaSection";
+import { AttendancePanel, MinutesDialog, ProxyDialog } from "../components/MeetingTools";
 import { Empty, ErrorBox, Field, PageHeader, Spinner } from "../components/ui";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -21,6 +22,8 @@ export function MeetingsPage() {
   const b = useBuilding();
   const meetings = useFetch<any[]>(`/api/buildings/${b.id}/meetings`);
   const [open, setOpen] = useState(false); const [edit, setEdit] = useState<any>(null); const [rsvps, setRsvps] = useState<any>(null);
+  const [proxyFor, setProxyFor] = useState<string | null>(null); const [minutesFor, setMinutesFor] = useState<any>(null); const [showAtt, setShowAtt] = useState<Record<string, boolean>>({});
+  const members = useFetch<{ members: { user_id: string; name: string }[] }>(`/api/buildings/${b.id}/members`);
   const rsvp = async (id: string, status: string) => { await api.put(`/api/buildings/${b.id}/meetings/${id}/rsvp`, { status }); meetings.reload(); toast.success("Aanwezigheid opgeslagen"); };
   const now = new Date();
   const list = meetings.data ?? [];
@@ -31,12 +34,14 @@ export function MeetingsPage() {
     <div className="min-w-0 flex-1">
       <div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-xs text-muted-foreground">{TYPE[m.type]}</div><h3 className="font-semibold">{m.title}</h3><div className="mt-1 flex flex-wrap gap-x-3 text-sm text-muted-foreground"><span className="flex items-center gap-1"><Calendar className="size-3.5" />{fmtDateTime(m.starts_at)}</span>{m.location && <span className="flex items-center gap-1"><MapPin className="size-3.5" />{m.location}</span>}</div></div>
         <div className="flex gap-1"><Button size="sm" variant="outline" asChild><a href={`/api/buildings/${b.id}/meetings/${m.id}/ics`}><CalendarPlus />.ics</a></Button>{b.isBoard && <Button size="sm" variant="outline" onClick={() => setEdit(m)}><Pencil />Bewerken</Button>}</div></div>
-      <MeetingAgenda meetingId={m.id} />
+      <MeetingAgenda meetingId={m.id} meetingStartsAt={m.starts_at} />
       {m.agenda && <details className="mt-3 text-sm"><summary className="cursor-pointer text-primary">Toelichting / vrije agenda</summary><div className="mt-2 whitespace-pre-wrap text-muted-foreground">{m.agenda}</div></details>}
       {m.minutes_document_id && <a className="mt-3 inline-flex items-center gap-1.5 text-sm text-primary hover:underline" href={`/api/buildings/${b.id}/documents/${m.minutes_document_id}/download?inline=1`} target="_blank" rel="noreferrer"><FileText className="size-4" />Verslag: {m.minutes_name}</a>}
       {new Date(m.starts_at) >= now && b.isOwner && <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4 text-sm"><span className="text-muted-foreground">Aanwezig?</span>
-        {[["attending", "Ja"], ["proxy", "Volmacht"], ["absent", "Nee"]].map(([s, l]) => <Button key={s} size="sm" variant={m.my_rsvp === s ? "default" : "outline"} onClick={() => rsvp(m.id, s)}>{s === "attending" ? <Check /> : s === "absent" ? <X /> : <Users />}{l}</Button>)}
-        <span className="ml-auto text-xs text-muted-foreground">{m.attending} aanwezig · {m.proxy} volmacht · {m.absent} afwezig</span>{b.isBoard && <Button size="sm" variant="ghost" onClick={async () => setRsvps({ m, list: await api.get(`/api/buildings/${b.id}/meetings/${m.id}/rsvps`) })}>Lijst</Button>}</div>}
+        {[["attending", "Ja"], ["proxy", "Volmacht"], ["absent", "Nee"]].map(([s, l]) => <Button key={s} size="sm" variant={m.my_rsvp === s ? "default" : "outline"} onClick={() => s === "proxy" ? setProxyFor(m.id) : rsvp(m.id, s)}>{s === "attending" ? <Check /> : s === "absent" ? <X /> : <Users />}{l}</Button>)}
+        <span className="ml-auto text-xs text-muted-foreground">{m.attending} aanwezig · {m.proxy} volmacht · {m.absent} afwezig</span><Button size="sm" variant="ghost" onClick={() => setShowAtt({ ...showAtt, [m.id]: !showAtt[m.id] })}>Quorum</Button></div>}
+      {(showAtt[m.id] || new Date(m.starts_at) < now) && <AttendancePanel meeting={m} onChanged={() => meetings.reload()} />}
+      {b.isBoard && <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3 text-sm"><Button size="sm" variant={m.minutes_status === "final" ? "outline" : "default"} onClick={() => setMinutesFor(m)}><ScrollText />{m.minutes_status === "final" ? "Notulen (definitief)" : m.minutes_status === "draft" ? "Notulen (ontwerp)" : "Notulen opstellen"}</Button>{m.minutes_status === "final" && m.minutes_sent_at && <span className="text-xs text-muted-foreground">verzonden {fmtDateTime(m.minutes_sent_at)}</span>}</div>}
     </div>
   </div>; };
   return <div>
@@ -45,6 +50,8 @@ export function MeetingsPage() {
     {meetings.loading ? <Spinner /> : !list.length ? <Empty icon={<Calendar />} title="Nog geen vergaderingen gepland" /> : <>
       <h2 className="mb-3 text-sm font-medium text-muted-foreground">Komende</h2>{upcoming.length ? <div className="mb-8 space-y-3">{upcoming.map((m) => <MeetingCard key={m.id} m={m} />)}</div> : <p className="mb-8 text-sm text-muted-foreground">Geen geplande vergaderingen.</p>}
       {past.length > 0 && <><h2 className="mb-3 text-sm font-medium text-muted-foreground">Voorbije</h2><div className="space-y-3">{past.map((m) => <MeetingCard key={m.id} m={m} />)}</div></>}</>}
+    {proxyFor && <ProxyDialog meetingId={proxyFor} onClose={() => setProxyFor(null)} onDone={() => { setProxyFor(null); meetings.reload(); }} />}
+    {minutesFor && <MinutesDialog meeting={minutesFor} members={members.data?.members ?? []} onClose={() => setMinutesFor(null)} onDone={() => { setMinutesFor(null); meetings.reload(); }} />}
     {(open || edit) && <MeetingForm meeting={edit} onClose={() => { setOpen(false); setEdit(null); }} onDone={() => { setOpen(false); setEdit(null); meetings.reload(); }} />}
     <Dialog open={!!rsvps} onOpenChange={(o) => !o && setRsvps(null)}><DialogContent><DialogHeader><DialogTitle>Aanwezigheden: {rsvps?.m.title}</DialogTitle></DialogHeader>
       {rsvps && (rsvps.list.length ? <Table><TableBody>{rsvps.list.map((r: any, i: number) => <TableRow key={i}><TableCell className="font-medium">{r.name}</TableCell><TableCell className="text-muted-foreground">{r.email}</TableCell><TableCell>{{ attending: "Aanwezig", proxy: `Volmacht${r.proxy_name ? ` → ${r.proxy_name}` : ""}`, absent: "Afwezig" }[r.status as string]}</TableCell></TableRow>)}</TableBody></Table> : <p className="text-sm text-muted-foreground">Nog geen antwoorden.</p>)}</DialogContent></Dialog>

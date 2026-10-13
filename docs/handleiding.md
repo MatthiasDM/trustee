@@ -16,8 +16,10 @@ Het dashboard opent met de **organen van de VME**: de volgende algemene vergader
 
 - **Agendapunt indienen.** Elke mede-eigenaar kan een punt voorstellen voor de volgende AV, met de meerderheid die ervoor nodig is. De uiterste datum (3 weken vóór de AV-periode) staat bovenaan. Later ingediende punten schuiven door naar de volgende AV.
 - **Agenda.** Syndicus en raad zetten voorstellen op de agenda van een geplande vergadering en bepalen de volgorde. Bij elk punt kunnen ze een **stemming** openen en na afloop de **beslissing** noteren.
-- **Aanwezigheid.** Laat weten of je komt, een volmacht geeft of afwezig bent. Voeg de vergadering toe aan je agenda met de .ics-knop.
-- **Verslag.** Na de AV koppelt de syndicus het verslag; iedereen krijgt een melding.
+- **Aanwezigheid en volmacht.** Laat weten of je komt, een volmacht geeft of afwezig bent. Kies bij een volmacht wie voor jou stemt: een andere mede-eigenaar, nooit de syndicus. Niemand mag meer dan drie volmachten dragen (tenzij alle stemmen samen hoogstens 10 % zijn); Trustee bewaakt dat. Voeg de vergadering toe aan je agenda met de .ics-knop.
+- **Quorum.** Syndicus en raad zien per kavel wie aanwezig of vertegenwoordigd is en of het quorum gehaald is (meer dan de helft van de eigenaars met minstens de helft van de aandelen, of meer dan 3/4 van de aandelen). Zo niet, dan kan een tweede bijeenroeping zonder quorum gemarkeerd worden.
+- **Stemmen tijdens de AV.** Bij elk agendapunt registreert de syndicus of de raad de stem per kavel (vóór, tegen, onthouding). Trustee weegt naar aandelen, laat onthoudingen buiten de meerderheid, toetst aan de vereiste meerderheid en bewaart de namen van wie tegenstemde.
+- **Notulen.** Met één klik maakt Trustee een ontwerp uit de aanwezigheid, het quorum en de beslissingen per punt. De syndicus vult aan (voorzitter, secretaris, varia) en maakt ze definitief: het document komt in *Documenten › Verslagen algemene vergadering* en alle stemgerechtigden krijgen een melding, binnen de wettelijke 30 dagen.
 
 ## Stemmingen
 

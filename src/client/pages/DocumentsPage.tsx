@@ -17,7 +17,7 @@ import { DOC_CATEGORIES, type Doc, type Folder as FolderT } from "../../shared/t
 
 const VIS: Record<string, string> = { all: "Iedereen", owners_only: "Enkel eigenaars", raad: "Raad + syndicus", syndicus: "Enkel syndicus" };
 const ROOT = "__root__";
-const canPreview = (d: Doc) => /^(application\/pdf|image\/)/.test(d.mime) || /\.(pdf|png|jpe?g|gif|webp)$/i.test(d.name);
+const canPreview = (d: Doc) => /^(application\/pdf|image\/|text\/html)/.test(d.mime) || /\.(pdf|png|jpe?g|gif|webp|html)$/i.test(d.name);
 const FileIcon = ({ mime }: { mime: string }) => { const I = mime.includes("pdf") ? FileText : mime.startsWith("image/") ? FileImage : mime.includes("sheet") || mime.includes("excel") || mime.includes("csv") ? FileSpreadsheet : File; return <I className="size-5 text-muted-foreground" />; };
 
 export function DocumentsPage() {

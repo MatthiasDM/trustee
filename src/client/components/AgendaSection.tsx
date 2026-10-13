@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ArrowDown, ArrowUp, CalendarCheck, Gavel, Info, ListPlus, Trash2, Undo2, Vote } from "lucide-react";
+import { VoteDialog } from "./MeetingTools";
 import { toast } from "sonner";
 import { useBuilding, useFetch } from "./Layout";
 import { ErrorBox, Field } from "./ui";
@@ -51,11 +52,11 @@ export function AgendaSection({ meetings }: { meetings: { id: string; title: str
 }
 
 /** Agenda van één vergadering (geagendeerde punten, volgorde, stemming, beslissing). */
-export function MeetingAgenda({ meetingId, onCreatePoll }: { meetingId: string; onCreatePoll?: (item: AgendaItem) => void }) {
+export function MeetingAgenda({ meetingId, meetingStartsAt }: { meetingId: string; meetingStartsAt?: string }) {
   const b = useBuilding();
   const { data, reload } = useFetch<{ items: AgendaItem[] }>(`/api/buildings/${b.id}/agenda?meeting=${meetingId}`);
   const [pollFor, setPollFor] = useState<AgendaItem | null>(null);
-  const [decide, setDecide] = useState<AgendaItem | null>(null);
+  const [decide, setDecide] = useState<AgendaItem | null>(null); const [voteFor, setVoteFor] = useState<AgendaItem | null>(null);
   if (!data || !data.items.length) return null;
   const items = [...data.items].sort((a, c) => a.position - c.position || a.created_at.localeCompare(c.created_at));
   const patch = async (id: string, body: any) => { await api.patch(`/api/buildings/${b.id}/agenda/${id}`, body); reload(); };
@@ -64,13 +65,15 @@ export function MeetingAgenda({ meetingId, onCreatePoll }: { meetingId: string; 
     <h4 className="mb-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Agenda</h4>
     <ol className="divide-y rounded-lg border text-sm">{items.map((i, idx) => <li key={i.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
       <span className="w-5 text-right tabular-nums text-muted-foreground">{idx + 1}.</span>
-      <div className="min-w-0 flex-1"><div className="font-medium">{i.title}</div><div className="text-xs text-muted-foreground">{MAJORITY_LABELS[i.required_majority]} · ingediend door {i.submitted_by_name}</div>{i.decision && <div className="mt-0.5 text-xs"><span className="font-medium">Beslissing:</span> {i.decision}</div>}</div>
+      <div className="min-w-0 flex-1"><div className="font-medium">{i.title}</div><div className="text-xs text-muted-foreground">{MAJORITY_LABELS[i.required_majority]} · ingediend door {i.submitted_by_name}</div>{(i as any).voted_at && <div className="mt-0.5 flex flex-wrap gap-1 text-xs"><Badge variant="success">vóór {(i as any).votes_for}</Badge><Badge variant="red">tegen {(i as any).votes_against}</Badge><Badge variant="secondary">onth. {(i as any).votes_abstain}</Badge></div>}{i.decision && <div className="mt-0.5 text-xs"><span className="font-medium">Beslissing:</span> {i.decision}</div>}</div>
       <Badge variant={STATUS[i.status].variant}>{STATUS[i.status].label}</Badge>
       {i.poll_id ? <Button size="sm" variant="outline" asChild><Link to={`/b/${b.id}/polls/${i.poll_id}`}><Vote />{i.poll_status === "closed" ? "Resultaat" : "Stemmen"}</Link></Button> : b.isBoard && i.status === "scheduled" && <Button size="sm" variant="outline" onClick={() => setPollFor(i)}><Vote />Stemming</Button>}
+      {b.isBoard && (i.status === "scheduled" || (i as any).voted_at) && <Button size="sm" variant={i.status === "scheduled" ? "default" : "ghost"} onClick={() => setVoteFor(i)}><Gavel />{(i as any).voted_at ? "Stemming wijzigen" : "Stemmen (AV)"}</Button>}
       {b.isBoard && i.status === "scheduled" && <Button size="sm" variant="ghost" onClick={() => setDecide(i)}><CalendarCheck />Beslist</Button>}
       {b.isBoard && <div className="flex"><Button size="icon-sm" variant="ghost" onClick={() => move(idx, -1)} disabled={idx === 0}><ArrowUp /></Button><Button size="icon-sm" variant="ghost" onClick={() => move(idx, 1)} disabled={idx === items.length - 1}><ArrowDown /></Button><Button size="icon-sm" variant="ghost" onClick={() => patch(i.id, { meeting_id: null, status: "proposed" })} title="Van agenda halen"><Trash2 /></Button></div>}
     </li>)}</ol>
     <Dialog open={!!pollFor} onOpenChange={(o) => !o && setPollFor(null)}><DialogContent><DialogHeader><DialogTitle>Stemming aanmaken</DialogTitle><DialogDescription>Gewogen volgens aandelen, enkel mede-eigenaars. Meerderheid: {pollFor && MAJORITY_LABELS[pollFor.required_majority]}.</DialogDescription></DialogHeader>{pollFor && <PollFromItemForm item={pollFor} onDone={() => { setPollFor(null); reload(); }} />}</DialogContent></Dialog>
+    {voteFor && <VoteDialog meetingId={meetingId} item={voteFor} onClose={() => setVoteFor(null)} onDone={() => { setVoteFor(null); reload(); }} />}
     <Dialog open={!!decide} onOpenChange={(o) => !o && setDecide(null)}><DialogContent><DialogHeader><DialogTitle>Beslissing noteren</DialogTitle></DialogHeader>{decide && <DecisionForm item={decide} onDone={() => { setDecide(null); reload(); }} />}</DialogContent></Dialog>
   </div>;
 }

@@ -15,7 +15,7 @@ export function OverviewTab({ buildingId, fy, isBoard }: { buildingId: string; f
   if (loading || !data) return <Spinner />;
   const { cash, result, balance } = data;
   return <div className="space-y-6">
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
       <Stat label="Werkkapitaal op bank" value={eur(cash.working_bank)} icon={<Banknote />} />
       <Stat label="Reservekapitaal op bank" value={eur(cash.reserve_bank + cash.deposits)} icon={<PiggyBank />} />
       <Stat label="Nog te ontvangen van eigenaars" value={eur(cash.open_receivables)} icon={<Receipt />} />

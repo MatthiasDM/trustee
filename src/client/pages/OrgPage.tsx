@@ -26,7 +26,7 @@ export function OrgPage() {
   const isAdmin = ["owner", "admin"].includes(data.org.role);
   return <div>
     <PageHeader title={data.org.name} subtitle={t("Kantoorportaal: alle gebouwen die je beheert, met wat vandaag aandacht vraagt.")} actions={<Button asChild><Link to="/"><Plus />{t("Nieuw gebouw")}</Link></Button>} />
-    <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-6">
+    <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
       <Stat label={t("Gebouwen")} value={data.totals.buildings} icon={<Building2 />} /><Stat label={t("Kavels")} value={data.totals.units} icon={<Home />} /><Stat label={t("Leden")} value={data.totals.members} icon={<Users />} />
       <Stat label={t("Open meldingen")} value={data.totals.open_incidents} icon={<Wrench />} /><Stat label={t("Werkkapitaal totaal")} value={eur(data.totals.working_cash)} icon={<Banknote />} /><Stat label={t("Reservekapitaal totaal")} value={eur(data.totals.reserve_cash)} icon={<PiggyBank />} />
     </div>

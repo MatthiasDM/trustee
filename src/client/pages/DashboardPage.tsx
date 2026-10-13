@@ -31,7 +31,7 @@ export function DashboardPage() {
     <PageHeader title={info.data.name} subtitle={`${info.data.address}${info.data.city ? `, ${info.data.postal_code ?? ""} ${info.data.city}` : ""}${info.data.enterprise_number ? ` · KBO ${info.data.enterprise_number}` : ""}`}
       actions={<><Button variant="outline" asChild><Link to={`/b/${b.id}/posts?new=question`}><HelpCircle />{t("Vraag stellen")}</Link></Button><Button asChild><Link to={`/b/${b.id}/posts?new=incident`}><AlertTriangle />{t("Melding maken")}</Link></Button></>} />
     <OrgansCard />
-    <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
       <Stat label={t("Leden")} value={s.members ?? 0} icon={<Users />} /><Stat label={t("Kavels")} value={s.units ?? 0} icon={<Home />} /><Stat label={t("Documenten")} value={s.documents ?? 0} icon={<FileText />} />
       <Stat label={t("Open vragen")} value={s.open_posts ?? 0} icon={<MessageSquare />} /><Stat label={t("Open stemmingen")} value={s.open_polls ?? 0} icon={<Vote />} /><Stat label={t("Vergaderingen")} value={s.upcoming_meetings ?? 0} icon={<Calendar />} />
     </div>

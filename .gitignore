@@ -4,3 +4,8 @@ dist
 .dev.vars
 *.log
 .DS_Store
+
+.wrangler/test-state
+.wrangler/test-env.pid
+test-results
+playwright-report

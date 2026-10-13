@@ -19,3 +19,13 @@ export function safeFilename(name: string): string {
 export class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
+
+/**
+ * PATCH-veilig parsen: valideert met het (partiële) schema maar houdt enkel de velden over die de client meestuurde.
+ * Zonder dit vallen velden met een .default() bij elke PATCH terug op hun standaardwaarde.
+ */
+export function patchOf<T extends Record<string, unknown>>(schema: { parse: (v: unknown) => T }, raw: unknown): Partial<T> {
+  const parsed = schema.parse(raw);
+  const keys = new Set(Object.keys((raw ?? {}) as object));
+  return Object.fromEntries(Object.entries(parsed).filter(([k]) => keys.has(k))) as Partial<T>;
+}

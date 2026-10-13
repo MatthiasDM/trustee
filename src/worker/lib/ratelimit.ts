@@ -6,22 +6,26 @@ import { HttpError } from "./util";
  * Eenvoudige rate limiter op KV: vast venster per sleutel (IP of IP+e-mail).
  * KV is eventueel consistent; voor brute-force-bescherming volstaat dat.
  */
-export function rateLimit(opts: { name: string; limit: number; windowSec: number; keyFrom?: (c: Context<AppEnv>, body: any) => string | null }): MiddlewareHandler<AppEnv> {
+export function rateLimit(opts: { name: string; limit: number; windowSec: number; keyFrom?: (c: Context<AppEnv>, body: any) => string | null; failuresOnly?: boolean }): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
     let extra: string | null = null;
     if (opts.keyFrom) { try { const body = await c.req.raw.clone().json(); extra = opts.keyFrom(c, body); } catch { extra = null; } }
     const bucket = Math.floor(Date.now() / 1000 / opts.windowSec);
     // per IP ruimer (kantoren en gebouwen delen vaak één adres), per account strikt
-    const keys: [string, number][] = [[`rl:${opts.name}:ip:${ip}:${bucket}`, opts.limit * 5], ...(extra ? [[`rl:${opts.name}:id:${extra.toLowerCase()}:${bucket}`, opts.limit] as [string, number]] : [])];
+    // in de testomgeving geldt de IP-limiet niet (alle testgebruikers delen één adres); de accountlimiet blijft
+    const keys: [string, number][] = [[`rl:${opts.name}:ip:${ip}:${bucket}`, c.env.TEST_MODE === "1" ? 1e9 : opts.limit * 5], ...(extra ? [[`rl:${opts.name}:id:${extra.toLowerCase()}:${bucket}`, opts.limit] as [string, number]] : [])];
     for (const [key, limit] of keys) {
       const cur = parseInt((await c.env.KV.get(key)) ?? "0", 10);
       if (cur >= limit) {
         c.header("Retry-After", String(opts.windowSec));
         throw new HttpError(429, "Te veel pogingen. Probeer later opnieuw.");
       }
-      await c.env.KV.put(key, String(cur + 1), { expirationTtl: opts.windowSec + 5 });
     }
-    await next();
+    const bump = async () => { for (const [key] of keys) { const cur = parseInt((await c.env.KV.get(key)) ?? "0", 10); await c.env.KV.put(key, String(cur + 1), { expirationTtl: opts.windowSec + 5 }); } };
+    // failuresOnly (login): enkel mislukte pogingen tellen, zodat een legitieme gebruiker met meerdere toestellen niet geblokkeerd raakt
+    if (!opts.failuresOnly) await bump();
+    try { await next(); } catch (e) { if (opts.failuresOnly) await bump(); throw e; }
+    if (opts.failuresOnly && c.res.status >= 400) await bump();
   };
 }

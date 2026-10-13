@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { requireAuth, requireBuilding } from "../lib/auth";
-import { HttpError, uid } from "../lib/util";
+import { HttpError, patchOf, uid } from "../lib/util";
 import { audit } from "../lib/notify";
 
 const mandates = new Hono<AppEnv>();
@@ -68,8 +68,8 @@ mandates.patch("/:buildingId/mandates/:mandateId", requireBuilding("syndicus", "
   const b = c.get("building");
   const existing = await c.env.DB.prepare("SELECT * FROM mandates WHERE id = ? AND building_id = ?").bind(c.req.param("mandateId"), b.id).first<any>();
   if (!existing) throw new HttpError(404, "Mandaat niet gevonden");
-  const body = schema.partial().parse(await c.req.json());
-  validate({ ...existing, ...body });
+  const body = patchOf(schema.partial(), await c.req.json());
+  validate({ ...existing, ...body } as any);
   const fields = Object.entries(body).filter(([, v]) => v !== undefined);
   if (fields.length) await c.env.DB.prepare(`UPDATE mandates SET ${fields.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ?`).bind(...fields.map(([, v]) => v), existing.id).run();
   return c.json({ ok: true });

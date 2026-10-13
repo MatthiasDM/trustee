@@ -20,6 +20,7 @@
     { "binding": "KV", "id": "REPLACE_WITH_KV_ID" }
   ],
   "triggers": { "crons": ["*/15 * * * *"] },
+  "env": { "test": { "vars": { "APP_NAME": "Trustee", "APP_URL": "http://localhost:5199", "VAPID_SUBJECT": "mailto:test@example.com", "VAPID_PUBLIC_KEY": "", "EMAIL_FROM": "Trustee <test@example.com>" }, "d1_databases": [{ "binding": "DB", "database_name": "trustee-db", "database_id": "REPLACE_WITH_D1_ID", "migrations_dir": "migrations" }], "r2_buckets": [{ "binding": "DOCS", "bucket_name": "trustee-docs" }], "kv_namespaces": [{ "binding": "KV", "id": "REPLACE_WITH_KV_ID" }] } },
   "vars": {
     "APP_NAME": "Trustee",
     "APP_URL": "http://localhost:5173",

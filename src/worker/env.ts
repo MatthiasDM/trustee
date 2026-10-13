@@ -11,6 +11,7 @@ export interface Env {
   RESEND_API_KEY?: string;
   EMAIL_FROM: string;
   SESSION_SECRET?: string;
+  TEST_MODE?: string; // "1" in de testomgeving: uitnodigingstokens in API-antwoord, geen e-mail
 }
 
 export interface AuthUser { id: string; email: string; name: string; locale: string; is_superadmin: number; phone: string | null }

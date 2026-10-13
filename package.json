@@ -15,7 +15,11 @@
     "seed:generate": "node scripts/seed.mjs",
     "vapid": "node scripts/gen-vapid.mjs",
     "cf-typegen": "wrangler types",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:env": "node scripts/test-env.mjs start",
+    "test:env:stop": "node scripts/test-env.mjs stop",
+    "test:env:reset": "node scripts/test-env.mjs reset",
+    "test:api": "node scripts/test-env.mjs reset && node scripts/test-env.mjs start && vitest run --config vitest.scenarios.config.ts; node scripts/test-env.mjs stop"
   },
   "dependencies": {
     "@block65/webcrypto-web-push": "^2.0.0",

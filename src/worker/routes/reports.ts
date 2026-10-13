@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { isBoard, requireAuth, requireBuilding } from "../lib/auth";
-import { HttpError, uid } from "../lib/util";
+import { HttpError, patchOf, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 import { generateAnnualReport, generateOwnerStatements, overdueUnits, renderCommissionerReport, storeDocument } from "../lib/reports";
 import { Pdf, dateNl, money } from "../lib/pdf";
@@ -57,7 +57,7 @@ reports.patch("/:buildingId/ledger/commissioner-reports/:id", requireBuilding("c
   if (!r) throw new HttpError(404, "Verslag niet gevonden");
   if (r.status === "final") throw new HttpError(400, "Het verslag is definitief");
   if (r.author_id !== c.get("user").id && b.role !== "syndicus") throw new HttpError(403, "Enkel de auteur kan dit verslag bewerken");
-  const body = crSchema.partial().parse(await c.req.json());
+  const body = patchOf(crSchema.partial(), await c.req.json());
   const fields = Object.entries(body).filter(([, v]) => v !== undefined);
   if (fields.length) await c.env.DB.prepare(`UPDATE commissioner_reports SET ${fields.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ?`).bind(...fields.map(([, v]) => v), r.id).run();
   return c.json({ ok: true });

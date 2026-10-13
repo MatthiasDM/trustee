@@ -43,7 +43,7 @@ auth.post("/register", rateLimit({ name: "register", limit: 10, windowSec: 3600 
   return c.json({ ok: true });
 });
 
-auth.post("/login", rateLimit({ name: "login", limit: 10, windowSec: 900, keyFrom: (_c, b) => b?.email ?? null }), async (c) => {
+auth.post("/login", rateLimit({ name: "login", limit: 10, windowSec: 900, keyFrom: (_c, b) => b?.email ?? null, failuresOnly: true }), async (c) => {
   const { email, password } = z.object({ email: z.string().email(), password: z.string() }).parse(await c.req.json());
   const user = await c.env.DB.prepare("SELECT id, password_hash FROM users WHERE email = ?").bind(email.toLowerCase().trim()).first<{ id: string; password_hash: string }>();
   if (!user || !(await verifyPassword(password, user.password_hash))) throw new HttpError(401, "Ongeldige e-mail of wachtwoord");

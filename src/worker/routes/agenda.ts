@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { isBoard, isOwner, requireAuth, requireBuilding } from "../lib/auth";
-import { HttpError, now, uid } from "../lib/util";
+import { HttpError, now, patchOf, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 
 const agenda = new Hono<AppEnv>();
@@ -60,11 +60,11 @@ agenda.patch("/:buildingId/agenda/:itemId", requireBuilding(), async (c) => {
   const b = c.get("building"); const user = c.get("user");
   const item = await c.env.DB.prepare("SELECT * FROM agenda_items WHERE id = ? AND building_id = ?").bind(c.req.param("itemId"), b.id).first<any>();
   if (!item) throw new HttpError(404, "Agendapunt niet gevonden");
-  const body = itemSchema.partial().extend({
+  const body = patchOf(itemSchema.partial().extend({
     status: z.enum(["proposed", "scheduled", "decided", "deferred", "withdrawn"]).optional(),
     position: z.number().int().optional(),
     decision: z.string().max(5000).nullable().optional(),
-  }).parse(await c.req.json());
+  }), await c.req.json());
   const isAuthor = item.submitted_by === user.id;
   if (!isBoard(b.role)) {
     // indiener mag enkel eigen, nog niet geagendeerd punt aanpassen of intrekken

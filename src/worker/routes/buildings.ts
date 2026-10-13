@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { requireAuth, requireBuilding } from "../lib/auth";
-import { HttpError, plusMs, randomToken, uid } from "../lib/util";
+import { HttpError, patchOf, plusMs, randomToken, uid } from "../lib/util";
 import { layout, sendEmail } from "../lib/email";
 import { audit, escapeHtml, notifyBuilding } from "../lib/notify";
 import { rateLimit } from "../lib/ratelimit";
@@ -79,7 +79,7 @@ buildings.get("/:buildingId", requireBuilding(), async (c) => {
 
 buildings.patch("/:buildingId", requireBuilding("syndicus"), async (c) => {
   const b = c.get("building");
-  const body = buildingSchema.partial().parse(await c.req.json());
+  const body = patchOf(buildingSchema.partial(), await c.req.json());
   const fields = Object.entries(body).filter(([, v]) => v !== undefined).map(([k, v]) => [k, typeof v === "boolean" ? +v : v] as [string, unknown]);
   if (!fields.length) return c.json({ ok: true });
   await c.env.DB.prepare(`UPDATE buildings SET ${fields.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ?`).bind(...fields.map(([, v]) => v), b.id).run();
@@ -141,7 +141,7 @@ buildings.post("/:buildingId/invites", rateLimit({ name: "invites", limit: 20, w
   const body = z.object({
     invites: z.array(z.object({ email: z.string().email(), name: z.string().max(120).optional(), role: z.enum(ROLES), unit_id: z.string().optional().nullable() })).min(1).max(200),
   }).parse(await c.req.json());
-  const created: string[] = [];
+  const created: string[] = []; const tokens: { email: string; token: string }[] = [];
   for (const inv of body.invites) {
     const email = inv.email.toLowerCase().trim();
     const existingUser = await c.env.DB.prepare("SELECT id FROM users WHERE email = ?").bind(email).first<{ id: string }>();
@@ -157,10 +157,10 @@ buildings.post("/:buildingId/invites", rateLimit({ name: "invites", limit: 20, w
     await sendEmail(c.env, email, `Uitnodiging voor ${b.name}`,
       layout(c.env, `Je bent uitgenodigd voor ${escapeHtml(b.name)}`, `<p>${escapeHtml(user.name)} nodigt je uit om toe te treden tot het platform van de VME <strong>${escapeHtml(b.name)}</strong> als ${inv.role}.</p><p>Hier vind je alle documenten, mededelingen, vragen en stemmingen van je gebouw.</p>`, { label: "Uitnodiging accepteren", url }),
       `Je bent uitgenodigd voor ${b.name}: ${url}`);
-    created.push(id);
+    created.push(id); tokens.push({ email, token });
   }
   await audit(c.env, b.id, user.id, "invite.create", undefined, undefined, { count: created.length });
-  return c.json({ created: created.length });
+  return c.json({ created: created.length, ...(c.env.TEST_MODE === "1" ? { tokens } : {}) });
 });
 
 buildings.delete("/:buildingId/invites/:inviteId", requireBuilding("syndicus"), async (c) => {
@@ -192,7 +192,7 @@ buildings.post("/:buildingId/units", requireBuilding("syndicus"), async (c) => {
 });
 
 buildings.patch("/:buildingId/units/:unitId", requireBuilding("syndicus"), async (c) => {
-  const body = unitSchema.partial().parse(await c.req.json());
+  const body = patchOf(unitSchema.partial(), await c.req.json());
   const fields = Object.entries(body).filter(([, v]) => v !== undefined);
   if (fields.length) await c.env.DB.prepare(`UPDATE units SET ${fields.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ? AND building_id = ?`).bind(...fields.map(([, v]) => v), c.req.param("unitId"), c.get("building").id).run();
   return c.json({ ok: true });

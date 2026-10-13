@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { requireAuth, requireBuilding } from "../lib/auth";
-import { HttpError, uid } from "../lib/util";
+import { HttpError, patchOf, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 
 const r = new Hono<AppEnv>();
@@ -35,7 +35,7 @@ r.post("/:buildingId/compliance", requireBuilding("syndicus", "raad"), async (c)
   return c.json({ id }, 201);
 });
 r.patch("/:buildingId/compliance/:id", requireBuilding("syndicus", "raad"), async (c) => {
-  const b = c.get("building"); const body = schema.partial().parse(await c.req.json());
+  const b = c.get("building"); const body = patchOf(schema.partial(), await c.req.json());
   const cur = await c.env.DB.prepare("SELECT * FROM compliance_items WHERE id = ? AND building_id = ?").bind(c.req.param("id"), b.id).first<any>();
   if (!cur) throw new HttpError(404, "Niet gevonden");
   const merged = { ...cur, ...body };

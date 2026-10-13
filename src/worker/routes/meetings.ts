@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { requireAuth, requireBuilding } from "../lib/auth";
-import { HttpError, uid } from "../lib/util";
+import { HttpError, patchOf, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 import { isBoard, isOwner } from "../lib/auth";
 import { attendance, majorityReached, MAJ, renderMinutesHtml, validateProxy } from "../lib/meeting";
@@ -53,7 +53,7 @@ meetings.post("/:buildingId/meetings", requireBuilding("syndicus", "raad"), asyn
 
 meetings.patch("/:buildingId/meetings/:meetingId", requireBuilding("syndicus", "raad"), async (c) => {
   const b = c.get("building");
-  const body = schema.partial().parse(await c.req.json());
+  const body = patchOf(schema.partial(), await c.req.json());
   const { notify: _n, ...rest } = body;
   const fields = Object.entries(rest).filter(([, v]) => v !== undefined).map(([k, v]) => [k, typeof v === "boolean" ? +v : v]);
   if (fields.length) await c.env.DB.prepare(`UPDATE meetings SET ${fields.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ? AND building_id = ?`).bind(...fields.map(([, v]) => v), c.req.param("meetingId"), b.id).run();

@@ -5,6 +5,6 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 import { fileURLToPath, URL } from "node:url";
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), cloudflare()],
+  plugins: [react(), tailwindcss(), cloudflare(process.env.TRUSTEE_STATE ? { persistState: { path: process.env.TRUSTEE_STATE } } : {})],
   resolve: { alias: { "@": fileURLToPath(new URL("./src/client", import.meta.url)), "@shared": fileURLToPath(new URL("./src/shared", import.meta.url)) } },
 });

@@ -2,7 +2,7 @@ import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { requireAuth, requireBuilding } from "../lib/auth";
-import { HttpError, uid } from "../lib/util";
+import { HttpError, patchOf, uid } from "../lib/util";
 import { audit } from "../lib/notify";
 import { postEntry, templateByCode } from "../lib/ledger";
 
@@ -29,7 +29,7 @@ r.post("/:buildingId/suppliers", mgr, async (c) => {
   return c.json({ id }, 201);
 });
 r.patch("/:buildingId/suppliers/:id", mgr, async (c) => {
-  const b = c.get("building"); const body = supplierSchema.partial().parse(await c.req.json());
+  const b = c.get("building"); const body = patchOf(supplierSchema.partial(), await c.req.json());
   const { default_account_code, ...rest } = body as any;
   const fields: [string, unknown][] = Object.entries(rest).filter(([, v]) => v !== undefined).map(([k, v]) => [k, typeof v === "boolean" ? +v : k === "iban" && v ? String(v).replace(/\s/g, "") : v === "" ? null : v]);
   if (default_account_code !== undefined) fields.push(["default_account_id", await accountId(c, default_account_code)]);

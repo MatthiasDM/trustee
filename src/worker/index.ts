@@ -41,6 +41,8 @@ app.route("/api/buildings", compliance);
 app.route("/api/notifications", notifications);
 app.route("/api/orgs", orgs);
 
+app.post("/api/admin/run-cron", async (c) => { if (c.env.TEST_MODE !== "1") return c.json({ error: "Niet gevonden" }, 404); return c.json(await runCron(c.env, "test")); });
+
 app.notFound((c) => c.json({ error: "Niet gevonden" }, 404));
 app.onError((err, c) => {
   if (err instanceof HttpError) return c.json({ error: err.message }, err.status as any);
@@ -49,14 +51,11 @@ app.onError((err, c) => {
   return c.json({ error: "Interne fout" }, 500);
 });
 
-export default {
-  fetch: app.fetch,
-  /** Cron: sluit verlopen stemmingen, stuurt herinneringen voor vergaderingen (24u vooraf), ruimt sessies op. */
-  async scheduled(event: ScheduledEvent, env: AppEnv["Bindings"], ctx: ExecutionContext) {
-    ctx.waitUntil((async () => {
+/** Achtergrondtaken (cron). In de testomgeving ook aanroepbaar via POST /api/admin/run-cron. */
+export async function runCron(env: AppEnv["Bindings"], cron = "manual") {
       const started = Date.now();
       const nowIso = new Date().toISOString();
-      const log: Record<string, unknown> = { started_at: nowIso, cron: event.cron };
+      const log: Record<string, unknown> = { started_at: nowIso, cron };
       try {
       // maandelijkse back-up op de 1e, in het eerste kwartier van de dag
       const d = new Date();
@@ -89,6 +88,13 @@ export default {
       } catch (e) { log.ok = false; log.error = String(e); console.error("cron failed", e); }
       log.duration_ms = Date.now() - started;
       await env.KV.put("cron:last", JSON.stringify(log));
-    })());
+      return log;
+}
+
+export default {
+  fetch: app.fetch,
+  /** Cron: sluit verlopen stemmingen, stuurt herinneringen voor vergaderingen (24u vooraf), ruimt sessies op. */
+  async scheduled(event: ScheduledEvent, env: AppEnv["Bindings"], ctx: ExecutionContext) {
+    ctx.waitUntil(runCron(env, event.cron));
   },
 };

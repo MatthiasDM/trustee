@@ -49,7 +49,7 @@ export function MeetingsPage() {
   return <div>
     <PageHeader title={t("Algemene vergadering")} subtitle={t("Het hoogste orgaan van de VME: mede-eigenaars beslissen, stemmen naar aandelen. Agenda, aanwezigheden en verslagen.")} actions={b.isBoard && <Button onClick={() => setOpen(true)}><CalendarPlus />{t("Vergadering plannen")}</Button>} />
     {!meetings.loading && <AgendaSection meetings={list} />}
-    <MeetingRequests />
+    <MeetingRequests meetings={list} />
     {meetings.loading ? <Spinner /> : !list.length ? <Empty icon={<Calendar />} title="Nog geen vergaderingen gepland" /> : <>
       <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t("Komende")}</h2>{upcoming.length ? <div className="mb-8 space-y-3">{upcoming.map((m) => <MeetingCard key={m.id} m={m} />)}</div> : <p className="mb-8 text-sm text-muted-foreground">Geen geplande vergaderingen.</p>}
       {past.length > 0 && <><h2 className="mb-3 text-sm font-medium text-muted-foreground">{t("Voorbije")}</h2><div className="space-y-3">{past.map((m) => <MeetingCard key={m.id} m={m} />)}</div></>}</>}

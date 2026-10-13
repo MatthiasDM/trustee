@@ -47,8 +47,11 @@ describe("Algemene vergadering: agenda, volmachten, quorum, stemming, notulen", 
     const r = await marie.post(`/api/buildings/${B}/meeting-requests`, { subject: "Test-verzoek" }); expect(r.status).toBe(201);
     expect((await lotte.post(`/api/buildings/${B}/meeting-requests/${r.data.id}/sign`)).status).toBe(403);
     const s = await jan.post(`/api/buildings/${B}/meeting-requests/${r.data.id}/sign`); expect(s.data.reached).toBe(true); expect(s.data.status).toBe("threshold_reached"); expect(s.data.deadline).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect((await marie.patch(`/api/buildings/${B}/meeting-requests/${r.data.id}`, { status: "fulfilled" })).status).toBe(403);
+    expect((await marie.patch(`/api/buildings/${B}/meeting-requests/${r.data.id}`, { status: "fulfilled", fulfilled_meeting_id: meetingId })).status).toBe(403);
+    expect((await synd.patch(`/api/buildings/${B}/meeting-requests/${r.data.id}`, { status: "fulfilled" })).status).toBe(400); // zonder vergadering niet ingewilligd
     expect((await synd.patch(`/api/buildings/${B}/meeting-requests/${r.data.id}`, { status: "fulfilled", fulfilled_meeting_id: meetingId })).status).toBe(200);
+    const done = (await marie.get(`/api/buildings/${B}/meeting-requests`)).data.find((x: any) => x.id === r.data.id); expect(done.meeting_title).toBe("Test-AV"); expect(done.resolved_by_name).toBe("Sofie Vermeulen");
+    expect((await synd.patch(`/api/buildings/${B}/meeting-requests/${r.data.id}`, { status: "cancelled" })).status).toBe(400); // al afgehandeld
   });
   it("schriftelijke besluitvorming: één tegenstem verwerpt, eenparigheid neemt aan", async () => {
     const mk = async () => (await synd.post(`/api/buildings/${B}/polls`, { title: "Schriftelijk test", options: ["x", "y"], written: true })).data.id as string;

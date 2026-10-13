@@ -17,7 +17,8 @@ function reset() {
 }
 async function waitHealthy(ms = 60000) {
   const t0 = Date.now();
-  while (Date.now() - t0 < ms) { try { const r = await fetch(`http://127.0.0.1:${PORT}/api/health`); if (r.ok) return true; } catch {} await new Promise((r) => setTimeout(r, 500)); }
+  // health én een echte route met D1-toegang: de eerste aanroep na een koude start compileert nog en gaf sporadisch een 500 (HTML)
+  while (Date.now() - t0 < ms) { try { const r = await fetch(`http://127.0.0.1:${PORT}/api/health`); const m = await fetch(`http://127.0.0.1:${PORT}/api/auth/me`); if (r.ok && m.ok) return true; } catch {} await new Promise((r) => setTimeout(r, 500)); }
   throw new Error("testserver niet gestart");
 }
 if (cmd === "reset") reset();

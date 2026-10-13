@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { requireAuth, requireBuilding } from "../lib/auth";
-import { HttpError, patchOf, uid } from "../lib/util";
+import { HttpError, now, patchOf, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 import { isBoard, isCoOwner } from "../lib/auth";
 import { attendance, majorityReached, MAJ, renderMinutesHtml, validateProxy } from "../lib/meeting";
@@ -193,7 +193,7 @@ async function requestWithProgress(env: AppEnv["Bindings"], buildingId: string, 
 }
 meetings.get("/:buildingId/meeting-requests", requireBuilding(), async (c) => {
   const b = c.get("building");
-  const rows = (await c.env.DB.prepare("SELECT r.*, u.name AS created_by_name, m.title AS meeting_title, m.starts_at AS meeting_starts_at FROM meeting_requests r JOIN users u ON u.id = r.created_by LEFT JOIN meetings m ON m.id = r.fulfilled_meeting_id WHERE r.building_id = ? ORDER BY r.created_at DESC").bind(b.id).all()).results as any[];
+  const rows = (await c.env.DB.prepare("SELECT r.*, u.name AS created_by_name, ru.name AS resolved_by_name, m.title AS meeting_title, m.starts_at AS meeting_starts_at FROM meeting_requests r JOIN users u ON u.id = r.created_by LEFT JOIN users ru ON ru.id = r.resolved_by LEFT JOIN meetings m ON m.id = r.fulfilled_meeting_id WHERE r.building_id = ? ORDER BY r.created_at DESC").bind(b.id).all()).results as any[];
   return c.json(await Promise.all(rows.map((r) => requestWithProgress(c.env, b.id, r))));
 });
 meetings.post("/:buildingId/meeting-requests", requireBuilding(), async (c) => {
@@ -223,10 +223,21 @@ meetings.patch("/:buildingId/meeting-requests/:id", requireBuilding(), async (c)
   const b = c.get("building"); const user = c.get("user");
   const req = await c.env.DB.prepare("SELECT * FROM meeting_requests WHERE id = ? AND building_id = ?").bind(c.req.param("id"), b.id).first<any>();
   if (!req) throw new HttpError(404, "Niet gevonden");
-  const body = z.object({ status: z.enum(["fulfilled", "cancelled"]).optional(), fulfilled_meeting_id: z.string().nullable().optional() }).parse(await c.req.json());
+  const body = z.object({ status: z.enum(["fulfilled", "cancelled"]), fulfilled_meeting_id: z.string().nullable().optional(), note: z.string().max(1000).nullable().optional() }).parse(await c.req.json());
+  if (req.status === "fulfilled" || req.status === "cancelled") throw new HttpError(400, "Dit verzoek is al afgehandeld");
   if (body.status === "cancelled" && req.created_by !== user.id && !isBoard(b.role)) throw new HttpError(403, "Geen rechten");
-  if (body.status === "fulfilled" && !isBoard(b.role)) throw new HttpError(403, "Enkel de syndicus kan een verzoek als ingewilligd markeren");
-  await c.env.DB.prepare("UPDATE meeting_requests SET status = COALESCE(?, status), fulfilled_meeting_id = COALESCE(?, fulfilled_meeting_id) WHERE id = ?").bind(body.status ?? null, body.fulfilled_meeting_id ?? null, req.id).run();
+  if (body.status === "fulfilled") {
+    if (!isBoard(b.role)) throw new HttpError(403, "Enkel de syndicus kan een verzoek als ingewilligd markeren");
+    // Ingewilligd betekent: er is een vergadering bijeengeroepen. Zonder gekoppelde vergadering is het verzoek niet afgehandeld.
+    if (!body.fulfilled_meeting_id) throw new HttpError(400, "Kies de vergadering die dit verzoek inwilligt");
+    const m = await c.env.DB.prepare("SELECT id FROM meetings WHERE id = ? AND building_id = ?").bind(body.fulfilled_meeting_id, b.id).first();
+    if (!m) throw new HttpError(400, "Vergadering niet gevonden");
+  }
+  await c.env.DB.prepare("UPDATE meeting_requests SET status = ?, fulfilled_meeting_id = ?, resolved_at = ?, resolved_by = ?, resolution_note = ? WHERE id = ?")
+    .bind(body.status, body.status === "fulfilled" ? body.fulfilled_meeting_id : null, now(), user.id, body.note ?? null, req.id).run();
+  await audit(c.env, b.id, user.id, body.status === "fulfilled" ? "meeting_request.fulfill" : "meeting_request.cancel", "meeting_request", req.id, { meeting_id: body.fulfilled_meeting_id ?? null });
+  const signers = (await c.env.DB.prepare("SELECT user_id FROM meeting_request_signatures WHERE request_id = ?").bind(req.id).all<{ user_id: string }>()).results.map((r) => r.user_id).filter((id) => id !== user.id);
+  if (signers.length) await notifyBuilding(c.env, { userIds: signers, buildingId: b.id, type: "meeting_request", title: body.status === "fulfilled" ? `Verzoek ingewilligd: ${req.subject}` : `Verzoek ingetrokken: ${req.subject}`, body: body.status === "fulfilled" ? `${user.name} heeft een algemene vergadering bijeengeroepen voor dit verzoek.` : `${user.name} heeft het verzoek ingetrokken.${body.note ? ` Reden: ${body.note}` : ""}`, link: `/b/${b.id}/meetings` });
   return c.json({ ok: true });
 });
 

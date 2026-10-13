@@ -1,0 +1,20 @@
+export interface Env {
+  DB: D1Database;
+  DOCS: R2Bucket;
+  KV: KVNamespace;
+  ASSETS: Fetcher;
+  APP_NAME: string;
+  APP_URL: string;
+  VAPID_SUBJECT: string;
+  VAPID_PUBLIC_KEY: string;
+  VAPID_PRIVATE_KEY?: string;
+  RESEND_API_KEY?: string;
+  EMAIL_FROM: string;
+  SESSION_SECRET?: string;
+}
+
+export interface AuthUser { id: string; email: string; name: string; locale: string; is_superadmin: number; phone: string | null }
+export interface BuildingCtx { id: string; org_id: string; name: string; total_shares: number; role: string }
+
+export type Vars = { user: AuthUser; building: BuildingCtx; sessionId: string };
+export type AppEnv = { Bindings: Env; Variables: Vars };

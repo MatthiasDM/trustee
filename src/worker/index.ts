@@ -1,0 +1,59 @@
+import { Hono } from "hono";
+import { logger } from "hono/logger";
+import { secureHeaders } from "hono/secure-headers";
+import { ZodError } from "zod";
+import type { AppEnv } from "./env";
+import { HttpError } from "./lib/util";
+import auth from "./routes/auth";
+import buildings from "./routes/buildings";
+import documents from "./routes/documents";
+import posts from "./routes/posts";
+import polls from "./routes/polls";
+import meetings from "./routes/meetings";
+import notifications from "./routes/notifications";
+import { notifyBuilding } from "./lib/notify";
+
+const app = new Hono<AppEnv>();
+app.use("*", logger());
+app.use("*", secureHeaders({ crossOriginEmbedderPolicy: false }));
+
+app.get("/api/health", (c) => c.json({ ok: true, ts: new Date().toISOString() }));
+app.route("/api/auth", auth);
+app.route("/api/buildings", buildings);
+app.route("/api/buildings", documents);
+app.route("/api/buildings", posts);
+app.route("/api/buildings", polls);
+app.route("/api/buildings", meetings);
+app.route("/api/notifications", notifications);
+
+app.notFound((c) => c.json({ error: "Niet gevonden" }, 404));
+app.onError((err, c) => {
+  if (err instanceof HttpError) return c.json({ error: err.message }, err.status as any);
+  if (err instanceof ZodError) return c.json({ error: "Ongeldige invoer", issues: err.issues.map((i) => `${i.path.join(".")}: ${i.message}`) }, 400);
+  console.error(err);
+  return c.json({ error: "Interne fout" }, 500);
+});
+
+export default {
+  fetch: app.fetch,
+  /** Cron: sluit verlopen stemmingen, stuurt herinneringen voor vergaderingen (24u vooraf), ruimt sessies op. */
+  async scheduled(_event: ScheduledEvent, env: AppEnv["Bindings"], ctx: ExecutionContext) {
+    ctx.waitUntil((async () => {
+      const nowIso = new Date().toISOString();
+      const expired = await env.DB.prepare("SELECT id, building_id, title FROM polls WHERE status = 'open' AND closes_at IS NOT NULL AND closes_at < ?").bind(nowIso).all<any>();
+      for (const p of expired.results) {
+        await env.DB.prepare("UPDATE polls SET status = 'closed' WHERE id = ?").bind(p.id).run();
+        await notifyBuilding(env, { buildingId: p.building_id, type: "poll_closed", title: `Stemming afgesloten: ${p.title}`, body: "Bekijk de resultaten.", link: `/b/${p.building_id}/polls/${p.id}`, email: false });
+      }
+      // herinnering 24u vooraf (venster van 15 min zodat cron het één keer oppikt)
+      const from = new Date(Date.now() + 24 * 3600_000).toISOString();
+      const to = new Date(Date.now() + 24 * 3600_000 + 15 * 60_000).toISOString();
+      const upcoming = await env.DB.prepare("SELECT id, building_id, title, starts_at, location FROM meetings WHERE starts_at >= ? AND starts_at < ?").bind(from, to).all<any>();
+      for (const m of upcoming.results) {
+        await notifyBuilding(env, { buildingId: m.building_id, type: "meeting_reminder", title: `Morgen: ${m.title}`, body: `${new Date(m.starts_at).toLocaleString("nl-BE", { timeZone: "Europe/Brussels" })}${m.location ? ` — ${m.location}` : ""}`, link: `/b/${m.building_id}/meetings` });
+      }
+      await env.DB.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(nowIso).run();
+      await env.DB.prepare("DELETE FROM password_resets WHERE expires_at < ?").bind(nowIso).run();
+    })());
+  },
+};

@@ -1,0 +1,37 @@
+
+-- Demo-data. Alle accounts: wachtwoord "wachtwoord123"
+INSERT OR IGNORE INTO users (id, email, name, password_hash) VALUES
+ ('u-syndicus','syndicus@demo.be','Sofie Vermeulen','pbkdf2$210000$wmGvKRTsyjf-hlnjcadhPQ$og21BYnikXiBY_qTGgb2Q2WyjI6bGhHEoH2G5Qmi8sM'),
+ ('u-jan','jan@demo.be','Jan Peeters','pbkdf2$210000$wmGvKRTsyjf-hlnjcadhPQ$og21BYnikXiBY_qTGgb2Q2WyjI6bGhHEoH2G5Qmi8sM'),
+ ('u-marie','marie@demo.be','Marie Claes','pbkdf2$210000$wmGvKRTsyjf-hlnjcadhPQ$og21BYnikXiBY_qTGgb2Q2WyjI6bGhHEoH2G5Qmi8sM'),
+ ('u-ahmed','ahmed@demo.be','Ahmed El Idrissi','pbkdf2$210000$wmGvKRTsyjf-hlnjcadhPQ$og21BYnikXiBY_qTGgb2Q2WyjI6bGhHEoH2G5Qmi8sM'),
+ ('u-lotte','lotte@demo.be','Lotte De Smet','pbkdf2$210000$wmGvKRTsyjf-hlnjcadhPQ$og21BYnikXiBY_qTGgb2Q2WyjI6bGhHEoH2G5Qmi8sM');
+INSERT OR IGNORE INTO orgs (id, name, slug, plan) VALUES ('org-demo','Syndicus Vermeulen bv','syndicus-vermeulen','pro');
+INSERT OR IGNORE INTO org_members (org_id, user_id, role) VALUES ('org-demo','u-syndicus','owner');
+INSERT OR IGNORE INTO buildings (id, org_id, name, address, city, postal_code, enterprise_number, total_shares) VALUES
+ ('b-zeezicht','org-demo','Residentie Zeezicht','Zeedijk 12','Oostende','8400','0712.345.678',1000);
+INSERT OR IGNORE INTO building_members (building_id, user_id, role) VALUES
+ ('b-zeezicht','u-syndicus','syndicus'),('b-zeezicht','u-jan','raad'),('b-zeezicht','u-marie','eigenaar'),('b-zeezicht','u-ahmed','eigenaar'),('b-zeezicht','u-lotte','huurder');
+INSERT OR IGNORE INTO units (id, building_id, label, type, floor, shares) VALUES
+ ('un-a1','b-zeezicht','A1','appartement','0',250),('un-a2','b-zeezicht','A2','appartement','1',300),('un-a3','b-zeezicht','A3','appartement','2',350),('un-g1','b-zeezicht','G1','garage','-1',50),('un-g2','b-zeezicht','G2','garage','-1',50);
+INSERT OR IGNORE INTO unit_owners (unit_id, user_id, share_pct) VALUES ('un-a1','u-jan',100),('un-a2','u-marie',100),('un-a3','u-ahmed',100),('un-g1','u-jan',100),('un-g2','u-marie',100);
+INSERT OR IGNORE INTO folders (id, building_id, name) VALUES
+ ('f-statuten','b-zeezicht','Statuten & basisakte'),('f-verslagen','b-zeezicht','Verslagen algemene vergadering'),('f-boekhouding','b-zeezicht','Boekhouding & afrekeningen'),('f-offertes','b-zeezicht','Offertes & facturen');
+INSERT OR IGNORE INTO posts (id, building_id, author_id, type, title, body, status, pinned) VALUES
+ ('p-1','b-zeezicht','u-syndicus','announcement','Welkom op het nieuwe platform','Beste mede-eigenaars, vanaf nu vinden jullie hier alle documenten, mededelingen en stemmingen van Residentie Zeezicht. Zet push-meldingen aan via Instellingen.','open',1),
+ ('p-2','b-zeezicht','u-marie','question','Wanneer wordt de gevel gereinigd?','Op de vorige AV werd gezegd dat de gevelreiniging in het voorjaar zou gebeuren. Is daar al een datum voor?','open',0),
+ ('p-3','b-zeezicht','u-ahmed','incident','Lift blokkeert af en toe op verdieping 2','De lift blijft sinds vorige week regelmatig hangen tussen verdieping 1 en 2. Graag een technieker laten langskomen.','in_progress',0);
+UPDATE posts SET priority='high' WHERE id='p-3';
+INSERT OR IGNORE INTO comments (id, post_id, author_id, body, is_answer) VALUES
+ ('c-1','p-2','u-syndicus','De gevelreiniging is ingepland voor de week van 18 mei. De firma plaatst de stelling op maandag.',1),
+ ('c-2','p-3','u-syndicus','Kone is verwittigd; technieker komt donderdag langs.',0);
+INSERT OR IGNORE INTO polls (id, building_id, created_by, title, description, weighted, anonymous, multiple, owners_only, required_majority, status) VALUES
+ ('poll-1','b-zeezicht','u-syndicus','Goedkeuring offerte dakrenovatie (€ 48.500)','Offerte van Dakwerken Devos voor volledige vernieuwing van de dakbedekking incl. isolatie. Zie map Offertes & facturen.',1,0,0,1,'two_thirds','open');
+INSERT OR IGNORE INTO poll_options (id, poll_id, label, position) VALUES ('po-1','poll-1','Ja, goedkeuren',0),('po-2','poll-1','Nee',1),('po-3','poll-1','Onthouding',2);
+INSERT OR IGNORE INTO poll_votes (id, poll_id, option_id, user_id, weight) VALUES ('pv-1','poll-1','po-1','u-jan',300);
+INSERT OR IGNORE INTO meetings (id, building_id, title, type, starts_at, location, agenda, created_by) VALUES
+ ('m-1','b-zeezicht','Jaarlijkse algemene vergadering 2026','av',strftime('%Y-%m-%dT18:30:00.000Z','now','+21 days'),'Inkomhal, gelijkvloers','1. Goedkeuring verslag vorige AV
+2. Jaarrekening 2025 en kwijting syndicus
+3. Begroting 2026
+4. Dakrenovatie: toelichting en stemming
+5. Varia','u-syndicus');

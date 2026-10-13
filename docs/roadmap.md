@@ -63,8 +63,9 @@ Stand op 13 oktober 2026, na de bouw van de boekhoudmodule. Gerangschikt per dom
 
 ## Volgorde die ik voorstel
 
-1. Productierijp (rate limiting, e-maildomein, uploadvalidatie, tests).
-2. Notulen, volmachten en quorum voor de AV: dit sluit de cirkel van agendapunt tot beslissing.
-3. Jaarrekening en afrekening als PDF, commissarisverslag, betalingsherinneringen.
-4. Vereenvoudigde boekhouding voor kleine VME's en het overdrachtsdossier bij verkoop.
+1. ~~Productierijp (rate limiting, e-maildomein, uploadvalidatie, tests).~~ Gedaan 13 okt 2026 (DNS voor e-mail blijft handwerk).
+2. ~~Notulen, volmachten en quorum voor de AV.~~ Gedaan 13 okt 2026.
+3. ~~Jaarrekening en afrekening als PDF, commissarisverslag, betalingsherinneringen.~~ Gedaan 13 okt 2026.
+4. ~~Vereenvoudigde boekhouding voor kleine VME's en het overdrachtsdossier bij verkoop.~~ Gedaan 13 okt 2026.
 5. Meertaligheid en het kantoorportaal.
+6. Daarna: notulen ook als PDF, leveranciersbeheer, periodieke boekingen, 1/5-verzoek tot AV, schriftelijke besluitvorming, keuringsattesten, tickets met leverancier.

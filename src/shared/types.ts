@@ -17,6 +17,7 @@ export const DOC_CATEGORIES: Record<string, string> = {
   reglement: "Reglement van interne orde",
   verslag_av: "Verslagen algemene vergadering",
   controleverslag: "Verslag commissaris / raad",
+  overdracht: "Overdrachtsdossier (verkoop)",
   boekhouding: "Boekhouding & afrekeningen",
   offerte: "Offertes",
   factuur: "Facturen",

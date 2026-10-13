@@ -46,6 +46,8 @@ Het dashboard opent met de **organen van de VME**: de volgende algemene vergader
 
 De boekhouding volgt het wettelijke rekeningenstelsel voor VME's (KB 12 juli 2012) en werkt met dubbel boekhouden: elke boeking heeft een debet- en een creditzijde die gelijk zijn. Je hoeft daar als syndicus niet over na te denken: je kiest een **handeling** en Trustee vult de rekeningen in.
 
+**Kleine VME (minder dan 20 kavels)?** Dan toont Trustee automatisch de **vereenvoudigde boekhouding**: een kasboek met ontvangsten en uitgaven per rubriek, de kaspositie en het werk- en reservekapitaal, precies wat de wet minimaal vraagt. Dagboek, vaste activa en draaitabel zijn dan verborgen; onderliggend blijft alles volledig geboekt, dus je kan altijd omschakelen onder *Instellingen › Boekhoudmodus*. Vanaf 20 kavels is dubbel boekhouden verplicht en kan je niet terug naar de eenvoudige weergave.
+
 - **Overzicht**: werk- en reservekapitaal op de bank, nog te ontvangen bijdragen, open leveranciersfacturen, resultaat van het boekjaar en de balans.
 - **Dagboek**: alle boekingen, genummerd per boekjaar, met filter op rekening en zoekfunctie. Een boeking is na het boeken onwijzigbaar; een fout corrigeer je met *Tegenboeken*. Raad en commissaris noteren bij elke boeking opmerkingen, bevindingen of "nagezien, in orde".
 - **Boeken** (syndicus): kies een handeling (factuur leverancier, betaling, bijdrage van eigenaar, aankoop vast actief, interesten, bankkosten, overboeking, creditnota…), vul bedrag, datum en tegenpartij in en koppel het verantwoordingsstuk uit Documenten.
@@ -59,7 +61,8 @@ De boekhouding volgt het wettelijke rekeningenstelsel voor VME's (KB 12 juli 201
 - **Afrekeningen versturen**: op *Afrekening* maakt de syndicus voor elke kavel een individuele PDF met kostenaandeel, voorschotten, saldo en betaalinstructie. Elke eigenaar ziet enkel zijn eigen afrekening bij Documenten en krijgt een melding.
 - **Opvolging** (syndicus, raad, commissaris): openstaande voorschotten per kavel met het aantal dagen over de vervaldag. De syndicus stuurt een herinnering, aanmaning of ingebrekestelling als PDF-brief (zichtbaar voor de eigenaar) met optionele aanmaningskost die op de kavel geboekt wordt. Automatische opvolging kan aan: de cron stuurt dan dagelijks herinneringen na X dagen en aanmaningen na Y dagen.
 - **Controle**: de commissaris stelt zijn verslag op (periode, omvang, vaststellingen, besluit, advies) en maakt het definitief. Het verslag wordt een PDF onder Documenten, alle leden krijgen een melding en het punt "verslag commissaris en kwijting" wordt automatisch als agendapunt voorgesteld voor de AV.
-- **Instellingen** (syndicus): boekjaren openen en afsluiten, bankrekeningen (werk- en reservekapitaal apart), verdeelsleutels, extra rekeningen.
+- **Overdrachtsdossier bij verkoop** (art. 3.94): de syndicus maakt het vanuit *Mede-eigenaars & organen › Kavels* (knop *Overdracht*); een eigenaar vraagt het voor zijn eigen kavel aan op *Mijn afrekening*. Het PDF bevat werk- en reservekapitaal, achterstallen, opgevraagde en voorziene bijdragen, beslissingen over werken, lopende procedures, de notulen van de laatste drie jaar, de laatste jaarrekeningen en de organen. Het is enkel zichtbaar voor de eigenaar van die kavel en de organen. Vul onder *Instellingen › Gebouw* de lopende procedures en de verzekeringen in.
+- **Instellingen** (syndicus): boekhoudmodus, boekjaren openen en afsluiten, bankrekeningen (werk- en reservekapitaal apart), verdeelsleutels, extra rekeningen.
 
 ## Mede-eigenaars & organen
 

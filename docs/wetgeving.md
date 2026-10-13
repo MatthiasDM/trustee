@@ -98,14 +98,14 @@ Wat een individuele mede-eigenaar **niet** kan: de syndicus instructies geven bu
 |---|---|
 | Wie voert de boekhouding | **De syndicus.** Duidelijk, nauwkeurig en gedetailleerd, volgens het minimum genormaliseerd rekeningenstelsel dat de Koning vastlegt. |
 | Dubbel boekhouden | **Verplicht vanaf 20 kavels** (kelders, garages en parkeerplaatsen niet meegerekend): KB van 12 juli 2012, van toepassing op boekjaren vanaf 1 januari 2013. Elke verrichting wordt zonder uitstel ingeschreven in een dagboek. |
-| Vereenvoudigde boekhouding | Toegestaan onder 20 kavels, maar moet minstens de ontvangsten en uitgaven, de kaspositie en het bedrag van werk- en reservekapitaal weergeven. |
+| Vereenvoudigde boekhouding | Toegestaan onder 20 kavels, maar moet minstens de ontvangsten en uitgaven, de kaspositie en het bedrag van werk- en reservekapitaal weergeven. In Trustee: automatische kasboekweergave onder 20 kavels, met dezelfde minimuminhoud in de jaarrekening. |
 | Verantwoordingsstukken | Elke boeking steunt op een gedagtekend stuk (factuur, uittreksel, bon). Bewaartermijn **7 jaar** (3 jaar voor stukken zonder bewijswaarde tegenover derden). |
 | Werkkapitaal | Voorschotten van de mede-eigenaars voor de **periodieke uitgaven** (onderhoud, nutsvoorzieningen, verzekeringen, syndicus). |
 | Reservekapitaal | Periodiek ingebrachte bedragen voor **niet-periodieke uitgaven** (renovatie, vervanging lift, dak). Verplicht sinds 2019 (jaarlijkse bijdrage van minstens 5 % van de gewone gemeenschappelijke lasten, tenzij de AV met 4/5 anders beslist). Werk- en reservekapitaal staan op **aparte rekeningen** op naam van de VME (art. 3.86 §3). |
 | Begroting | De syndicus legt jaarlijks een begroting voor van de **gewone** lopende uitgaven én van de te verwachten **buitengewone** kosten; de AV stemt erover (art. 3.89 §5, 16°). |
 | Inventaris / jaarrekening | Minstens één keer per jaar: bezittingen, vorderingen, schulden en eigen middelen, ingericht volgens het rekeningenstelsel. Activa aan aanschaffingswaarde min afschrijvingen. |
 | Controle | De **commissaris van de rekeningen** controleert (art. 3.91); de **raad** heeft inzage (art. 3.90); de **AV** keurt de rekeningen goed en geeft kwijting. Elke mede-eigenaar heeft inzagerecht (art. 3.89 §5, 9°). |
-| Bij verkoop van een kavel | De syndicus bezorgt binnen 15 dagen o.a. werk- en reservekapitaal, achterstallen en de laatste goedgekeurde balans (art. 3.94). |
+| Bij verkoop van een kavel (art. 3.94 §1) | Vóór de ondertekening bezorgt de syndicus binnen 15 dagen aan notaris, verkoper of koper: het werk- en reservekapitaal, de achterstallen van de verkoper (incl. invorderingskosten), de opgevraagde en nog verschuldigde bedragen, de lopende procedures, de notulen van de laatste drie jaar, de afrekeningen van de laatste twee jaar en de laatste goedgekeurde balans. Het aandeel in het reservekapitaal blijft bij de vereniging (§3). Na de overdracht geeft de syndicus op verzoek van de notaris binnen 30 dagen de staat van de schulden (§2). In Trustee: knop *Overdracht* bij de kavel of *Overdrachtsdossier* op de afrekening. |
 
 ### Hoe Trustee dit toepast
 

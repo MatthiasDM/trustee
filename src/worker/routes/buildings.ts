@@ -27,6 +27,9 @@ const buildingSchema = z.object({
   reminder_days_1: z.number().int().min(1).max(90).optional(),
   reminder_days_2: z.number().int().min(1).max(180).optional(),
   reminder_fee_2: z.number().min(0).max(500).optional(),
+  ledger_mode: z.enum(["auto", "simple", "double"]).optional(),
+  legal_proceedings: z.string().max(5000).nullable().optional(),
+  insurance_info: z.string().max(2000).nullable().optional(),
 });
 
 /** Nieuw gebouw (VME) aanmaken binnen een org waar de gebruiker admin is. */

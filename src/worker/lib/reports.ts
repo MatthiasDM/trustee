@@ -3,6 +3,7 @@ import { Pdf, dateNl, money } from "./pdf";
 import { uid } from "./util";
 import { ownerStatement, summary } from "../routes/ledger";
 import { ogm } from "./ledger";
+import { cashbook, ledgerMode } from "./cashbook";
 
 /** Bewaart gegenereerde bytes als document in Documenten (map op naam, optioneel gekoppeld aan één kavel). */
 export async function storeDocument(env: Env, buildingId: string, userId: string | null, opts: { name: string; bytes: Uint8Array | string; mime: string; category: string; description?: string; folderMatch?: RegExp; unitId?: string | null; visibility?: string }) {
@@ -30,6 +31,14 @@ export async function generateAnnualReport(env: Env, buildingId: string, userId:
   pdf.title(`Jaarrekening boekjaar ${fy.label}${provisional ? " (voorlopige versie)" : ""}`);
   pdf.text(`Vereniging van mede-eigenaars ${b.name}, ${b.address}${b.city ? `, ${b.postal_code ?? ""} ${b.city}` : ""}${b.enterprise_number ? ` - KBO ${b.enterprise_number}` : ""}`);
   pdf.text(`Boekjaar van ${dateNl(fy.start_date)} tot ${dateNl(fy.end_date)}. Opgemaakt op ${dateNl(new Date().toISOString())} volgens het minimum genormaliseerd rekeningenstelsel (KB 12 juli 2012).`);
+  const mode = await ledgerMode(env, buildingId);
+  if (mode === "simple") {
+    const cb = await cashbook(env, buildingId, fyId);
+    pdf.h2("Staat van ontvangsten en uitgaven (vereenvoudigde boekhouding, minder dan 20 kavels)");
+    pdf.table([{ label: "Rubriek", w: 0.6 }, { label: "Ontvangsten", w: 0.2, align: "right" }, { label: "Uitgaven", w: 0.2, align: "right" }], [...cb.by_rubriek.map((r: any) => [r.rubriek, money(r.in), money(r.out)]), ["Totaal", money(cb.total_in), money(cb.total_out)]], { totalRow: true });
+    pdf.table([{ label: "Rekening", w: 0.5 }, { label: "Begin boekjaar", w: 0.25, align: "right" }, { label: "Einde boekjaar", w: 0.25, align: "right" }], cb.position.map((p: any) => [`${p.code} ${p.name}`, money(p.opening), money(p.closing)]));
+    pdf.text(`Werkkapitaal: ${money(cb.capital.working)} op de rekeningen, ${money(cb.capital.working_receivable)} nog te innen. Reservekapitaal: ${money(cb.capital.reserve)} op de rekeningen, ${money(cb.capital.reserve_receivable)} nog te innen.`, 10, { bold: true });
+  }
   pdf.h2("1. Resultatenrekening");
   pdf.table([{ label: "Rekening", w: 0.15 }, { label: "Kosten", w: 0.6 }, { label: "Bedrag", w: 0.25, align: "right" }], [...s.result.expenses.map((r: any) => [r.code, `${r.name}${r.memo ? ` (${r.memo})` : ""}`, money(r.amount)]), ["", "Totaal kosten", money(s.result.total_expenses)]], { totalRow: true });
   pdf.table([{ label: "Rekening", w: 0.15 }, { label: "Opbrengsten en voorschotten", w: 0.6 }, { label: "Bedrag", w: 0.25, align: "right" }], [...s.result.income.map((r: any) => [r.code, r.name, money(r.amount)]), ["", "Totaal opbrengsten", money(s.result.total_income)]], { totalRow: true });

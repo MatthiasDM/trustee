@@ -7,6 +7,8 @@ import { audit, notifyBuilding } from "../lib/notify";
 import { generateAnnualReport, generateOwnerStatements, overdueUnits, renderCommissionerReport, storeDocument } from "../lib/reports";
 import { Pdf, dateNl, money } from "../lib/pdf";
 import { postEntry } from "../lib/ledger";
+import { cashbook, countedUnits, ledgerMode } from "../lib/cashbook";
+import { generateTransferDossier } from "../lib/transfer";
 
 const reports = new Hono<AppEnv>();
 reports.use("*", requireAuth);
@@ -137,5 +139,27 @@ export async function autoReminders(env: AppEnv["Bindings"]) {
   }
   return sent;
 }
+
+// ---------- Vereenvoudigde boekhouding (kasboek) ----------
+reports.get("/:buildingId/ledger/mode", requireBuilding(), async (c) => {
+  const b = c.get("building");
+  const row = await c.env.DB.prepare("SELECT ledger_mode FROM buildings WHERE id = ?").bind(b.id).first<any>();
+  const n = await countedUnits(c.env, b.id);
+  return c.json({ setting: row?.ledger_mode ?? "auto", effective: await ledgerMode(c.env, b.id), counted_units: n, double_required: n >= 20 });
+});
+reports.get("/:buildingId/ledger/cashbook/:fyId", requireBuilding(), async (c) => c.json(await cashbook(c.env, c.get("building").id, c.req.param("fyId"))));
+
+// ---------- Overdrachtsdossier (art. 3.94 §1) ----------
+reports.post("/:buildingId/ledger/units/:unitId/transfer-dossier", requireBuilding(), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  if (!isBoard(b.role)) {
+    const own = await c.env.DB.prepare("SELECT 1 FROM unit_owners WHERE unit_id = ? AND user_id = ?").bind(c.req.param("unitId"), user.id).first();
+    if (!own) throw new HttpError(403, "Je kan enkel een dossier voor je eigen kavel aanvragen");
+  }
+  const docId = await generateTransferDossier(c.env, b.id, user.id, c.req.param("unitId"));
+  await audit(c.env, b.id, user.id, "transfer.dossier", "unit", c.req.param("unitId"));
+  if (!isBoard(b.role)) await notifyBuilding(c.env, { buildingId: b.id, type: "transfer", title: `Overdrachtsdossier aangevraagd door ${user.name}`, body: "Een mede-eigenaar bereidt de verkoop van zijn kavel voor; het dossier (art. 3.94) staat bij Documenten.", link: `/b/${b.id}/documents`, roles: ["syndicus"], email: false });
+  return c.json({ documentId: docId }, 201);
+});
 
 export default reports;

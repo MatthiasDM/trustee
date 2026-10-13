@@ -59,7 +59,7 @@ export function DocumentsPage() {
         {canPreview(d) && <Button variant="ghost" size="icon-sm" title="Voorvertoning" onClick={() => setPreview(d)}><Eye /></Button>}
         <Button variant="ghost" size="icon-sm" asChild><a href={`/api/buildings/${b.id}/documents/${d.id}/download`} aria-label="Downloaden"><Download /></a></Button>
         {b.isBoard && <Button variant="ghost" size="icon-sm" title="Controle / opmerkingen" onClick={() => setReview(d)}><ClipboardCheck /></Button>}
-        {(b.isManager || b.role === "raad") && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm"><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => setEdit(d)}><Pencil />Bewerken</DropdownMenuItem><DropdownMenuItem variant="destructive" onClick={() => del(d)}><Trash2 />Verwijderen</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}
+        {(b.isManager || b.role === "raad") && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="Acties"><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => setEdit(d)}><Pencil />Bewerken</DropdownMenuItem><DropdownMenuItem variant="destructive" onClick={() => del(d)}><Trash2 />Verwijderen</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}
       </div>)}
     </div>}
     </>}

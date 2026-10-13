@@ -19,9 +19,9 @@ export function useLedgerBase() {
   return { b, fys, accounts, banks, keys };
 }
 
-export function AccountSelect({ accounts, value, onChange, filter, placeholder = "Rekening" }: { accounts: Account[]; value: string; onChange: (v: string) => void; filter?: string; placeholder?: string }) {
+export function AccountSelect({ accounts, value, onChange, filter, placeholder = "Rekening", id }: { accounts: Account[]; value: string; onChange: (v: string) => void; filter?: string; placeholder?: string; id?: string }) {
   const list = accounts.filter((a) => !a.is_header && a.active && (!filter || a.code.startsWith(filter)));
-  return <Select value={value || NONE} onValueChange={(v) => onChange(v === NONE ? "" : v)}><SelectTrigger className="w-full"><SelectValue placeholder={placeholder} /></SelectTrigger><SelectContent><SelectItem value={NONE}>— {placeholder} —</SelectItem>{list.map((a) => <SelectItem key={a.id} value={a.code}><span className="font-mono text-xs text-muted-foreground">{a.code}</span> {a.name}</SelectItem>)}</SelectContent></Select>;
+  return <Select value={value || NONE} onValueChange={(v) => onChange(v === NONE ? "" : v)}><SelectTrigger id={id} className="w-full"><SelectValue placeholder={placeholder} /></SelectTrigger><SelectContent><SelectItem value={NONE}>— {placeholder} —</SelectItem>{list.map((a) => <SelectItem key={a.id} value={a.code}><span className="font-mono text-xs text-muted-foreground">{a.code}</span> {a.name}</SelectItem>)}</SelectContent></Select>;
 }
 
 export function FySelect({ fys, value, onChange }: { fys: FiscalYear[]; value: string; onChange: (v: string) => void }) {

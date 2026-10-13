@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate, useParams, Link } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import { Bell, BookOpen, Briefcase, Building2, Calculator, Calendar, ChevronsUpDown, FileText, Home, LogOut, Menu, MessageSquare, Moon, Settings, Sun, Users, Vote } from "lucide-react";
 import { Toaster } from "sonner";
 import { useAuth } from "../lib/auth";
@@ -38,7 +38,8 @@ export function AppShell() {
   const t = useT();
   const { dark, toggle } = useTheme();
   useEffect(() => { if (!loading && !user) nav("/login", { replace: true }); }, [loading, user, nav]);
-  useEffect(() => { setOpen(false); }, [buildingId]);
+  const location = useLocation();
+  useEffect(() => { setOpen(false); }, [location.pathname, location.search]);
   if (loading || !user) return <Spinner />;
   const current = buildings.find((b) => b.id === buildingId);
 

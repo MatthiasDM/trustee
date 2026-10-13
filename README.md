@@ -69,6 +69,20 @@ npm run deploy
 
 Koppel daarna een custom domain aan de Worker (Workers & Pages › trustee › Settings › Domains). `APP_URL` moet het publieke adres zijn; het wordt gebruikt in e-mails en push-links.
 
+## Testen
+
+Drie lagen, allemaal lokaal en zonder Cloudflare-account:
+
+| Laag | Commando | Wat |
+|---|---|---|
+| Unit | `npm test` | Pure logica: verdeelsleutels, gestructureerde mededeling, rekeningenstelsel, CSV/CODA-parsers, uploadvalidatie, PDF-generator (19 tests). Draait ook mee in `npm run build`. |
+| API-scenario's | `npm run test:api` | Start een **geïsoleerde testomgeving** (eigen D1/R2/KV in `.wrangler/test-state`, verse migraties en seed, poort 5199, `TEST_MODE=1`) en speelt hele workflows af: onboarding en uitnodigingen, rechtenmatrix per rol, AV-flow (agenda, volmachten, quorum, stemming, notulen, 1/5-verzoek, schriftelijk besluit), boekhouding (handelingen, bank, CSV, matching, afrekening, periodiek, activa, begroting, tegenboeking, PDF, opvolging, overdracht), beveiliging (rate limit, uploads, sessies, kennisgeving, cron) en regressies (122 tests). |
+| UI end-to-end | `npm run test:ui` | Playwright bedient de echte interface in Chromium (desktop en Pixel 7): aanmelden, vragen en meldingen, stemmen, documenten uploaden en voorvertonen, keuringen, boeken via handelingen, bankimport en matching, agendapunten, volmachten en quorum, stemming en notulen, taal en thema, kantoorportaal, mobiel menu (20 tests). Rapport in `playwright-report/`, trace en screenshot bij een fout in `test-results/`. |
+
+`npm run test:all` draait alles. De testomgeving kan ook los gebruikt worden om handmatig te klikken zonder je dev-data te raken: `npm run test:env` (reset met `npm run test:env:reset`, stop met `npm run test:env:stop`).
+
+**Kortlevende deployments**: `npm run deploy:preview` laadt een versie op zonder ze live te zetten (`wrangler versions upload`) en geeft een preview-URL terug. Dat vereist `wrangler login` en de productie-bindingen; gebruik voor preview-tests een aparte D1-database (`wrangler d1 create trustee-preview`) en zet die in een `env.preview`-blok in `wrangler.jsonc`, zodat testdata nooit in productie belandt.
+
 ## Structuur
 
 ```

@@ -19,7 +19,10 @@
     "test:env": "node scripts/test-env.mjs start",
     "test:env:stop": "node scripts/test-env.mjs stop",
     "test:env:reset": "node scripts/test-env.mjs reset",
-    "test:api": "node scripts/test-env.mjs reset && node scripts/test-env.mjs start && vitest run --config vitest.scenarios.config.ts; node scripts/test-env.mjs stop"
+    "test:api": "node scripts/test-env.mjs reset && node scripts/test-env.mjs start && vitest run --config vitest.scenarios.config.ts; node scripts/test-env.mjs stop",
+    "test:ui": "node scripts/test-env.mjs stop; playwright test",
+    "test:all": "npm run test && npm run test:api && npm run test:ui",
+    "deploy:preview": "npm run build && wrangler versions upload"
   },
   "dependencies": {
     "@block65/webcrypto-web-push": "^2.0.0",
@@ -56,6 +59,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.63.1",
     "@cloudflare/workers-types": "^5.20261012.1",
+    "@playwright/test": "^1.64.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

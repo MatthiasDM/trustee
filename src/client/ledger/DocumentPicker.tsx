@@ -17,14 +17,14 @@ const LEDGER_CATEGORIES = ["factuur", "offerte", "boekhouding", "contract", "ver
  * Verantwoordingsstuk kiezen: zoeken in bestaande documenten of een nieuw stuk uploaden.
  * Een nieuwe upload belandt in Documenten (map "Boekhouding & afrekeningen", categorie naar keuze) en is daar ook zichtbaar.
  */
-export function DocumentPicker({ value, onChange, suggestedName }: { value: string; onChange: (id: string, doc?: Doc) => void; suggestedName?: string }) {
+export function DocumentPicker({ value, onChange, suggestedName, id }: { value: string; onChange: (id: string, doc?: Doc) => void; suggestedName?: string; id?: string }) {
   const b = useBuilding();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Doc | null>(null);
   useEffect(() => { if (!value) setSelected(null); else if (!selected || selected.id !== value) api.get<Doc[]>(`/api/buildings/${b.id}/documents`).then((ds) => setSelected(ds.find((d) => d.id === value) ?? null)).catch(() => {}); }, [value]);
   return <div className="flex items-center gap-2">
     {selected ? <Badge variant="secondary" className="max-w-full py-1"><Paperclip /><span className="truncate">{selected.name}</span></Badge> : <span className="text-sm text-muted-foreground">Geen stuk gekoppeld</span>}
-    <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>{selected ? "Wijzigen" : "Kiezen of uploaden"}</Button>
+    <Button id={id} type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>{selected ? "Wijzigen" : "Kiezen of uploaden"}</Button>
     {selected && <Button type="button" size="icon-sm" variant="ghost" onClick={() => { setSelected(null); onChange(""); }}><X /></Button>}
     {open && <PickerDialog suggestedName={suggestedName} onClose={() => setOpen(false)} onPick={(d) => { setSelected(d); onChange(d.id, d); setOpen(false); }} />}
   </div>;

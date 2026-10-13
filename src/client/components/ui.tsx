@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { cloneElement, isValidElement, useId, type ReactNode } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { ROLE_LABELS, type Role } from "../../shared/types";
 import { Badge } from "./ui/badge";
@@ -23,8 +23,11 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
   </div>;
 }
 
+/** Label + veld; het label wordt via id/htmlFor aan het veld gekoppeld (toegankelijkheid, en getByLabel in tests). */
 export function Field({ label, children, hint, className }: { label: string; children: ReactNode; hint?: string; className?: string }) {
-  return <div className={cn("grid gap-1.5", className)}><Label>{label}</Label>{children}{hint && <p className="text-xs text-muted-foreground">{hint}</p>}</div>;
+  const id = useId();
+  const child = isValidElement(children) && !(children.props as any).id ? cloneElement(children as any, { id }) : children;
+  return <div className={cn("grid gap-1.5", className)}><Label htmlFor={id}>{label}</Label>{child}{hint && <p className="text-xs text-muted-foreground">{hint}</p>}</div>;
 }
 
 export function ErrorBox({ error }: { error: unknown }) {

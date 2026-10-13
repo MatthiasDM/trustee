@@ -100,7 +100,7 @@ mandates.get("/:buildingId/organs", requireBuilding(), async (c) => {
       ...(byOrgan("syndicus").length === 0 ? ["Geen actief syndicusmandaat geregistreerd (art. 3.89 BW)."] : []),
       ...(byOrgan("commissaris").length === 0 ? ["Geen commissaris van de rekeningen aangewezen voor dit jaar (art. 3.91 BW: jaarlijks verplicht)."] : []),
       ...((units?.n ?? 0) >= 20 && byOrgan("raad").length === 0 ? ["Raad van mede-eigendom verplicht vanaf 20 kavels, maar nog niet samengesteld (art. 3.90 BW)."] : []),
-      ...active.filter((m) => m.end_date <= soon).map((m) => `Mandaat ${ORGAN_RULES[m.organ as keyof typeof ORGAN_RULES].label.toLowerCase()} van ${m.user_name ?? m.holder_name} loopt af op ${m.end_date}; agendeer de herbenoeming op de AV.`),
+      ...active.filter((m) => m.end_date <= soon).map((m) => `Mandaat ${ORGAN_RULES[m.organ as keyof typeof ORGAN_RULES].label.toLowerCase()} van ${m.user_name ?? m.holder_name} loopt af op ${new Date(m.end_date).toLocaleDateString("nl-BE", { timeZone: "Europe/Brussels", dateStyle: "medium" })}; agendeer de herbenoeming op de AV.`),
     ],
   });
 });

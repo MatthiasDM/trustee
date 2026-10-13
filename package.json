@@ -22,7 +22,10 @@
     "test:api": "node scripts/test-env.mjs reset && node scripts/test-env.mjs start && vitest run --config vitest.scenarios.config.ts; node scripts/test-env.mjs stop",
     "test:ui": "node scripts/test-env.mjs stop; playwright test",
     "test:all": "npm run test && npm run test:api && npm run test:ui",
-    "deploy:preview": "npm run build && wrangler versions upload"
+    "preview:deploy": "CLOUDFLARE_ENV=preview vite build && wrangler deploy",
+    "preview:db": "wrangler d1 migrations apply trustee-preview --remote --env preview && node scripts/seed.mjs && wrangler d1 execute trustee-preview --remote --env preview --file=./seed/seed.sql",
+    "preview:test": "TEST_BASE=https://trustee-preview.example.workers.dev vitest run --config vitest.scenarios.config.ts",
+    "preview:destroy": "wrangler delete --name trustee-preview --force"
   },
   "dependencies": {
     "@block65/webcrypto-web-push": "^2.0.0",

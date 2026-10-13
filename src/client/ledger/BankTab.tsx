@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { api, fmtDate } from "../lib/api";
 import { AccountSelect, Money, NONE, type Account, type BankAccount, type CostKey } from "./shared";
+import { DocumentPicker } from "./DocumentPicker";
 import type { Unit } from "../../shared/types";
 
 const KINDS = [["owner_payment", "Bijdrage van mede-eigenaar"], ["supplier_payment", "Betaling leverancier (open factuur)"], ["direct_expense", "Kost rechtstreeks (zonder factuurboeking)"], ["bank_fee", "Bankkosten"], ["interest", "Interesten"], ["other_income", "Andere opbrengst"], ["transfer", "Overboeking tussen eigen rekeningen"], ["ignore", "Negeren (geen boeking)"]];
@@ -62,14 +63,15 @@ function ManualTxDialog({ bank, onClose, onDone }: { bank: BankAccount; onClose:
 function MatchDialog({ tx, accounts, keys, units, onClose, onDone }: { tx: any; accounts: Account[]; keys: CostKey[]; units: Unit[]; onClose: () => void; onDone: () => void }) {
   const b = useBuilding();
   const [kind, setKind] = useState(tx.suggestion?.kind ?? (tx.amount > 0 ? "owner_payment" : "direct_expense"));
-  const [unit, setUnit] = useState(tx.suggestion?.unit_id ?? ""); const [code, setCode] = useState(""); const [key, setKey] = useState(""); const [desc, setDesc] = useState(""); const [error, setError] = useState<unknown>(null);
+  const [unit, setUnit] = useState(tx.suggestion?.unit_id ?? ""); const [code, setCode] = useState(""); const [key, setKey] = useState(""); const [desc, setDesc] = useState(""); const [docId, setDocId] = useState(""); const [error, setError] = useState<unknown>(null);
   return <Dialog open onOpenChange={(o) => !o && onClose()}><DialogContent><DialogHeader><DialogTitle>Verrichting verwerken</DialogTitle><DialogDescription>{fmtDate(tx.date)} · {tx.counterparty_name || "—"} · <Money n={tx.amount} /><br />{tx.communication}</DialogDescription></DialogHeader>
-    <form className="grid gap-3" onSubmit={async (e: FormEvent) => { e.preventDefault(); setError(null); try { await api.post(`/api/buildings/${b.id}/ledger/bank-transactions/${tx.id}/match`, { kind, unit_id: unit || undefined, account_code: code || undefined, cost_key_id: key || null, description: desc || undefined }); toast.success(kind === "ignore" ? "Genegeerd" : "Geboekt"); onDone(); } catch (err) { setError(err); } }}>
+    <form className="grid gap-3" onSubmit={async (e: FormEvent) => { e.preventDefault(); setError(null); try { await api.post(`/api/buildings/${b.id}/ledger/bank-transactions/${tx.id}/match`, { kind, unit_id: unit || undefined, account_code: code || undefined, cost_key_id: key || null, description: desc || undefined, document_id: docId || null }); toast.success(kind === "ignore" ? "Genegeerd" : "Geboekt"); onDone(); } catch (err) { setError(err); } }}>
       <Field label="Aard van de verrichting"><Select value={kind} onValueChange={setKind}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{KINDS.map(([k, l]) => <SelectItem key={k} value={k}>{l}</SelectItem>)}</SelectContent></Select></Field>
       {kind === "owner_payment" && <Field label="Kavel"><Select value={unit || NONE} onValueChange={(v) => setUnit(v === NONE ? "" : v)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={NONE}>— kavel —</SelectItem>{units.map((u) => <SelectItem key={u.id} value={u.id}>{u.label}{u.owners?.length ? ` · ${u.owners.map((o) => o.name).join(", ")}` : ""}</SelectItem>)}</SelectContent></Select></Field>}
       {(kind === "direct_expense") && <><Field label="Kostenrekening"><AccountSelect accounts={accounts} filter="6" value={code} onChange={setCode} /></Field><Field label="Verdeelsleutel"><Select value={key || NONE} onValueChange={(v) => setKey(v === NONE ? "" : v)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={NONE}>Standaard (aandelen)</SelectItem>{keys.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent></Select></Field></>}
       {kind === "other_income" && <Field label="Opbrengstrekening"><AccountSelect accounts={accounts} filter="7" value={code} onChange={setCode} /></Field>}
       {kind === "transfer" && <Field label="Tegenrekening (5xx)"><AccountSelect accounts={accounts} filter="5" value={code} onChange={setCode} /></Field>}
       {kind !== "ignore" && <Field label="Omschrijving (optioneel)"><Input value={desc} onChange={(e) => setDesc(e.target.value)} /></Field>}
+      {kind !== "ignore" && <Field label="Verantwoordingsstuk" hint="Bij een betaling van een open factuur zit het stuk al bij de factuurboeking; hier kan je het bankuittreksel of een bon koppelen."><DocumentPicker value={docId} onChange={setDocId} suggestedName={tx.counterparty_name ?? undefined} /></Field>}
       <ErrorBox error={error} /><DialogFooter><Button variant={kind === "ignore" ? "outline" : "default"}>{kind === "ignore" ? <><X />Negeren</> : <><Check />Boeken</>}</Button></DialogFooter></form></DialogContent></Dialog>;
 }

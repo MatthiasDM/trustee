@@ -323,7 +323,7 @@ ledger.post("/:buildingId/ledger/bank-transactions/:txId/match", mgr, async (c) 
   const tx = await c.env.DB.prepare("SELECT bt.*, ba.fund, a.code AS bank_code FROM bank_transactions bt JOIN bank_accounts ba ON ba.id = bt.bank_account_id JOIN accounts a ON a.id = ba.account_id WHERE bt.id = ? AND bt.building_id = ?").bind(c.req.param("txId"), b.id).first<any>();
   if (!tx) throw new HttpError(404, "Verrichting niet gevonden");
   if (tx.status !== "unmatched") throw new HttpError(400, "Al verwerkt");
-  const body = z.object({ kind: z.enum(["owner_payment", "supplier_payment", "direct_expense", "bank_fee", "interest", "other_income", "transfer", "custom", "ignore"]), unit_id: z.string().optional(), account_code: z.string().optional(), cost_key_id: z.string().nullable().optional(), description: z.string().max(200).optional(), lines: z.array(lineSchema).optional() }).parse(await c.req.json());
+  const body = z.object({ kind: z.enum(["owner_payment", "supplier_payment", "direct_expense", "bank_fee", "interest", "other_income", "transfer", "custom", "ignore"]), unit_id: z.string().optional(), account_code: z.string().optional(), cost_key_id: z.string().nullable().optional(), description: z.string().max(200).optional(), document_id: z.string().nullable().optional(), lines: z.array(lineSchema).optional() }).parse(await c.req.json());
   if (body.kind === "ignore") { await c.env.DB.prepare("UPDATE bank_transactions SET status = 'ignored' WHERE id = ?").bind(tx.id).run(); return c.json({ ok: true }); }
   const amt = Math.abs(tx.amount); const bankLine = tx.amount > 0 ? { account_code: tx.bank_code, debit: amt } : { account_code: tx.bank_code, credit: amt };
   let lines: LineInput[]; let description = body.description ?? "";
@@ -337,7 +337,7 @@ ledger.post("/:buildingId/ledger/bank-transactions/:txId/match", mgr, async (c) 
     case "transfer": if (!body.account_code) throw new HttpError(400, "Tegenrekening (5xx) ontbreekt"); lines = tx.amount > 0 ? [bankLine, { account_code: body.account_code, credit: amt }] : [{ account_code: body.account_code, debit: amt }, bankLine]; description ||= "Interne overboeking"; break;
     default: if (!body.lines) throw new HttpError(400, "Lijnen ontbreken"); lines = [bankLine, ...body.lines]; description ||= tx.communication ?? "Bankverrichting";
   }
-  const id = await postEntry(c.env, b.id, user.id, { date: tx.date, description, counterparty: tx.counterparty_name ?? null, source: "bank", template_code: body.kind, lines });
+  const id = await postEntry(c.env, b.id, user.id, { date: tx.date, description, counterparty: tx.counterparty_name ?? null, source: "bank", template_code: body.kind, document_id: body.document_id ?? null, lines });
   await c.env.DB.prepare("UPDATE bank_transactions SET status = 'matched', entry_id = ? WHERE id = ?").bind(id, tx.id).run();
   return c.json({ id }, 201);
 });

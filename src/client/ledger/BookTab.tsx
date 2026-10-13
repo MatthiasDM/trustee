@@ -7,7 +7,8 @@ import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { api } from "../lib/api";
 import { AccountSelect, NONE, type Account, type BankAccount, type CostKey } from "./shared";
-import type { Doc, Unit } from "../../shared/types";
+import { DocumentPicker } from "./DocumentPicker";
+import type { Unit } from "../../shared/types";
 
 interface TemplateField { key: string; label: string; type: string; required?: boolean; default?: string; filter?: string; hint?: string }
 interface Template { code: string; name: string; group: string; description: string; fields: TemplateField[] }
@@ -17,7 +18,6 @@ export function BookTab({ accounts, banks, keys, onPosted }: { accounts: Account
   const b = useBuilding();
   const templates = useFetch<Template[]>(`/api/buildings/${b.id}/ledger/templates`);
   const units = useFetch<{ units: Unit[] }>(`/api/buildings/${b.id}/units`);
-  const docs = useFetch<Doc[]>(`/api/buildings/${b.id}/documents`);
   const [sel, setSel] = useState<Template | null>(null);
   const [v, setV] = useState<Record<string, any>>({});
   const [error, setError] = useState<unknown>(null); const [busy, setBusy] = useState(false);
@@ -36,7 +36,7 @@ export function BookTab({ accounts, banks, keys, onPosted }: { accounts: Account
       case "cost_key": return <Select value={v[f.key] ?? NONE} onValueChange={(x) => set(x === NONE ? "" : x)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={NONE}>Standaard (volgens aandelen)</SelectItem>{keys.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent></Select>;
       case "fund": return <Select value={v[f.key] ?? "working"} onValueChange={set}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="working">Werkkapitaal (gewone kosten)</SelectItem><SelectItem value="reserve">Reservekapitaal (buitengewone kosten)</SelectItem></SelectContent></Select>;
       case "bank": return <Select value={v[f.key] ?? NONE} onValueChange={(x) => set(x === NONE ? "" : x)}><SelectTrigger className="w-full"><SelectValue placeholder="Bankrekening" /></SelectTrigger><SelectContent>{!banks.length && <SelectItem value={NONE}>Geen bankrekening: maak er een aan onder Instellingen</SelectItem>}{banks.map((k) => <SelectItem key={k.id} value={k.id}>{k.name} ({k.fund === "reserve" ? "reserve" : "werk"})</SelectItem>)}</SelectContent></Select>;
-      case "document": return <Select value={v[f.key] || NONE} onValueChange={(x) => set(x === NONE ? "" : x)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={NONE}>— geen —</SelectItem>{(docs.data ?? []).slice(0, 200).map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select>;
+      case "document": return <DocumentPicker value={v[f.key] ?? ""} onChange={(id) => set(id)} suggestedName={v.counterparty ? `${sel?.name} ${v.counterparty}` : undefined} />;
       default: return <Input value={v[f.key] ?? ""} onChange={(e) => set(e.target.value)} />;
     }
   };

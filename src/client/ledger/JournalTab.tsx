@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { api, fmtDate, timeAgo } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { AccountSelect, Money, type Account, type Entry, type FiscalYear } from "./shared";
+import { DocumentPicker } from "./DocumentPicker";
 
 const STATUS: Record<string, { label: string; variant: any }> = { posted: { label: "Geboekt", variant: "success" }, scheduled: { label: "Gepland", variant: "info" }, reversed: { label: "Tegengeboekt", variant: "secondary" } };
 const SOURCE: Record<string, string> = { manual: "Vrije post", template: "Handeling", depreciation: "Afschrijving", bank: "Bank", call: "Oproep", closing: "Afsluiting" };
@@ -45,14 +46,15 @@ export function JournalTab({ fy, accounts }: { fy: FiscalYear | null; accounts: 
 
 function ManualEntryDialog({ accounts, onClose, onDone }: { accounts: Account[]; onClose: () => void; onDone: () => void }) {
   const b = useBuilding();
-  const [f, setF] = useState({ date: new Date().toISOString().slice(0, 10), description: "", counterparty: "" });
+  const [f, setF] = useState({ date: new Date().toISOString().slice(0, 10), description: "", counterparty: "", document_id: "" });
   const [lines, setLines] = useState([{ account_code: "", debit: "", credit: "" }, { account_code: "", debit: "", credit: "" }]);
   const [error, setError] = useState<unknown>(null);
   const d = lines.reduce((s, l) => s + (+l.debit || 0), 0), c = lines.reduce((s, l) => s + (+l.credit || 0), 0);
   const upd = (i: number, p: any) => setLines(lines.map((l, j) => j === i ? { ...l, ...p } : l));
   return <Dialog open onOpenChange={(o) => !o && onClose()}><DialogContent className="sm:max-w-2xl"><DialogHeader><DialogTitle>Vrije journaalpost</DialogTitle><DialogDescription>Debet en credit moeten gelijk zijn. Eenmaal geboekt is een post onwijzigbaar; corrigeren gebeurt via tegenboeking.</DialogDescription></DialogHeader>
-    <form className="grid gap-4" onSubmit={async (e: FormEvent) => { e.preventDefault(); setError(null); try { await api.post(`/api/buildings/${b.id}/ledger/entries`, { ...f, lines: lines.map((l) => ({ account_code: l.account_code, debit: +l.debit || 0, credit: +l.credit || 0 })) }); toast.success("Geboekt"); onDone(); } catch (err) { setError(err); } }}>
+    <form className="grid gap-4" onSubmit={async (e: FormEvent) => { e.preventDefault(); setError(null); try { await api.post(`/api/buildings/${b.id}/ledger/entries`, { ...f, document_id: f.document_id || null, lines: lines.map((l) => ({ account_code: l.account_code, debit: +l.debit || 0, credit: +l.credit || 0 })) }); toast.success("Geboekt"); onDone(); } catch (err) { setError(err); } }}>
       <div className="grid gap-3 sm:grid-cols-3"><Field label="Datum"><Input type="date" required value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field><Field label="Omschrijving" className="sm:col-span-2"><Input required value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field></div>
+      <Field label="Verantwoordingsstuk"><DocumentPicker value={f.document_id} onChange={(id) => setF({ ...f, document_id: id })} suggestedName={f.description} /></Field>
       <div className="grid gap-2">{lines.map((l, i) => <div key={i} className="grid grid-cols-12 gap-2"><div className="col-span-6"><AccountSelect accounts={accounts} value={l.account_code} onChange={(v) => upd(i, { account_code: v })} /></div><Input className="col-span-2" type="number" step="0.01" min="0" placeholder="Debet" value={l.debit} onChange={(e) => upd(i, { debit: e.target.value, credit: "" })} /><Input className="col-span-2" type="number" step="0.01" min="0" placeholder="Credit" value={l.credit} onChange={(e) => upd(i, { credit: e.target.value, debit: "" })} /><div className="col-span-2 flex justify-end">{lines.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => setLines(lines.filter((_, j) => j !== i))}><X /></Button>}</div></div>)}
         <div className="flex items-center justify-between"><Button type="button" variant="outline" size="sm" onClick={() => setLines([...lines, { account_code: "", debit: "", credit: "" }])}><Plus />Lijn</Button><span className={`text-sm tabular-nums ${Math.abs(d - c) < 0.005 ? "text-emerald-600" : "text-destructive"}`}>D {d.toFixed(2)} / C {c.toFixed(2)}{Math.abs(d - c) >= 0.005 ? ` · verschil ${(d - c).toFixed(2)}` : " ✓"}</span></div></div>
       <ErrorBox error={error} /><DialogFooter><Button disabled={Math.abs(d - c) >= 0.005}>Boeken</Button></DialogFooter></form></DialogContent></Dialog>;

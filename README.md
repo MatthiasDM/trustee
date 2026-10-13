@@ -41,7 +41,7 @@ Zonder `RESEND_API_KEY` worden e-mails naar de console gelogd.
 ```bash
 npx wrangler login
 npx wrangler d1 create trustee-db        # zet database_id in wrangler.jsonc
-npx wrangler r2 bucket create trustee-docs
+npx wrangler r2 bucket create trustee-docs --location eu   # EU-opslag, zoals de handleiding belooft
 npx wrangler kv namespace create KV      # zet id in wrangler.jsonc
 npm run db:migrate:remote
 

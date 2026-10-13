@@ -5,6 +5,8 @@ import { requireAuth, requireBuilding } from "../lib/auth";
 import { HttpError, plusMs, randomToken, uid } from "../lib/util";
 import { layout, sendEmail } from "../lib/email";
 import { audit, escapeHtml, notifyBuilding } from "../lib/notify";
+import { rateLimit } from "../lib/ratelimit";
+import { exportBuilding } from "../lib/backup";
 
 const buildings = new Hono<AppEnv>();
 buildings.use("*", requireAuth);
@@ -126,7 +128,7 @@ buildings.get("/:buildingId/me/preferences", requireBuilding(), async (c) => {
 });
 
 // ---- Uitnodigingen ----
-buildings.post("/:buildingId/invites", requireBuilding("syndicus"), async (c) => {
+buildings.post("/:buildingId/invites", rateLimit({ name: "invites", limit: 20, windowSec: 3600 }), requireBuilding("syndicus"), async (c) => {
   const b = c.get("building");
   const user = c.get("user");
   const body = z.object({
@@ -220,6 +222,28 @@ buildings.post("/:buildingId/broadcast", requireBuilding("syndicus"), async (c) 
   await notifyBuilding(c.env, { buildingId: b.id, type: "broadcast", title, body, roles, link: `/b/${b.id}` });
   await audit(c.env, b.id, c.get("user").id, "broadcast", undefined, undefined, { title });
   return c.json({ ok: true });
+});
+
+// ---- Back-up / export van alle gegevens van het gebouw (JSON) ----
+buildings.get("/:buildingId/export", requireBuilding("syndicus", "raad", "commissaris"), async (c) => {
+  const b = c.get("building");
+  const data = await exportBuilding(c.env, b.id);
+  await audit(c.env, b.id, c.get("user").id, "building.export");
+  return new Response(JSON.stringify(data, null, 2), { headers: { "Content-Type": "application/json", "Content-Disposition": `attachment; filename="trustee-${b.id}-${new Date().toISOString().slice(0, 10)}.json"` } });
+});
+buildings.get("/:buildingId/backups", requireBuilding("syndicus", "raad", "commissaris"), async (c) => {
+  const b = c.get("building");
+  const list = await c.env.DOCS.list({ prefix: `backups/${b.id}/` });
+  const lastCron = await c.env.KV.get("cron:last");
+  return c.json({ backups: list.objects.map((o) => ({ key: o.key, size: o.size, uploaded: o.uploaded })).sort((x, y) => (x.uploaded < y.uploaded ? 1 : -1)), last_cron: lastCron ? JSON.parse(lastCron) : null });
+});
+buildings.get("/:buildingId/backups/:key{.+}", requireBuilding("syndicus", "raad", "commissaris"), async (c) => {
+  const b = c.get("building");
+  const key = c.req.param("key");
+  if (!key.startsWith(`backups/${b.id}/`)) throw new HttpError(403, "Geen toegang");
+  const obj = await c.env.DOCS.get(key);
+  if (!obj) throw new HttpError(404, "Back-up niet gevonden");
+  return new Response(obj.body, { headers: { "Content-Type": "application/json", "Content-Disposition": `attachment; filename="${key.split("/").pop()}"` } });
 });
 
 export default buildings;

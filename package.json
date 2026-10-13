@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit -p tsconfig.worker.json && vite build",
+    "build": "tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p tsconfig.json && vitest run && vite build",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply trustee-db --local",
@@ -14,7 +14,8 @@
     "db:seed:remote": "wrangler d1 execute trustee-db --remote --file=./seed/seed.sql",
     "seed:generate": "node scripts/seed.mjs",
     "vapid": "node scripts/gen-vapid.mjs",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "test": "vitest run"
   },
   "dependencies": {
     "@block65/webcrypto-web-push": "^2.0.0",
@@ -57,6 +58,7 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
+    "vitest": "^4.1.11",
     "wrangler": "^4.149.0"
   }
 }

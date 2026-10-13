@@ -6,6 +6,7 @@ import { createSession, destroySession, loadUser, requireAuth } from "../lib/aut
 import { HttpError, plusMs, randomToken, uid } from "../lib/util";
 import { layout, sendEmail } from "../lib/email";
 import { audit } from "../lib/notify";
+import { rateLimit } from "../lib/ratelimit";
 
 const auth = new Hono<AppEnv>();
 
@@ -17,7 +18,7 @@ const registerSchema = z.object({
   inviteToken: z.string().optional(),
 });
 
-auth.post("/register", async (c) => {
+auth.post("/register", rateLimit({ name: "register", limit: 10, windowSec: 3600 }), async (c) => {
   const body = registerSchema.parse(await c.req.json());
   const email = body.email.toLowerCase().trim();
   const existing = await c.env.DB.prepare("SELECT id FROM users WHERE email = ?").bind(email).first();
@@ -42,7 +43,7 @@ auth.post("/register", async (c) => {
   return c.json({ ok: true });
 });
 
-auth.post("/login", async (c) => {
+auth.post("/login", rateLimit({ name: "login", limit: 10, windowSec: 900, keyFrom: (_c, b) => b?.email ?? null }), async (c) => {
   const { email, password } = z.object({ email: z.string().email(), password: z.string() }).parse(await c.req.json());
   const user = await c.env.DB.prepare("SELECT id, password_hash FROM users WHERE email = ?").bind(email.toLowerCase().trim()).first<{ id: string; password_hash: string }>();
   if (!user || !(await verifyPassword(password, user.password_hash))) throw new HttpError(401, "Ongeldige e-mail of wachtwoord");
@@ -87,7 +88,7 @@ auth.post("/change-password", requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
-auth.post("/forgot-password", async (c) => {
+auth.post("/forgot-password", rateLimit({ name: "forgot", limit: 5, windowSec: 3600, keyFrom: (_c, b) => b?.email ?? null }), async (c) => {
   const { email } = z.object({ email: z.string().email() }).parse(await c.req.json());
   const user = await c.env.DB.prepare("SELECT id, name FROM users WHERE email = ?").bind(email.toLowerCase().trim()).first<{ id: string; name: string }>();
   if (user) {
@@ -99,7 +100,7 @@ auth.post("/forgot-password", async (c) => {
   return c.json({ ok: true });
 });
 
-auth.post("/reset-password", async (c) => {
+auth.post("/reset-password", rateLimit({ name: "reset", limit: 10, windowSec: 3600 }), async (c) => {
   const { token, password } = z.object({ token: z.string(), password: z.string().min(8).max(200) }).parse(await c.req.json());
   const row = await c.env.DB.prepare("SELECT user_id, expires_at FROM password_resets WHERE token = ?").bind(token).first<{ user_id: string; expires_at: string }>();
   if (!row || row.expires_at < new Date().toISOString()) throw new HttpError(400, "Ongeldige of verlopen link");
@@ -108,6 +109,49 @@ auth.post("/reset-password", async (c) => {
     c.env.DB.prepare("DELETE FROM password_resets WHERE user_id = ?").bind(row.user_id),
     c.env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(row.user_id),
   ]);
+  return c.json({ ok: true });
+});
+
+/** AVG: alle gegevens van de aangemelde gebruiker als JSON. */
+auth.get("/me/export", requireAuth, async (c) => {
+  const user = c.get("user");
+  const q = async (sql: string) => (await c.env.DB.prepare(sql).bind(user.id).all()).results;
+  const data = {
+    exported_at: new Date().toISOString(), user,
+    memberships: await q("SELECT bm.*, b.name AS building_name FROM building_members bm JOIN buildings b ON b.id = bm.building_id WHERE bm.user_id = ?"),
+    units: await q("SELECT uo.*, un.label, un.building_id FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE uo.user_id = ?"),
+    posts: await q("SELECT * FROM posts WHERE author_id = ?"), comments: await q("SELECT * FROM comments WHERE author_id = ?"),
+    votes: await q("SELECT * FROM poll_votes WHERE user_id = ?"), rsvps: await q("SELECT * FROM meeting_rsvps WHERE user_id = ?"),
+    agenda_items: await q("SELECT * FROM agenda_items WHERE submitted_by = ?"), mandates: await q("SELECT * FROM mandates WHERE user_id = ?"),
+    notifications: await q("SELECT * FROM notifications WHERE user_id = ?"), push_subscriptions: await q("SELECT id, endpoint, user_agent, created_at FROM push_subscriptions WHERE user_id = ?"),
+    audit: await q("SELECT * FROM audit_log WHERE user_id = ?"),
+  };
+  return new Response(JSON.stringify(data, null, 2), { headers: { "Content-Type": "application/json", "Content-Disposition": `attachment; filename="trustee-export-${user.id}.json"` } });
+});
+
+/**
+ * AVG: account verwijderen. Boekhoudkundige en besluitvormingsgegevens (stemmen, boekingen, notulen) moeten bewaard blijven
+ * (wettelijke bewaartermijn), dus de gebruiker wordt geanonimiseerd: naam en e-mail vervangen, sessies, push en lidmaatschappen verwijderd.
+ */
+auth.delete("/me", requireAuth, async (c) => {
+  const user = c.get("user");
+  const { password } = z.object({ password: z.string() }).parse(await c.req.json());
+  const row = await c.env.DB.prepare("SELECT password_hash FROM users WHERE id = ?").bind(user.id).first<{ password_hash: string }>();
+  if (!row || !(await verifyPassword(password, row.password_hash))) throw new HttpError(400, "Wachtwoord klopt niet");
+  const activeSyndicus = await c.env.DB.prepare("SELECT b.name FROM building_members bm JOIN buildings b ON b.id = bm.building_id WHERE bm.user_id = ? AND bm.role = 'syndicus' AND (SELECT COUNT(*) FROM building_members x WHERE x.building_id = bm.building_id AND x.role = 'syndicus') = 1").bind(user.id).first<{ name: string }>();
+  if (activeSyndicus) throw new HttpError(400, `Je bent de enige syndicus van ${activeSyndicus.name}. Draag het beheer eerst over.`);
+  await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE users SET name = 'Verwijderde gebruiker', email = ?, phone = NULL, password_hash = 'deleted', is_superadmin = 0 WHERE id = ?").bind(`deleted-${user.id}@invalid.local`, user.id),
+    c.env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(user.id),
+    c.env.DB.prepare("DELETE FROM push_subscriptions WHERE user_id = ?").bind(user.id),
+    c.env.DB.prepare("DELETE FROM notifications WHERE user_id = ?").bind(user.id),
+    c.env.DB.prepare("DELETE FROM building_members WHERE user_id = ?").bind(user.id),
+    c.env.DB.prepare("DELETE FROM org_members WHERE user_id = ?").bind(user.id),
+    c.env.DB.prepare("DELETE FROM unit_owners WHERE user_id = ?").bind(user.id),
+    c.env.DB.prepare("DELETE FROM password_resets WHERE user_id = ?").bind(user.id),
+  ]);
+  await audit(c.env, null, user.id, "user.delete");
+  await destroySession(c);
   return c.json({ ok: true });
 });
 

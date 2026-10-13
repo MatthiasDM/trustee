@@ -14,6 +14,7 @@ import notifications from "./routes/notifications";
 import agenda from "./routes/agenda";
 import mandates, { ORGAN_RULES } from "./routes/mandates";
 import ledger, { postDueScheduled } from "./routes/ledger";
+import { runBackups } from "./lib/backup";
 import { notifyBuilding } from "./lib/notify";
 
 const app = new Hono<AppEnv>();
@@ -43,9 +44,15 @@ app.onError((err, c) => {
 export default {
   fetch: app.fetch,
   /** Cron: sluit verlopen stemmingen, stuurt herinneringen voor vergaderingen (24u vooraf), ruimt sessies op. */
-  async scheduled(_event: ScheduledEvent, env: AppEnv["Bindings"], ctx: ExecutionContext) {
+  async scheduled(event: ScheduledEvent, env: AppEnv["Bindings"], ctx: ExecutionContext) {
     ctx.waitUntil((async () => {
+      const started = Date.now();
       const nowIso = new Date().toISOString();
+      const log: Record<string, unknown> = { started_at: nowIso, cron: event.cron };
+      try {
+      // maandelijkse back-up op de 1e, in het eerste kwartier van de dag
+      const d = new Date();
+      if (d.getUTCDate() === 1 && d.getUTCHours() === 2 && d.getUTCMinutes() < 15) log.backups = await runBackups(env);
       const expired = await env.DB.prepare("SELECT id, building_id, title FROM polls WHERE status = 'open' AND closes_at IS NOT NULL AND closes_at < ?").bind(nowIso).all<any>();
       for (const p of expired.results) {
         await env.DB.prepare("UPDATE polls SET status = 'closed' WHERE id = ?").bind(p.id).run();
@@ -65,9 +72,13 @@ export default {
       if (minute < 15) for (const m of expiring.results) {
         await notifyBuilding(env, { buildingId: m.building_id, type: "mandate", title: `Mandaat loopt af over 60 dagen: ${ORGAN_RULES[m.organ as keyof typeof ORGAN_RULES].label}`, body: `${m.user_name ?? m.holder_name} — tot ${m.end_date}. Agendeer de herbenoeming op de algemene vergadering.`, link: `/b/${m.building_id}/members?tab=mandates`, roles: ["syndicus", "raad"] });
       }
-      await postDueScheduled(env); // geplande afschrijvingen boeken
+      log.posted_scheduled = await postDueScheduled(env); // geplande afschrijvingen boeken
       await env.DB.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(nowIso).run();
       await env.DB.prepare("DELETE FROM password_resets WHERE expires_at < ?").bind(nowIso).run();
+      log.ok = true;
+      } catch (e) { log.ok = false; log.error = String(e); console.error("cron failed", e); }
+      log.duration_ms = Date.now() - started;
+      await env.KV.put("cron:last", JSON.stringify(log));
     })());
   },
 };

@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ChevronRight, ClipboardCheck, Download, File, FileImage, FileSpreadsheet, FileText, Folder, FolderPlus, Lock, MoreHorizontal, Pencil, Search, Trash2, Upload, UploadCloud } from "lucide-react";
+import { ChevronRight, ClipboardCheck, Download, Eye, File, FileImage, FileSpreadsheet, FileText, Folder, FolderPlus, Lock, MoreHorizontal, Pencil, Search, Trash2, Upload, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { useBuilding, useFetch } from "../components/Layout";
 import { DocCommentsDialog } from "../components/DocComments";
@@ -17,6 +17,7 @@ import { DOC_CATEGORIES, type Doc, type Folder as FolderT } from "../../shared/t
 
 const VIS: Record<string, string> = { all: "Iedereen", owners_only: "Enkel eigenaars", raad: "Raad + syndicus", syndicus: "Enkel syndicus" };
 const ROOT = "__root__";
+const canPreview = (d: Doc) => /^(application\/pdf|image\/)/.test(d.mime) || /\.(pdf|png|jpe?g|gif|webp)$/i.test(d.name);
 const FileIcon = ({ mime }: { mime: string }) => { const I = mime.includes("pdf") ? FileText : mime.startsWith("image/") ? FileImage : mime.includes("sheet") || mime.includes("excel") || mime.includes("csv") ? FileSpreadsheet : File; return <I className="size-5 text-muted-foreground" />; };
 
 export function DocumentsPage() {
@@ -26,7 +27,7 @@ export function DocumentsPage() {
   const [q, setQ] = useState("");
   const folders = useFetch<FolderT[]>(`/api/buildings/${b.id}/folders`);
   const docs = useFetch<Doc[]>(`/api/buildings/${b.id}/documents?${q ? `q=${encodeURIComponent(q)}` : `folder=${folderId}`}`);
-  const [upload, setUpload] = useState(false); const [newFolder, setNewFolder] = useState(false); const [edit, setEdit] = useState<Doc | null>(null); const [review, setReview] = useState<Doc | null>(null);
+  const [upload, setUpload] = useState(false); const [newFolder, setNewFolder] = useState(false); const [edit, setEdit] = useState<Doc | null>(null); const [review, setReview] = useState<Doc | null>(null); const [preview, setPreview] = useState<Doc | null>(null);
   const current = folders.data?.find((f) => f.id === folderId);
   const children = useMemo(() => (folders.data ?? []).filter((f) => (f.parent_id ?? "root") === folderId), [folders.data, folderId]);
   const crumbs = useMemo(() => { const out: FolderT[] = []; let f = current; while (f) { out.unshift(f); f = folders.data?.find((x) => x.id === f!.parent_id); } return out; }, [current, folders.data]);
@@ -45,9 +46,10 @@ export function DocumentsPage() {
       {!q && children.map((f) => <div key={f.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50"><button className="flex flex-1 items-center gap-3 text-left cursor-pointer" onClick={() => go(f.id)}><Folder className="size-5 fill-primary/15 text-primary" /><span className="text-sm font-medium">{f.name}</span>{f.visibility !== "all" && <Badge variant="secondary"><Lock />{VIS[f.visibility]}</Badge>}</button>{b.isManager && <Button variant="ghost" size="icon-sm" onClick={() => delFolder(f)}><Trash2 /></Button>}</div>)}
       {(docs.data ?? []).map((d) => <div key={d.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50">
         <FileIcon mime={d.mime} />
-        <div className="min-w-0 flex-1"><a href={`/api/buildings/${b.id}/documents/${d.id}/download?inline=1`} target="_blank" rel="noreferrer" className="block truncate text-sm font-medium hover:text-primary">{d.name}</a>
+        <div className="min-w-0 flex-1">{canPreview(d) ? <button className="block w-full truncate text-left text-sm font-medium hover:text-primary cursor-pointer" onClick={() => setPreview(d)}>{d.name}</button> : <a href={`/api/buildings/${b.id}/documents/${d.id}/download`} className="block truncate text-sm font-medium hover:text-primary">{d.name}</a>}
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"><span>{DOC_CATEGORIES[d.category] ?? d.category}</span><span>·</span><span>{fmtSize(d.size)}</span><span>·</span><span>{fmtDate(d.created_at)}</span><span>·</span><span>{d.uploaded_by_name}</span>{d.version > 1 && <Badge variant="outline">v{d.version}</Badge>}{d.visibility !== "all" && <Badge variant="secondary"><Lock />{VIS[d.visibility]}</Badge>}</div>
           {d.description && <div className="mt-0.5 text-xs text-muted-foreground">{d.description}</div>}</div>
+        {canPreview(d) && <Button variant="ghost" size="icon-sm" title="Voorvertoning" onClick={() => setPreview(d)}><Eye /></Button>}
         <Button variant="ghost" size="icon-sm" asChild><a href={`/api/buildings/${b.id}/documents/${d.id}/download`} aria-label="Downloaden"><Download /></a></Button>
         {b.isBoard && <Button variant="ghost" size="icon-sm" title="Controle / opmerkingen" onClick={() => setReview(d)}><ClipboardCheck /></Button>}
         {(b.isManager || b.role === "raad") && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm"><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => setEdit(d)}><Pencil />Bewerken</DropdownMenuItem><DropdownMenuItem variant="destructive" onClick={() => del(d)}><Trash2 />Verwijderen</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}
@@ -55,6 +57,7 @@ export function DocumentsPage() {
     </div>}
     <UploadModal open={upload} onClose={() => setUpload(false)} folders={folders.data ?? []} folderId={folderId} onDone={() => { setUpload(false); docs.reload(); toast.success("Document geüpload"); }} canSetVisibility={b.isBoard} />
     <Dialog open={newFolder} onOpenChange={setNewFolder}><DialogContent><DialogHeader><DialogTitle>Nieuwe map</DialogTitle></DialogHeader><FolderForm parentId={folderId === "root" ? null : folderId} onDone={() => { setNewFolder(false); folders.reload(); }} /></DialogContent></Dialog>
+    <Dialog open={!!preview} onOpenChange={(o) => !o && setPreview(null)}><DialogContent className="sm:max-w-4xl"><DialogHeader><DialogTitle className="truncate pr-8">{preview?.name}</DialogTitle></DialogHeader>{preview && (preview.mime.startsWith("image/") ? <img src={`/api/buildings/${b.id}/documents/${preview.id}/download?inline=1`} alt={preview.name} className="max-h-[75vh] w-full rounded-lg object-contain" /> : <iframe title={preview.name} src={`/api/buildings/${b.id}/documents/${preview.id}/download?inline=1`} className="h-[75vh] w-full rounded-lg border" sandbox="" />)}<div className="flex justify-end"><Button variant="outline" size="sm" asChild><a href={`/api/buildings/${b.id}/documents/${preview?.id}/download`}><Download />Downloaden</a></Button></div></DialogContent></Dialog>
     {review && <DocCommentsDialog doc={review} onClose={() => setReview(null)} />}
     <Dialog open={!!edit} onOpenChange={(o) => !o && setEdit(null)}><DialogContent><DialogHeader><DialogTitle>Document bewerken</DialogTitle></DialogHeader>{edit && <EditDocForm doc={edit} folders={folders.data ?? []} onDone={() => { setEdit(null); docs.reload(); }} />}</DialogContent></Dialog>
   </div>;

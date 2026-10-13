@@ -4,11 +4,11 @@ import type { AppEnv } from "../env";
 import { isBoard, isManager, isOwner, requireAuth, requireBuilding } from "../lib/auth";
 import { HttpError, safeFilename, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
+import { safeContentType, validateUpload } from "../lib/files";
 
 const docs = new Hono<AppEnv>();
 docs.use("*", requireAuth);
 
-const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
 
 /** SQL-filter op zichtbaarheid volgens rol. */
 function visibilityFilter(role: string): string {
@@ -72,7 +72,7 @@ docs.post("/:buildingId/documents", requireBuilding("syndicus", "raad", "eigenaa
   const form = await c.req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) throw new HttpError(400, "Geen bestand");
-  if (file.size > MAX_SIZE) throw new HttpError(413, "Bestand te groot (max 50 MB)");
+  validateUpload(file);
   const meta = z.object({
     folder_id: z.string().nullable().optional(),
     category: z.string().max(40).default("overig"),
@@ -124,10 +124,13 @@ docs.get("/:buildingId/documents/:docId/download", requireBuilding(), async (c) 
   await notifyInspection(c, d);
   const obj = await c.env.DOCS.get(d.r2_key);
   if (!obj) throw new HttpError(404, "Bestand niet gevonden in opslag");
-  const inline = c.req.query("inline") === "1";
+  const ct = safeContentType(d.mime, d.name);
+  const inline = c.req.query("inline") === "1" && /^(application\/pdf|image\/|text\/plain)/.test(ct);
   const headers = new Headers();
-  obj.writeHttpMetadata(headers);
+  headers.set("Content-Type", ct);
   headers.set("etag", obj.httpEtag);
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'");
   headers.set("Content-Disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(d.name)}`);
   headers.set("Cache-Control", "private, max-age=0");
   return new Response(obj.body, { headers });
@@ -147,6 +150,7 @@ docs.post("/:buildingId/documents/:docId/version", requireBuilding("syndicus", "
   const form = await c.req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) throw new HttpError(400, "Geen bestand");
+  validateUpload(file);
   const key = `${b.id}/${d.id}/v${d.version + 1}/${safeFilename(file.name)}`;
   await c.env.DOCS.put(key, file.stream(), { httpMetadata: { contentType: file.type || "application/octet-stream" } });
   await c.env.DB.prepare("UPDATE documents SET r2_key = ?, size = ?, mime = ?, version = version + 1, name = ? WHERE id = ?").bind(key, file.size, file.type || "application/octet-stream", file.name, d.id).run();

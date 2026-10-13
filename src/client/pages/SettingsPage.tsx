@@ -1,4 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { Download, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { useBuilding, useFetch } from "../components/Layout";
 import { ErrorBox, Field, PageHeader, Spinner } from "../components/ui";
@@ -8,7 +10,7 @@ import { Textarea } from "../components/ui/textarea";
 import { Switch } from "../components/ui/switch";
 import { Separator } from "../components/ui/separator";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-import { api, fmtDateTime } from "../lib/api";
+import { api, fmtDateTime, fmtSize } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { getPushSubscription, pushSupported, subscribePush, unsubscribePush } from "../lib/push";
 
@@ -18,7 +20,10 @@ function Row({ label, hint, checked, onChange }: { label: string; hint?: string;
 
 export function SettingsPage() {
   const b = useBuilding();
-  const { user, vapidPublicKey, refresh } = useAuth();
+  const { user, vapidPublicKey, refresh, logout } = useAuth();
+  const nav = useNavigate();
+  const backups = useFetch<any>(b.isBoard ? `/api/buildings/${b.id}/backups` : null);
+  const [delPw, setDelPw] = useState(""); const [delErr, setDelErr] = useState<unknown>(null);
   const prefs = useFetch<{ notify_email: number; notify_push: number }>(`/api/buildings/${b.id}/me/preferences`);
   const info = useFetch<any>(b.isManager ? `/api/buildings/${b.id}` : null);
   const audit = useFetch<any[]>(b.isBoard ? `/api/buildings/${b.id}/audit` : null);
@@ -73,6 +78,17 @@ export function SettingsPage() {
       <form className="grid gap-4" onSubmit={async (e: FormEvent) => { e.preventDefault(); await api.post(`/api/buildings/${b.id}/broadcast`, broadcast); setBroadcast({ title: "", body: "" }); toast.success("Bericht verstuurd"); }}>
         <Input placeholder="Titel" required value={broadcast.title} onChange={(e) => setBroadcast({ ...broadcast, title: e.target.value })} /><Textarea placeholder="Bericht" required value={broadcast.body} onChange={(e) => setBroadcast({ ...broadcast, body: e.target.value })} />
         <Button className="w-fit">Versturen</Button></form></CardContent></Card>}
+
+    {b.isBoard && <Card><CardHeader><CardTitle>Back-ups en systeemstatus</CardTitle><CardDescription>Elke eerste van de maand wordt een volledige export van dit gebouw (alle gegevens, metadata van documenten) bewaard in de opslag; 36 maanden worden bijgehouden. Download er een of maak nu een export.</CardDescription></CardHeader><CardContent>
+      <div className="mb-3 flex flex-wrap gap-2"><Button size="sm" variant="outline" asChild><a href={`/api/buildings/${b.id}/export`}><Download />Export nu (JSON)</a></Button></div>
+      {backups.data && <><ul className="divide-y text-sm">{backups.data.backups.slice(0, 12).map((x: any) => <li key={x.key} className="flex items-center justify-between py-1.5"><a className="text-primary hover:underline" href={`/api/buildings/${b.id}/backups/${x.key}`}>{x.key.split("/").pop()}</a><span className="text-xs text-muted-foreground">{fmtSize(x.size)}</span></li>)}{!backups.data.backups.length && <li className="py-2 text-muted-foreground">Nog geen automatische back-up (de eerste volgt op de 1e van de maand).</li>}</ul>
+        <p className="mt-3 text-xs text-muted-foreground">Laatste achtergrondtaak: {backups.data.last_cron ? `${fmtDateTime(backups.data.last_cron.started_at)} · ${backups.data.last_cron.ok ? "geslaagd" : `mislukt: ${backups.data.last_cron.error}`} · ${backups.data.last_cron.duration_ms} ms` : "nog niet uitgevoerd"}</p></>}
+    </CardContent></Card>}
+
+    <Card><CardHeader><CardTitle>Privacy (AVG)</CardTitle><CardDescription>Download al je gegevens of verwijder je account. Stemmen, boekingen en notulen blijven geanonimiseerd bewaard omdat de wet dat vereist.</CardDescription></CardHeader><CardContent className="grid gap-4">
+      <Button size="sm" variant="outline" className="w-fit" asChild><a href="/api/auth/me/export"><Download />Mijn gegevens downloaden (JSON)</a></Button>
+      <form className="grid gap-2 rounded-lg border border-destructive/30 p-3" onSubmit={async (e: FormEvent) => { e.preventDefault(); setDelErr(null); if (!confirm("Je account definitief verwijderen?")) return; try { await api.del("/api/auth/me", { password: delPw }); await logout(); nav("/login"); } catch (err) { setDelErr(err); } }}><div className="flex items-center gap-2 text-sm font-medium text-destructive"><ShieldAlert className="size-4" />Account verwijderen</div><div className="flex gap-2"><Input type="password" placeholder="Bevestig met je wachtwoord" required value={delPw} onChange={(e) => setDelPw(e.target.value)} /><Button variant="destructive">Verwijderen</Button></div><ErrorBox error={delErr} /></form>
+    </CardContent></Card>
 
     {b.isBoard && <Card><CardHeader><CardTitle>Activiteitenlog</CardTitle></CardHeader><CardContent>{audit.loading ? <Spinner /> : <ul className="max-h-80 divide-y overflow-y-auto text-xs">{(audit.data ?? []).map((a) => <li key={a.id} className="flex gap-3 py-2"><span className="shrink-0 tabular-nums text-muted-foreground">{fmtDateTime(a.created_at)}</span><span className="font-medium">{a.user_name ?? "systeem"}</span><span className="text-muted-foreground">{a.action}{a.meta ? ` · ${Object.values(JSON.parse(a.meta)).join(", ")}` : ""}</span></li>)}</ul>}</CardContent></Card>}
   </div>;

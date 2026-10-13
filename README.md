@@ -53,6 +53,20 @@ npx wrangler secret put RESEND_API_KEY    # optioneel
 npm run deploy
 ```
 
+### E-mail (Resend) en domein
+
+1. Voeg in Resend je verzenddomein toe (bv. `trustee.be`) en zet de **DKIM**- en **SPF**-records (en optioneel DMARC) in je DNS; zonder die records belanden uitnodigingen in spam.
+2. Zet `EMAIL_FROM` op een adres van dat domein, bv. `Trustee <noreply@trustee.be>`, en `RESEND_API_KEY` als secret.
+3. Test met `POST /api/auth/forgot-password` op een eigen adres.
+
+### Beveiliging en bewaking
+
+- Rate limiting (KV) op aanmelden, registreren, wachtwoord-reset en uitnodigingen.
+- Uploads: enkel documenttypes (pdf, afbeeldingen, Office, csv, zip…), uitvoerbare bestanden en html geweigerd; voorvertoning in een gesandboxte iframe.
+- Elke eerste van de maand maakt de cron een JSON-export per gebouw in R2 (`backups/<gebouw>/<datum>.json`, 36 maanden bewaard); syndicus, raad en commissaris kunnen ze downloaden onder Instellingen. De laatste cron-status staat daar ook.
+- Workers Observability staat aan (`observability.enabled`); fouten verschijnen in het Cloudflare-dashboard onder Logs. Koppel daar een alert aan `cron failed` of 5xx-pieken.
+- AVG: gebruikers downloaden hun gegevens en verwijderen hun account (geanonimiseerd; stemmen en boekingen blijven bewaard).
+
 Koppel daarna een custom domain aan de Worker (Workers & Pages › trustee › Settings › Domains). `APP_URL` moet het publieke adres zijn; het wordt gebruikt in e-mails en push-links.
 
 ## Structuur

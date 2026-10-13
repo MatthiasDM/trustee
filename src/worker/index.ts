@@ -13,6 +13,7 @@ import meetings from "./routes/meetings";
 import notifications from "./routes/notifications";
 import agenda from "./routes/agenda";
 import mandates, { ORGAN_RULES } from "./routes/mandates";
+import ledger, { postDueScheduled } from "./routes/ledger";
 import { notifyBuilding } from "./lib/notify";
 
 const app = new Hono<AppEnv>();
@@ -28,6 +29,7 @@ app.route("/api/buildings", polls);
 app.route("/api/buildings", meetings);
 app.route("/api/buildings", agenda);
 app.route("/api/buildings", mandates);
+app.route("/api/buildings", ledger);
 app.route("/api/notifications", notifications);
 
 app.notFound((c) => c.json({ error: "Niet gevonden" }, 404));
@@ -63,6 +65,7 @@ export default {
       if (minute < 15) for (const m of expiring.results) {
         await notifyBuilding(env, { buildingId: m.building_id, type: "mandate", title: `Mandaat loopt af over 60 dagen: ${ORGAN_RULES[m.organ as keyof typeof ORGAN_RULES].label}`, body: `${m.user_name ?? m.holder_name} — tot ${m.end_date}. Agendeer de herbenoeming op de algemene vergadering.`, link: `/b/${m.building_id}/members?tab=mandates`, roles: ["syndicus", "raad"] });
       }
+      await postDueScheduled(env); // geplande afschrijvingen boeken
       await env.DB.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(nowIso).run();
       await env.DB.prepare("DELETE FROM password_resets WHERE expires_at < ?").bind(nowIso).run();
     })());

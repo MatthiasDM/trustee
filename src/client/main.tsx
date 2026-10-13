@@ -16,6 +16,7 @@ import { MembersPage } from "./pages/MembersPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { HelpPage } from "./pages/HelpPage";
+import { LedgerPage } from "./pages/LedgerPage";
 
 registerSW();
 
@@ -41,6 +42,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/b/:buildingId/polls/:pollId" element={<PollDetailPage />} />
             <Route path="/b/:buildingId/meetings" element={<MeetingsPage />} />
             <Route path="/b/:buildingId/members" element={<MembersPage />} />
+            <Route path="/b/:buildingId/ledger" element={<LedgerPage />} />
             <Route path="/b/:buildingId/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -90,6 +90,30 @@ Wat een individuele mede-eigenaar **niet** kan: de syndicus instructies geven bu
 
 **In Trustee**: de rol *Huurder*. Ziet mededelingen, vragen en documenten die voor iedereen zichtbaar zijn, kan meldingen maken en vragen stellen. Geen stemrecht, geen agendapunten.
 
+## Boekhouding van de VME (art. 3.89 §5, 15° en 16° BW; KB 12 juli 2012)
+
+| Onderwerp | Regel |
+|---|---|
+| Wie voert de boekhouding | **De syndicus.** Duidelijk, nauwkeurig en gedetailleerd, volgens het minimum genormaliseerd rekeningenstelsel dat de Koning vastlegt. |
+| Dubbel boekhouden | **Verplicht vanaf 20 kavels** (kelders, garages en parkeerplaatsen niet meegerekend): KB van 12 juli 2012, van toepassing op boekjaren vanaf 1 januari 2013. Elke verrichting wordt zonder uitstel ingeschreven in een dagboek. |
+| Vereenvoudigde boekhouding | Toegestaan onder 20 kavels, maar moet minstens de ontvangsten en uitgaven, de kaspositie en het bedrag van werk- en reservekapitaal weergeven. |
+| Verantwoordingsstukken | Elke boeking steunt op een gedagtekend stuk (factuur, uittreksel, bon). Bewaartermijn **7 jaar** (3 jaar voor stukken zonder bewijswaarde tegenover derden). |
+| Werkkapitaal | Voorschotten van de mede-eigenaars voor de **periodieke uitgaven** (onderhoud, nutsvoorzieningen, verzekeringen, syndicus). |
+| Reservekapitaal | Periodiek ingebrachte bedragen voor **niet-periodieke uitgaven** (renovatie, vervanging lift, dak). Verplicht sinds 2019 (jaarlijkse bijdrage van minstens 5 % van de gewone gemeenschappelijke lasten, tenzij de AV met 4/5 anders beslist). Werk- en reservekapitaal staan op **aparte rekeningen** op naam van de VME (art. 3.86 §3). |
+| Begroting | De syndicus legt jaarlijks een begroting voor van de **gewone** lopende uitgaven én van de te verwachten **buitengewone** kosten; de AV stemt erover (art. 3.89 §5, 16°). |
+| Inventaris / jaarrekening | Minstens één keer per jaar: bezittingen, vorderingen, schulden en eigen middelen, ingericht volgens het rekeningenstelsel. Activa aan aanschaffingswaarde min afschrijvingen. |
+| Controle | De **commissaris van de rekeningen** controleert (art. 3.91); de **raad** heeft inzage (art. 3.90); de **AV** keurt de rekeningen goed en geeft kwijting. Elke mede-eigenaar heeft inzagerecht (art. 3.89 §5, 9°). |
+| Bij verkoop van een kavel | De syndicus bezorgt binnen 15 dagen o.a. werk- en reservekapitaal, achterstallen en de laatste goedgekeurde balans (art. 3.94). |
+
+### Hoe Trustee dit toepast
+
+- Rekeningenstelsel voorgeladen uit het KB (klassen 1, 2, 4, 5, 6, 7): voorschotten op **700/701**, vorderingen per kavel op **4100/4101**, bankrekeningen **550/551**, overgedragen middelen **48901/48902**, resultaatverwerking via **693/793** (zoals het uitgewerkte voorbeeld van de Commissie voor Boekhoudkundige Normen).
+- Elke journaalpost is gebalanceerd (debet = credit, server-side afgedwongen), genummerd per boekjaar en **onwijzigbaar**; corrigeren kan enkel via tegenboeking. Zo blijft het dagboek een betrouwbaar spoor.
+- "Handelingen" vullen de juiste rekeningen in; de syndicus geeft bedrag, datum en tegenpartij. Afschrijvingen worden vooraf ingepland en automatisch geboekt.
+- Kosten dragen een **verdeelsleutel** (aandelen, gelijk, of eigen gewichten); daaruit volgt de afrekening per kavel.
+- Oproepen van voorschotten krijgen per kavel een **gestructureerde mededeling**, zodat betalingen uit bankuittreksels (CSV of CODA) automatisch herkend worden.
+- Mede-eigenaars zien het overzicht, de rapporten en **enkel hun eigen afrekening**; achterstallen van anderen blijven privé.
+
 ## Termijnen en limieten die Trustee afdwingt
 
 | Regel | Waar in Trustee |
@@ -102,4 +126,6 @@ Wat een individuele mede-eigenaar **niet** kan: de syndicus instructies geven bu
 | Stemgewicht = aandelen | Stemmingen: gewogen volgens kavels × eigendomsaandeel |
 | Vereiste meerderheid | Stemmingen en agendapunten: 1/2, 2/3, 4/5, eenparigheid; resultaat toont "gehaald / niet gehaald" |
 | Mandaat loopt af | Herinnering aan syndicus en raad 60 dagen vooraf |
+| Journaalpost in evenwicht, onwijzigbaar | Boekhouding: weigering bij debet ≠ credit; correctie enkel via tegenboeking |
+| Syndicusmandaat max 3 jaar bij boekjaar sluiten | Boekhouding: afsluiten vereist dat alle geplande boekingen geboekt zijn; resultaat gaat naar 48901/48902 |
 | Kennisgeving bij inzage door de raad | Documenten: automatische melding aan de syndicus en logboekvermelding bij het openen van stukken "enkel syndicus" |

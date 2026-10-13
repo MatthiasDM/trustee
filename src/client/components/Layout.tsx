@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate, useParams, Link } from "react-router-dom";
-import { Bell, BookOpen, Building2, Calendar, ChevronsUpDown, FileText, Home, LogOut, Menu, MessageSquare, Moon, Settings, Sun, Users, Vote } from "lucide-react";
+import { Bell, BookOpen, Building2, Calculator, Calendar, ChevronsUpDown, FileText, Home, LogOut, Menu, MessageSquare, Moon, Settings, Sun, Users, Vote } from "lucide-react";
 import { Toaster } from "sonner";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
@@ -18,6 +18,7 @@ const NAV = [
   { to: "polls", label: "Stemmingen", icon: Vote },
   { to: "posts", label: "Vragen & meldingen", icon: MessageSquare },
   { to: "documents", label: "Documenten", icon: FileText },
+  { to: "ledger", label: "Boekhouding", icon: Calculator },
   { to: "members", label: "Mede-eigenaars & organen", icon: Users },
   { to: "settings", label: "Instellingen", icon: Settings },
 ];

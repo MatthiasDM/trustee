@@ -40,6 +40,21 @@ Het dashboard opent met de **organen van de VME**: de volgende algemene vergader
 - **Kennisgeving**: opent een lid van de raad (of de commissaris) een stuk dat als "enkel syndicus" gemarkeerd is, dan krijgt de syndicus automatisch een melding en staat de inzage in het activiteitenlog. Dat is de wettelijke kennisgeving uit art. 3.90; de inzage zelf wordt nooit tegengehouden.
 - Versies: een nieuwe versie uploaden bewaart het versienummer.
 
+## Boekhouding
+
+De boekhouding volgt het wettelijke rekeningenstelsel voor VME's (KB 12 juli 2012) en werkt met dubbel boekhouden: elke boeking heeft een debet- en een creditzijde die gelijk zijn. Je hoeft daar als syndicus niet over na te denken: je kiest een **handeling** en Trustee vult de rekeningen in.
+
+- **Overzicht**: werk- en reservekapitaal op de bank, nog te ontvangen bijdragen, open leveranciersfacturen, resultaat van het boekjaar en de balans.
+- **Dagboek**: alle boekingen, genummerd per boekjaar, met filter op rekening en zoekfunctie. Een boeking is na het boeken onwijzigbaar; een fout corrigeer je met *Tegenboeken*. Raad en commissaris noteren bij elke boeking opmerkingen, bevindingen of "nagezien, in orde".
+- **Boeken** (syndicus): kies een handeling (factuur leverancier, betaling, bijdrage van eigenaar, aankoop vast actief, interesten, bankkosten, overboeking, creditnota…), vul bedrag, datum en tegenpartij in en koppel het verantwoordingsstuk uit Documenten.
+- **Bank**: importeer uittreksels als **CSV** (KBC, Belfius, BNP Paribas Fortis, ING, Argenta, Crelan…) of **CODA**, of voeg een verrichting manueel toe. Trustee stelt per verrichting een boeking voor: betalingen met gestructureerde mededeling worden aan de juiste kavel gekoppeld, uitgaven aan open facturen. Jij bevestigt met één klik.
+- **Oproepen**: vraag voorschotten voor werk- of reservekapitaal op; het totaal wordt verdeeld volgens aandelen of een andere sleutel. Elke eigenaar krijgt zijn bedrag en een gestructureerde mededeling.
+- **Afrekening**: per kavel het aandeel in de kosten (volgens de verdeelsleutels), de opgeroepen en betaalde voorschotten en het saldo. Mede-eigenaars zien enkel hun eigen kavels.
+- **Vaste activa**: investeringen met een afschrijvingsplan; de afschrijvingen van toekomstige jaren staan klaar als geplande boekingen.
+- **Begroting**: gewone en buitengewone kosten per rubriek, naast vorig jaar en de werkelijke cijfers; na goedkeuring door de AV vergrendeld.
+- **Draaitabel**: kosten en opbrengsten per rekening, rubriek of klasse, per maand, kwartaal of jaar; export naar CSV.
+- **Instellingen** (syndicus): boekjaren openen en afsluiten, bankrekeningen (werk- en reservekapitaal apart), verdeelsleutels, extra rekeningen.
+
 ## Mede-eigenaars & organen
 
 - **Leden**: wie lid is, met rol en kavel. De syndicus beheert rollen en uitnodigingen (ook in bulk via CSV).
@@ -53,7 +68,7 @@ Jij bent, samen met de andere eigenaars, de VME. De syndicus werkt in jullie opd
 - **Meebeslissen.** Je stemt op de algemene vergadering, naar je aandelen. Kan je niet komen, geef dan een volmacht (iemand mag er maximaal 3 dragen; de syndicus geen enkele). In Trustee stem je ook tussentijds mee in stemmingen die de AV voorbereiden of die als peiling dienen.
 - **Punten op de agenda zetten.** Dien het hele jaar door agendapunten in via *Algemene vergadering*. Wat 3 weken vóór de AV-periode binnen is, komt gegarandeerd op de agenda.
 - **Een vergadering afdwingen.** Vind je met anderen samen minstens 1/5 van de aandelen, dan moet de syndicus binnen 30 dagen een AV bijeenroepen.
-- **Alles inkijken.** Je hebt recht op inzage in alle niet-private documenten en gegevens van de VME: statuten, verslagen, contracten, offertes, facturen en de boekhouding. In Trustee vind je ze onder *Documenten*. Ontbreekt iets, vraag het aan de syndicus via *Vragen & meldingen*.
+- **Alles inkijken.** Je hebt recht op inzage in alle niet-private documenten en gegevens van de VME: statuten, verslagen, contracten, offertes, facturen en de boekhouding. In Trustee vind je ze onder *Documenten* en *Boekhouding* (overzicht, dagboek, draaitabel en je eigen afrekening). Ontbreekt iets, vraag het aan de syndicus via *Vragen & meldingen*.
 - **Verslag ontvangen.** Binnen 30 dagen na elke AV ontvang je de notulen; in Trustee staan ze bij de vergadering.
 - **Vragen stellen en problemen melden.** De syndicus moet verantwoording afleggen. Een vraag kan publiek of privé aan de syndicus.
 - **Kandidaat zijn** voor de raad van mede-eigendom of als commissaris van de rekeningen.
@@ -78,6 +93,10 @@ Huurders en andere bewoners zijn geen lid van de VME en stemmen niet, maar mogen
 | Opmerking / bevinding bij document | – | – | ✔ | ✔ | ✔ |
 | Leden, kavels, uitnodigingen beheren | – | – | – | – | ✔ |
 | Mandaten registreren | – | – | ✔ | – | ✔ |
+| Boekhouding: overzicht, dagboek, rapporten zien | ✔ | – | ✔ | ✔ | ✔ |
+| Eigen afrekening zien | eigen kavels | – | alle kavels | alle kavels | alle kavels |
+| Boeken, bank, oproepen, begroting opstellen | – | – | – | – | ✔ |
+| Opmerking / bevinding bij boeking | – | – | ✔ | ✔ | ✔ |
 | Bericht aan alle leden | – | – | – | – | ✔ |
 
 ## Privacy en veiligheid

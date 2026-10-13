@@ -49,11 +49,11 @@ Onthoudingen, blanco en ongeldige stemmen tellen niet mee bij het berekenen van 
 
 - **Verplicht** in elk gebouw of groep van gebouwen met **minstens 20 kavels**, kelders, garages en parkeerplaatsen niet meegerekend. Kleinere VME's mogen er vrijwillig een oprichten.
 - Leden: enkel **stemgerechtigde mede-eigenaars** (titularissen van een zakelijk recht). Huurders kunnen geen lid zijn.
-- Opdracht: **erop toezien dat de syndicus zijn taken naar behoren uitvoert**. Daarvoor heeft de raad, na kennisgeving aan de syndicus, **inzage en kopie van alle documenten en stukken** die met het beheer te maken hebben.
+- Opdracht: **erop toezien dat de syndicus zijn taken naar behoren uitvoert**. Daarvoor heeft de raad, na kennisgeving aan de syndicus, **inzage en kopie van alle documenten en stukken** die met het beheer te maken hebben. De boekhouding valt daar volledig onder: ze voeren is zelf een beheerstaak (art. 3.89 §5, 15°). De kennisgeving is een mededeling, geen vraag om toestemming; de syndicus kan de inzage niet weigeren.
 - Brengt **jaarlijks** een omstandig verslag uit aan de gewone AV.
 - Bijkomende opdrachten of delegaties kan de AV enkel geven met **2/3 meerderheid**, voor **één jaar**, en uitdrukkelijk opgesomd.
 
-**In Trustee**: de rol *Raad van mede-eigendom*. Ziet alle documenten, kan agendapunten agenderen, vergaderingen en stemmingen aanmaken, en opmerkingen of bevindingen bij documenten noteren.
+**In Trustee**: de rol *Raad van mede-eigendom*. Ziet alle documenten, kan agendapunten agenderen, vergaderingen en stemmingen aanmaken, en opmerkingen of bevindingen bij documenten noteren. Opent een raadslid een stuk met zichtbaarheid "enkel syndicus", dan verwittigt Trustee de syndicus automatisch en logt het de inzage: zo is de wettelijke kennisgeving altijd vervuld zonder dat de inzage wordt vertraagd.
 
 ## Commissaris van de rekeningen (art. 3.91)
 
@@ -63,16 +63,30 @@ Onthoudingen, blanco en ongeldige stemmen tellen niet mee bij het berekenen van 
 
 **In Trustee**: de rol *Commissaris van de rekeningen*. Leesrecht op alle documenten, kan opmerkingen, bevindingen en "nagezien, in orde" noteren bij documenten en een controleverslag uploaden. Kan geen document bewerken of verwijderen.
 
-## Mede-eigenaar
+## Mede-eigenaar: wat je individueel kan en mag
 
-- Lid van de VME, stemrecht naar aandelen, mag agendapunten indienen, de syndicus vragen stellen en documenten inkijken.
-- Draagt bij in de gemeenschappelijke lasten volgens de aandelen (of het nut, als de statuten dat bepalen).
+| Recht | Basis | Toelichting |
+|---|---|---|
+| **Stemmen** op de AV, naar aandelen | art. 3.87 §6 | Persoonlijk of via volmacht (max. 3 volmachten per drager; de syndicus mag geen volmacht dragen). |
+| **Agendapunten indienen** | art. 3.87 §3 | Het hele jaar door. Punten die minstens 3 weken vóór de AV-periode binnen zijn, moet de syndicus agenderen; latere schuiven door. |
+| **Een AV afdwingen** | art. 3.87 §2 | Samen met anderen die minstens 1/5 van de aandelen vertegenwoordigen. Roept de syndicus niet binnen 30 dagen op, dan mag een van de ondertekenaars het zelf. |
+| **Inzage in alle niet-private documenten en gegevens** over de mede-eigendom | art. 3.89 §5, 9° | De syndicus moet dit mogelijk maken op de wijze die het reglement van interne orde of de AV bepaalt. Daaronder vallen ook de boekhouding, de rekeningen, de contracten en de offertes. Enkel privégegevens van andere eigenaars (bv. hun persoonlijke betalingsachterstand) blijven afgeschermd. |
+| **Notulen ontvangen** | art. 3.87 §12 | De syndicus bezorgt de notulen binnen 30 dagen na de AV aan elke stemgerechtigde mede-eigenaar. |
+| **Register van beslissingen raadplegen** | art. 3.93 §4 | Ter plaatse en gratis, voor iedere belanghebbende. |
+| **De syndicus vragen stellen** en antwoord krijgen | art. 3.89 | De syndicus beheert in opdracht van de VME en moet verantwoording afleggen. |
+| **Naar de rechter** tegen een AV-beslissing | art. 3.92 §3 | Elke mede-eigenaar kan een onregelmatige, bedrieglijke of onrechtmatige beslissing die hem persoonlijk nadeel berokkent laten vernietigen of wijzigen, binnen **4 maanden** na de AV. |
+| **Informatie bij aankoop** | art. 3.94 | Vóór de verkoop moet de koper o.a. het werk- en reservekapitaal, achterstallen, lopende procedures, de notulen van de laatste 3 jaar en de laatste goedgekeurde balans krijgen. |
+| **Kandidaat zijn** voor raad of commissaris | art. 3.90, 3.91 | De AV beslist met volstrekte meerderheid. |
 
-**In Trustee**: de rol *Mede-eigenaar*. Stemt gewogen, dient agendapunten in, stelt vragen, maakt meldingen, uploadt documenten voor iedereen, bevestigt aanwezigheid op de AV.
+Plichten: bijdragen in de gemeenschappelijke lasten volgens de aandelen (of het nut, als de statuten dat bepalen), de statuten en het reglement naleven, en bewoners (huurders) op de hoogte brengen van de regels.
+
+Wat een individuele mede-eigenaar **niet** kan: de syndicus instructies geven buiten de AV om, beslissingen van de AV naast zich neerleggen, of in naam van de VME contracten sluiten. De VME beslist collectief; het individu heeft inzage, stem en rechtsbescherming.
+
+**In Trustee**: de rol *Mede-eigenaar*. Stemt gewogen, dient agendapunten in, stelt vragen, maakt meldingen, uploadt documenten voor iedereen, bevestigt aanwezigheid op de AV, ziet alle documenten met zichtbaarheid "iedereen" of "enkel eigenaars". Documenten die de syndicus als "enkel syndicus" markeert, horen enkel zijn eigen werkstukken of privégegevens van anderen te bevatten; de raad en de commissaris zien ook die.
 
 ## Huurder en andere bewoners
 
-- Geen lid van de VME en geen stemrecht. Heeft wel recht op informatie over beslissingen die hem aanbelangen; de syndicus deelt de datum van de AV en de beslissingen mee die de bewoners raken.
+- Geen lid van de VME en geen stemrecht. De syndicus moet bewoners zonder stemrecht wel de datum van de AV meedelen, zodat zij **schriftelijk vragen of opmerkingen** over de gemene delen kunnen indienen (art. 3.89 §5, 6°), en hij hangt de oproeping uit in de gemene delen.
 
 **In Trustee**: de rol *Huurder*. Ziet mededelingen, vragen en documenten die voor iedereen zichtbaar zijn, kan meldingen maken en vragen stellen. Geen stemrecht, geen agendapunten.
 
@@ -88,3 +102,4 @@ Onthoudingen, blanco en ongeldige stemmen tellen niet mee bij het berekenen van 
 | Stemgewicht = aandelen | Stemmingen: gewogen volgens kavels × eigendomsaandeel |
 | Vereiste meerderheid | Stemmingen en agendapunten: 1/2, 2/3, 4/5, eenparigheid; resultaat toont "gehaald / niet gehaald" |
 | Mandaat loopt af | Herinnering aan syndicus en raad 60 dagen vooraf |
+| Kennisgeving bij inzage door de raad | Documenten: automatische melding aan de syndicus en logboekvermelding bij het openen van stukken "enkel syndicus" |

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Bell, BellOff, Calendar, CheckCheck, Clock, FileText, HelpCircle, Megaphone, MessageSquare, RefreshCw, Vote, Wrench } from "lucide-react";
+import { Bell, BellOff, Calendar, CheckCheck, Clock, Eye, FileText, Gavel, HelpCircle, Megaphone, MessageSquare, RefreshCw, UserCog, Vote, Wrench } from "lucide-react";
 import { useFetch } from "../components/Layout";
 import { Empty, PageHeader, Spinner } from "../components/ui";
 import { Button } from "../components/ui/button";
@@ -9,7 +9,7 @@ import { useAuth } from "../lib/auth";
 import type { Notification } from "../../shared/types";
 import { cn } from "@/lib/utils";
 
-const ICON: Record<string, any> = { question: HelpCircle, announcement: Megaphone, incident: Wrench, comment: MessageSquare, poll: Vote, poll_closed: Vote, meeting: Calendar, meeting_reminder: Clock, minutes: FileText, document: FileText, broadcast: Megaphone, post_status: RefreshCw };
+const ICON: Record<string, any> = { question: HelpCircle, announcement: Megaphone, incident: Wrench, comment: MessageSquare, poll: Vote, poll_closed: Vote, meeting: Calendar, meeting_reminder: Clock, minutes: FileText, document: FileText, broadcast: Megaphone, post_status: RefreshCw, inspection: Eye, agenda: Gavel, mandate: UserCog, document_comment: FileText };
 
 export function NotificationsPage() {
   const { setUnread } = useAuth();

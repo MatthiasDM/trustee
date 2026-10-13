@@ -102,8 +102,26 @@ async function loadDoc(c: any) {
   return d as any;
 }
 
+/**
+ * Wettelijke kennisgeving (art. 3.90 BW): de raad van mede-eigendom neemt inzage in beheersdocumenten
+ * "na de syndicus op de hoogte te hebben gebracht". Opent een raadslid (of de commissaris) een stuk dat enkel
+ * voor de syndicus zichtbaar is, dan wordt de syndicus automatisch verwittigd en wordt de inzage gelogd.
+ * Het inzagerecht zelf wordt nooit geblokkeerd. Eén melding per document per persoon per dag.
+ */
+async function notifyInspection(c: any, d: any) {
+  const b = c.get("building"); const user = c.get("user");
+  if (d.visibility !== "syndicus" || !(b.role === "raad" || b.role === "commissaris")) return;
+  const since = new Date(Date.now() - 86400_000).toISOString();
+  const recent = await c.env.DB.prepare("SELECT 1 FROM audit_log WHERE building_id = ? AND user_id = ? AND action = 'document.inspect' AND target_id = ? AND created_at > ? LIMIT 1").bind(b.id, user.id, d.id, since).first();
+  if (recent) return;
+  await audit(c.env, b.id, user.id, "document.inspect", "document", d.id, { name: d.name, role: b.role });
+  const label = b.role === "raad" ? "Raad van mede-eigendom" : "Commissaris van de rekeningen";
+  await notifyBuilding(c.env, { buildingId: b.id, type: "inspection", title: `Kennisgeving inzage: ${d.name}`, body: `${user.name} (${label}) nam inzage in dit document (art. 3.90 BW).`, link: `/b/${b.id}/documents${d.folder_id ? `?folder=${d.folder_id}` : ""}`, roles: ["syndicus"], excludeUserId: user.id, email: false });
+}
+
 docs.get("/:buildingId/documents/:docId/download", requireBuilding(), async (c) => {
   const d = await loadDoc(c);
+  await notifyInspection(c, d);
   const obj = await c.env.DOCS.get(d.r2_key);
   if (!obj) throw new HttpError(404, "Bestand niet gevonden in opslag");
   const inline = c.req.query("inline") === "1";

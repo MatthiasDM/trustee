@@ -3,6 +3,8 @@ import { NavLink, Outlet, useLocation, useNavigate, useParams, Link } from "reac
 import { Bell, BookOpen, Briefcase, Building2, Calculator, Calendar, ChevronsUpDown, FileText, Home, LogOut, Menu, MessageSquare, Moon, Settings, Sun, Users, Vote } from "lucide-react";
 import { Toaster } from "sonner";
 import { useAuth } from "../lib/auth";
+import { ConsentGate } from "./ConsentGate";
+import { LegalLinks } from "../pages/LegalPage";
 import { api } from "../lib/api";
 import { RoleBadge, Spinner, UserAvatar } from "./ui";
 import { Button } from "./ui/button";
@@ -67,6 +69,7 @@ export function AppShell() {
       <NavLink to="/help" className={({ isActive }) => cn("flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors", isActive ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "hover:bg-accent/60")}><BookOpen className="size-4" />{t("Handleiding")}</NavLink>
     </div>
     <div className="border-t p-3">
+      <LegalLinks className="mb-2 block px-2 text-[11px] text-muted-foreground" />
       <DropdownMenu>
         <DropdownMenuTrigger asChild><button className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-accent cursor-pointer"><UserAvatar name={user.name} /><div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{user.name}</div><div className="truncate text-xs text-muted-foreground">{user.email}</div></div><ChevronsUpDown className="size-4 text-muted-foreground" /></button></DropdownMenuTrigger>
         <DropdownMenuContent className="w-56" align="end" side="top">
@@ -88,6 +91,7 @@ export function AppShell() {
         <Button variant="ghost" size="icon" asChild><Link to="/notifications" className="relative"><Bell />{unread > 0 && <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">{unread}</span>}</Link></Button>
       </header>
       <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8"><Outlet /></main>
+      <ConsentGate />
     </div>
     <Toaster richColors position="bottom-center" theme={dark ? "dark" : "light"} />
   </div></TooltipProvider>;

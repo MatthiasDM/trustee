@@ -10,6 +10,7 @@ async function hash(pw) {
   return `pbkdf2$100000$${b64u(salt)}$${b64u(bits)}`;
 }
 const h = await hash("wachtwoord123");
+const LEGAL = Object.fromEntries([...(await import("node:fs")).readFileSync(new URL("../src/shared/legal.ts", import.meta.url), "utf8").matchAll(/(terms|privacy): "([\d-]+)"/g)].map((m) => [m[1], m[2]]));
 const sql = `
 -- Demo-data. Alle accounts: wachtwoord "wachtwoord123"
 INSERT OR IGNORE INTO users (id, email, name, password_hash) VALUES
@@ -18,6 +19,8 @@ INSERT OR IGNORE INTO users (id, email, name, password_hash) VALUES
  ('u-marie','marie@demo.be','Marie Claes','${h}'),
  ('u-ahmed','ahmed@demo.be','Ahmed El Idrissi','${h}'),
  ('u-lotte','lotte@demo.be','Lotte De Smet','${h}');
+INSERT OR IGNORE INTO consents (id, user_id, document, version) VALUES
+${['u-syndicus','u-jan','u-marie','u-ahmed','u-lotte'].flatMap((u) => Object.entries(LEGAL).map(([d, v]) => `('c-${u}-${d}','${u}','${d}','${v}')`)).join(',')};
 INSERT OR IGNORE INTO orgs (id, name, slug, plan) VALUES ('org-demo','Syndicus Vermeulen bv','syndicus-vermeulen','pro');
 INSERT OR IGNORE INTO org_members (org_id, user_id, role) VALUES ('org-demo','u-syndicus','owner');
 INSERT OR IGNORE INTO buildings (id, org_id, name, address, city, postal_code, enterprise_number, total_shares) VALUES

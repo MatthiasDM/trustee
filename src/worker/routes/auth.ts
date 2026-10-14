@@ -1,5 +1,6 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
+import { LEGAL_VERSIONS, type LegalDoc } from "../../shared/legal";
 import type { AppEnv } from "../env";
 import { hashPassword, verifyPassword } from "../lib/password";
 import { createSession, destroySession, loadUser, requireAuth } from "../lib/auth";
@@ -16,6 +17,7 @@ const registerSchema = z.object({
   password: z.string().min(8).max(200),
   orgName: z.string().min(2).max(120).optional(), // nieuw syndicuskantoor aanmaken
   inviteToken: z.string().optional(),
+  accept_terms: z.literal(true, { message: "Je moet de voorwaarden en de privacyverklaring aanvaarden" }),
 });
 
 auth.post("/register", rateLimit({ name: "register", limit: 10, windowSec: 3600 }), async (c) => {
@@ -38,6 +40,7 @@ auth.post("/register", rateLimit({ name: "register", limit: 10, windowSec: 3600 
       c.env.DB.prepare("INSERT INTO org_members (org_id, user_id, role) VALUES (?, ?, 'owner')").bind(orgId, userId),
     ]);
   }
+  await recordConsents(c, userId);
   await createSession(c, userId);
   await audit(c.env, null, userId, "user.register");
   return c.json({ ok: true });
@@ -52,6 +55,18 @@ auth.post("/login", rateLimit({ name: "login", limit: 10, windowSec: 900, keyFro
 });
 
 auth.post("/logout", async (c) => { await destroySession(c); return c.json({ ok: true }); });
+
+/** Logt de aanvaarding van de huidige versie van voorwaarden en privacyverklaring (bewijs: versie, datum, IP, browser). */
+async function recordConsents(c: Context<AppEnv>, userId: string) {
+  const ip = c.req.header("cf-connecting-ip") ?? null; const ua = (c.req.header("user-agent") ?? "").slice(0, 300) || null;
+  await c.env.DB.batch((Object.keys(LEGAL_VERSIONS) as LegalDoc[]).map((d) => c.env.DB.prepare("INSERT INTO consents (id, user_id, document, version, ip, user_agent) VALUES (?,?,?,?,?,?)").bind(uid(), userId, d, LEGAL_VERSIONS[d], ip, ua)));
+}
+/** Welke documenten de gebruiker nog moet aanvaarden (nieuwe versie of nooit aanvaard). */
+async function pendingConsents(env: AppEnv["Bindings"], userId: string): Promise<LegalDoc[]> {
+  const rows = (await env.DB.prepare("SELECT document, version FROM consents WHERE user_id = ?").bind(userId).all<{ document: string; version: string }>()).results;
+  return (Object.keys(LEGAL_VERSIONS) as LegalDoc[]).filter((d) => !rows.some((r) => r.document === d && r.version === LEGAL_VERSIONS[d]));
+}
+auth.post("/consent", requireAuth, async (c) => { await recordConsents(c, c.get("user").id); await audit(c.env, null, c.get("user").id, "user.consent", undefined, undefined, LEGAL_VERSIONS); return c.json({ ok: true }); });
 
 auth.get("/me", async (c) => {
   const user = await loadUser(c);
@@ -69,7 +84,7 @@ auth.get("/me", async (c) => {
      ORDER BY 2`
   ).bind(user.id).all();
   const unread = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL").bind(user.id).first<{ n: number }>();
-  return c.json({ user, orgs: orgs.results, buildings: buildings.results, unread: unread?.n ?? 0, vapidPublicKey: c.env.VAPID_PUBLIC_KEY || null });
+  return c.json({ user, orgs: orgs.results, buildings: buildings.results, unread: unread?.n ?? 0, vapidPublicKey: c.env.VAPID_PUBLIC_KEY || null, consents_required: await pendingConsents(c.env, user.id), legal_versions: LEGAL_VERSIONS });
 });
 
 auth.patch("/me", requireAuth, async (c) => {

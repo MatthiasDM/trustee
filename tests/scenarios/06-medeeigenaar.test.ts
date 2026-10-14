@@ -44,3 +44,11 @@ describe("Mede-eigenaarschap volgt uit kavels; documentreferenties bij stemminge
     expect((await marie.patch(`/api/buildings/${B}/polls/${pid}`, { document_ids: [docId] })).status).toBe(403);
   });
 });
+
+describe("Aanvaarding van voorwaarden", () => {
+  it("nieuwe gebruiker heeft aanvaard bij registratie; demo-gebruikers hebben niets openstaand; /consent logt", async () => {
+    const c = await as("marie");
+    const me = (await c.get("/api/auth/me")).data; expect(me.consents_required).toEqual([]); expect(me.legal_versions.terms).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect((await c.post("/api/auth/consent")).status).toBe(200);
+  });
+});

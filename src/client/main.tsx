@@ -19,6 +19,7 @@ import { NotificationsPage } from "./pages/NotificationsPage";
 import { HelpPage } from "./pages/HelpPage";
 import { LedgerPage } from "./pages/LedgerPage";
 import { OrgPage } from "./pages/OrgPage";
+import { LegalPage } from "./pages/LegalPage";
 
 function Localized({ children }: { children: React.ReactNode }) { const { user } = useAuth(); return <I18nProvider locale={user?.locale ?? (navigator.language.startsWith("fr") ? "fr" : navigator.language.startsWith("en") ? "en" : "nl")}>{children}</I18nProvider>; }
 
@@ -34,6 +35,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/invite/:token" element={<InvitePage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          {["/voorwaarden", "/privacy", "/verwerkersovereenkomst", "/beveiliging"].map((p) => <Route key={p} path={p} element={<LegalPage />} />)}
           <Route element={<AppShell />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/notifications" element={<NotificationsPage />} />

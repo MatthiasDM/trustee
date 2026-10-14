@@ -7,13 +7,14 @@ describe("Onboarding: syndicuskantoor, gebouw, kavels, uitnodigingen", () => {
   let buildingId = ""; let unitId = "";
 
   it("registreert een syndicus met eigen organisatie", async () => {
-    const r = await synd.post("/api/auth/register", { name: "Test Syndicus", email, password: PW, orgName: "Testkantoor bv" });
+    const r = await synd.post("/api/auth/register", { name: "Test Syndicus", email, password: PW, orgName: "Testkantoor bv", accept_terms: true });
     expect(r.status).toBe(200);
     const me = await synd.get("/api/auth/me"); expect(me.data.user.email).toBe(email); expect(me.data.orgs).toHaveLength(1); expect(me.data.orgs[0].role).toBe("owner");
   });
   it("weigert een dubbele registratie en een te kort wachtwoord", async () => {
-    expect((await new Client().post("/api/auth/register", { name: "Xy", email, password: PW })).status).toBe(409);
-    expect((await new Client().post("/api/auth/register", { name: "X", email: uniq("y") + "@t.be", password: "kort" })).status).toBe(400);
+    expect((await new Client().post("/api/auth/register", { name: "Xy", email, password: PW, accept_terms: true })).status).toBe(409);
+    expect((await new Client().post("/api/auth/register", { name: "X", email: uniq("y") + "@t.be", password: "kort", accept_terms: true })).status).toBe(400);
+    expect((await new Client().post("/api/auth/register", { name: "Zonder akkoord", email: uniq("z") + "@t.be", password: PW })).status).toBe(400); // voorwaarden niet aanvaard
   });
   it("maakt een gebouw met standaardmappen en wordt er syndicus van", async () => {
     const me = await synd.get("/api/auth/me");
@@ -33,13 +34,13 @@ describe("Onboarding: syndicuskantoor, gebouw, kavels, uitnodigingen", () => {
     expect(r.status).toBe(200); expect(r.data.created).toBe(2); expect(r.data.tokens).toHaveLength(2);
     const tok = r.data.tokens.find((t: any) => t.email === ownerMail).token;
     const info = await new Client().get(`/api/auth/invite/${tok}`); expect(info.data.building_name).toBe("Residentie Test"); expect(info.data.unit_label).toBe("1A"); expect(info.data.has_account).toBe(false);
-    const reg = await owner.post("/api/auth/register", { name: "Nieuwe Eigenaar", email: ownerMail, password: PW, inviteToken: tok }); expect(reg.status).toBe(200);
+    const reg = await owner.post("/api/auth/register", { name: "Nieuwe Eigenaar", email: ownerMail, password: PW, inviteToken: tok, accept_terms: true }); expect(reg.status).toBe(200);
     const me = await owner.get("/api/auth/me"); expect(me.data.buildings[0].role).toBe("eigenaar");
     const units = await owner.get(`/api/buildings/${buildingId}/units`); expect(units.data.units.find((u: any) => u.id === unitId).owners[0].email).toBe(ownerMail);
     // huurder via token met verkeerd e-mailadres wordt geweigerd
     const tok2 = r.data.tokens.find((t: any) => t.email === tenantMail).token;
-    const wrong = await new Client().post("/api/auth/register", { name: "Iemand", email: uniq("ander") + "@t.be", password: PW, inviteToken: tok2 }); expect(wrong.status).toBe(403);
-    expect((await tenant.post("/api/auth/register", { name: "Huurder", email: tenantMail, password: PW, inviteToken: tok2 })).status).toBe(200);
+    const wrong = await new Client().post("/api/auth/register", { name: "Iemand", email: uniq("ander") + "@t.be", password: PW, inviteToken: tok2, accept_terms: true }); expect(wrong.status).toBe(403);
+    expect((await tenant.post("/api/auth/register", { name: "Huurder", email: tenantMail, password: PW, inviteToken: tok2, accept_terms: true })).status).toBe(200);
     expect((await new Client().get(`/api/auth/invite/${tok2}`)).data.accepted_at).toBeTruthy();
   });
   it("laat de eigenaar zijn gebouw zien en de huurder niet stemmen", async () => {

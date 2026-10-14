@@ -3,7 +3,7 @@ import { api } from "./api";
 import type { Building, User } from "../../shared/types";
 
 interface Org { id: string; name: string; plan: string; role: string }
-interface Me { user: User | null; orgs: Org[]; buildings: Building[]; unread: number; vapidPublicKey: string | null }
+interface Me { user: User | null; orgs: Org[]; buildings: Building[]; unread: number; vapidPublicKey: string | null; consents_required?: string[] }
 interface AuthCtx extends Me { loading: boolean; refresh: () => Promise<void>; logout: () => Promise<void>; setUnread: (n: number) => void }
 
 const Ctx = createContext<AuthCtx>(null!);

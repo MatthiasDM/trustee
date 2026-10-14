@@ -15,6 +15,7 @@ import agenda from "./routes/agenda";
 import mandates, { ORGAN_RULES } from "./routes/mandates";
 import ledger, { postDueScheduled } from "./routes/ledger";
 import { runBackups } from "./lib/backup";
+import { loadUser } from "./lib/auth";
 import reports, { autoReminders } from "./routes/reports";
 import orgs from "./routes/orgs";
 import suppliers, { runDueRecurring } from "./routes/suppliers";
@@ -42,6 +43,8 @@ app.route("/api/notifications", notifications);
 app.route("/api/orgs", orgs);
 
 app.post("/api/admin/run-cron", async (c) => { if (c.env.TEST_MODE !== "1") return c.json({ error: "Niet gevonden" }, 404); return c.json(await runCron(c.env, "test")); });
+/** Testomgeving: wist de aanvaardingen van de aangemelde gebruiker, om de aanvaardingsdialoog bij een nieuwe versie te testen. */
+app.post("/api/admin/reset-consents", async (c) => { if (c.env.TEST_MODE !== "1") return c.json({ error: "Niet gevonden" }, 404); const u = await loadUser(c); if (!u) return c.json({ error: "Niet aangemeld" }, 401); await c.env.DB.prepare("DELETE FROM consents WHERE user_id = ?").bind(u.id).run(); return c.json({ ok: true }); });
 
 app.notFound((c) => c.json({ error: "Niet gevonden" }, 404));
 app.onError((err, c) => {

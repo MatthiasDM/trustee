@@ -4,10 +4,16 @@ import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { ErrorBox, Field, Spinner, RoleBadge } from "../components/ui";
 import { Button } from "../components/ui/button";
+import { Checkbox } from "../components/ui/checkbox";
+import { LegalLinks } from "./LegalPage";
 import { Input } from "../components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { useT } from "../lib/i18n";
+
+function AcceptTerms({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return <label className="flex items-start gap-2 text-sm"><Checkbox checked={checked} onCheckedChange={(v) => onChange(!!v)} className="mt-0.5" /><span>Ik aanvaard de <Link className="underline" to="/voorwaarden" target="_blank">algemene voorwaarden</Link> en de <Link className="underline" to="/privacy" target="_blank">privacyverklaring</Link>.</span></label>;
+}
 
 function AuthCard({ title, description, children, footer }: { title: string; description?: string; children: React.ReactNode; footer?: React.ReactNode }) {
   return <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
@@ -15,6 +21,7 @@ function AuthCard({ title, description, children, footer }: { title: string; des
       <div className="mb-6 flex items-center justify-center gap-2"><img src="/icon.svg" className="size-9 rounded-lg" alt="" /><span className="text-xl font-semibold tracking-tight">Trustee</span></div>
       <Card><CardHeader><CardTitle className="text-xl">{title}</CardTitle>{description && <CardDescription>{description}</CardDescription>}</CardHeader><CardContent>{children}</CardContent></Card>
       {footer && <p className="mt-4 text-center text-sm text-muted-foreground">{footer}</p>}
+      <LegalLinks className="mt-3 block text-center text-xs text-muted-foreground" />
     </div></div>;
 }
 
@@ -44,7 +51,7 @@ export function LoginPage() {
 export function RegisterPage() {
   const { refresh } = useAuth();
   const nav = useNavigate();
-  const [f, setF] = useState({ name: "", email: "", password: "", orgName: "" });
+  const [f, setF] = useState({ name: "", email: "", password: "", orgName: "", accept_terms: false });
   const [error, setError] = useState<unknown>(null); const [busy, setBusy] = useState(false);
   const t = useT();
   const submit = async (e: FormEvent) => {
@@ -57,8 +64,9 @@ export function RegisterPage() {
       <Field label={t("Jouw naam")}><Input required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
       <Field label={t("E-mail")}><Input type="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
       <Field label={t("Wachtwoord")} hint={t("Minstens 8 tekens")}><Input type="password" autoComplete="new-password" minLength={8} required value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></Field>
+      <AcceptTerms checked={f.accept_terms} onChange={(v) => setF({ ...f, accept_terms: v })} />
       <ErrorBox error={error} />
-      <Button className="w-full" disabled={busy}>{t("Account aanmaken")}</Button>
+      <Button className="w-full" disabled={busy || !f.accept_terms}>{t("Account aanmaken")}</Button>
     </form>
   </AuthCard>;
 }
@@ -68,7 +76,7 @@ export function InvitePage() {
   const { user, refresh, loading } = useAuth();
   const nav = useNavigate();
   const [inv, setInv] = useState<any>(null); const [error, setError] = useState<unknown>(null);
-  const [f, setF] = useState({ name: "", password: "" }); const [busy, setBusy] = useState(false); const t = useT();
+  const [f, setF] = useState({ name: "", password: "", accept_terms: false }); const [busy, setBusy] = useState(false); const t = useT();
   useEffect(() => { api.get<any>(`/api/auth/invite/${token}`).then((i) => { setInv(i); setF((p) => ({ ...p, name: i.name ?? "" })); }).catch(setError); }, [token]);
   if (error && !inv) return <AuthCard title="Uitnodiging"><ErrorBox error={error} /></AuthCard>;
   if (!inv || loading) return <Spinner />;
@@ -76,7 +84,7 @@ export function InvitePage() {
     setBusy(true); setError(null);
     try {
       if (user) { const r = await api.post<any>(`/api/auth/invite/${token}/accept`); await refresh(); nav(`/b/${r.buildingId}`); }
-      else { await api.post("/api/auth/register", { name: f.name, email: inv.email, password: f.password, inviteToken: token }); await refresh(); nav("/"); }
+      else { await api.post("/api/auth/register", { name: f.name, email: inv.email, password: f.password, inviteToken: token, accept_terms: f.accept_terms }); await refresh(); nav("/"); }
     } catch (err) { setError(err); } finally { setBusy(false); }
   };
   return <AuthCard title={`Uitnodiging voor ${inv.building_name}`} description={inv.address}>
@@ -90,7 +98,8 @@ export function InvitePage() {
           <Field label="E-mail"><Input value={inv.email} disabled /></Field>
           <Field label={t("Jouw naam")}><Input required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
           <Field label="Kies een wachtwoord"><Input type="password" minLength={8} required value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></Field>
-          <ErrorBox error={error} /><Button disabled={busy}>Account aanmaken & toetreden</Button>
+          <AcceptTerms checked={f.accept_terms} onChange={(v) => setF({ ...f, accept_terms: v })} />
+          <ErrorBox error={error} /><Button disabled={busy || !f.accept_terms}>Account aanmaken & toetreden</Button>
         </form>}
   </AuthCard>;
 }

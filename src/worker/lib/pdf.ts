@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { PDF_DISCLAIMER } from "../../shared/legal";
 
 /** Minimale PDF-opmaak voor rapporten: titels, paragrafen en tabellen met automatische pagina-einden (A4). */
 export class Pdf {
@@ -7,7 +8,7 @@ export class Pdf {
   private footer = "";
   static async create(footer: string) { const p = new Pdf(); p.doc = await PDFDocument.create(); p.font = await p.doc.embedFont(StandardFonts.Helvetica); p.bold = await p.doc.embedFont(StandardFonts.HelveticaBold); p.footer = footer; p.newPage(); return p; }
   private clean(s: string) { return (s ?? "").replace(/[^\x20-\x7E\xA0-\xFF€]/g, (ch) => ({ "≥": ">=", "≤": "<=", "—": "-", "–": "-", "…": "...", "’": "'", "“": '"', "”": '"', "€": "EUR" }[ch] ?? "?")).replace(/€/g, "EUR"); }
-  private newPage() { this.page = this.doc.addPage([this.W, this.H]); this.pageNo++; this.y = this.H - this.M; this.page.drawText(this.clean(`${this.footer} - pagina ${this.pageNo}`), { x: this.M, y: 24, size: 8, font: this.font, color: rgb(0.45, 0.45, 0.45) }); }
+  private newPage() { this.page = this.doc.addPage([this.W, this.H]); this.pageNo++; this.y = this.H - this.M; this.page.drawText(this.clean(`${this.footer} - pagina ${this.pageNo}`), { x: this.M, y: 34, size: 8, font: this.font, color: rgb(0.45, 0.45, 0.45) }); this.page.drawText(this.clean(PDF_DISCLAIMER), { x: this.M, y: 22, size: 6.5, font: this.font, color: rgb(0.55, 0.55, 0.55) }); }
   private need(h: number) { if (this.y - h < this.M + 10) this.newPage(); }
   private wrap(text: string, size: number, font: PDFFont, width: number): string[] {
     const out: string[] = []; for (const para of this.clean(text).split("\n")) { let line = ""; for (const w of para.split(" ")) { const t = line ? `${line} ${w}` : w; if (font.widthOfTextAtSize(t, size) > width && line) { out.push(line); line = w; } else line = t; } out.push(line); } return out;

@@ -105,6 +105,15 @@ Wat je **niet** alleen kan: de syndicus opdrachten geven buiten de AV om, AV-bes
 
 Huurders en andere bewoners zijn geen lid van de VME en stemmen niet, maar mogen vóór de AV schriftelijk vragen of opmerkingen over de gemene delen indienen; in Trustee doe je dat via *Vragen & meldingen*.
 
+## Beveiliging, archief en herstel
+
+- **Tweestapsverificatie.** Onder *Instellingen › Beveiliging* schakel je een authenticator-app in; daarna vraagt elke aanmelding een code. Je krijgt acht herstelcodes voor als je je toestel kwijt bent. Sterk aanbevolen voor syndici en kantoorleden. Daar beëindig je ook alle andere sessies van je account.
+- **Prullenbak.** Een verwijderd document blijft 30 dagen herstelbaar door de syndicus (icoon prullenbak bovenaan *Documenten*); daarna wordt het definitief gewist.
+- **Archief.** Onder *Instellingen › Archief, back-ups en systeemstatus* downloaden syndicus en raad op elk moment het volledige archief van de VME als zip: alle gegevens in open JSON-formaat plus alle documenten in hun mapstructuur. De VME is zo nooit afhankelijk van Trustee of van het kantoor. Trustee bewaart daarnaast elke nacht een export (dagelijks 60 dagen, maandelijks 36 maanden).
+- **Annuleren in plaats van verwijderen.** Een opgeroepen vergadering kan enkel geannuleerd worden met een reden die iedereen ontvangt. Een lid verwijderen wordt gemeld aan de raad en de commissaris, en de laatste syndicus van een gebouw kan niet verwijderd worden zonder opvolger.
+- **Inhoud melden.** Onder elk bericht van iemand anders staat *Melden*; de syndicus beoordeelt en verwijdert indien nodig.
+- **Voorwaarden en privacy.** Bij registratie en bij elke nieuwe versie aanvaard je de algemene voorwaarden en de privacyverklaring; die aanvaarding wordt gelogd. De teksten staan onderaan de zijbalk.
+
 ## Rollen en rechten
 
 **Wie is mede-eigenaar?** Trustee leidt dat af uit de kavels: wie onder *Mede-eigenaars & organen › Kavels* als eigenaar van een kavel staat, is mede-eigenaar en stemgerechtigd, ongeacht zijn rol. Een professionele syndicus of een externe commissaris zonder kavel is dus géén mede-eigenaar: hij kan niet stemmen, geen aanwezigheid melden of volmacht geven, geen agendapunt "indienen" (de syndicus agendeert zelf) en geen AV eisen. Bezit de syndicus of commissaris wél een kavel, dan heeft hij daarvoor dezelfde rechten als elke andere mede-eigenaar; alleen volmachten dragen blijft voor de syndicus uitgesloten. Leden met rol *eigenaar* of *raad* gelden ook als mede-eigenaar zolang hun kavel nog niet gekoppeld is, maar wegen pas mee in gewogen stemmingen zodra dat gebeurd is.

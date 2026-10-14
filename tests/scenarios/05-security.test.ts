@@ -46,3 +46,29 @@ describe("Beveiliging: rate limiting, uploads, sessies", () => {
     const s = await as("syndicus"); const b = await s.get(`/api/buildings/${B}/backups`); expect(b.data.last_cron?.ok).toBe(true);
   });
 });
+
+describe("Tweestapsverificatie", () => {
+  it("activeren met geldige code, aanmelden vereist tweede stap, herstelcode werkt één keer, uitschakelen", async () => {
+    const { totpCode } = await import("../../src/worker/lib/totp");
+    const c = await as("lotte");
+    const setup = (await c.post("/api/auth/totp/setup")).data; expect(setup.otpauth).toMatch(/^otpauth:\/\/totp\//);
+    expect((await c.post("/api/auth/totp/enable", { code: "000000" })).status).toBe(400);
+    const en = await c.post("/api/auth/totp/enable", { code: await totpCode(setup.secret) }); expect(en.status).toBe(200); expect(en.data.recovery_codes).toHaveLength(8);
+    expect((await c.get("/api/auth/me")).data.security.totp_enabled).toBe(true);
+    const fresh = new Client();
+    const l1 = await fresh.post("/api/auth/login", { email: "lotte@demo.be", password: "wachtwoord123" }); expect(l1.data.totp_required).toBe(true);
+    expect((await fresh.get("/api/auth/me")).data.user).toBeNull(); // nog geen sessie
+    expect((await fresh.post("/api/auth/login/totp", { challenge: l1.data.challenge, code: "123456" })).status).toBe(401);
+    expect((await fresh.post("/api/auth/login/totp", { challenge: l1.data.challenge, code: await totpCode(setup.secret) })).status).toBe(200);
+    expect((await fresh.get("/api/auth/me")).data.user.email).toBe("lotte@demo.be");
+    const again = new Client(); const l2 = await again.post("/api/auth/login", { email: "lotte@demo.be", password: "wachtwoord123" });
+    expect((await again.post("/api/auth/login/totp", { challenge: l2.data.challenge, code: en.data.recovery_codes[0] })).status).toBe(200);
+    const third = new Client(); const l3 = await third.post("/api/auth/login", { email: "lotte@demo.be", password: "wachtwoord123" });
+    expect((await third.post("/api/auth/login/totp", { challenge: l3.data.challenge, code: en.data.recovery_codes[0] })).status).toBe(401); // al gebruikt
+    const out = await c.post("/api/auth/logout-all"); expect(out.data.ended).toBeGreaterThanOrEqual(2);
+    expect((await fresh.get("/api/auth/me")).data.user).toBeNull();
+    expect((await c.post("/api/auth/totp/disable", { password: "fout", code: await totpCode(setup.secret) })).status).toBe(401);
+    expect((await c.post("/api/auth/totp/disable", { password: "wachtwoord123", code: await totpCode(setup.secret) })).status).toBe(200);
+    expect((await new Client().post("/api/auth/login", { email: "lotte@demo.be", password: "wachtwoord123" })).data.ok).toBe(true);
+  });
+});

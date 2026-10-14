@@ -31,12 +31,25 @@ export function LoginPage() {
   const [sp] = useSearchParams();
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [error, setError] = useState<unknown>(null); const [busy, setBusy] = useState(false);
+  const [challenge, setChallenge] = useState<string | null>(null); const [code, setCode] = useState("");
   const t = useT();
   useEffect(() => { if (user) nav(sp.get("next") || "/", { replace: true }); }, [user]);
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setBusy(true); setError(null);
-    try { await api.post("/api/auth/login", { email, password }); await refresh(); nav(sp.get("next") || "/"); } catch (err) { setError(err); } finally { setBusy(false); }
+    try {
+      if (challenge) { await api.post("/api/auth/login/totp", { challenge, code }); }
+      else { const r = await api.post<{ totp_required?: boolean; challenge?: string }>("/api/auth/login", { email, password }); if (r.totp_required && r.challenge) { setChallenge(r.challenge); setBusy(false); return; } }
+      await refresh(); nav(sp.get("next") || "/");
+    } catch (err) { setError(err); } finally { setBusy(false); }
   };
+  if (challenge) return <AuthCard title="Tweede stap" description="Voer de code uit je authenticator-app in, of een herstelcode.">
+    <form onSubmit={submit} className="grid gap-4">
+      <Field label="Code"><Input autoFocus inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={(e) => setCode(e.target.value)} /></Field>
+      <ErrorBox error={error} />
+      <Button className="w-full" disabled={busy}>Bevestigen</Button>
+      <Button type="button" variant="ghost" className="w-full" onClick={() => { setChallenge(null); setCode(""); setError(null); }}>Terug</Button>
+    </form>
+  </AuthCard>;
   return <AuthCard title={t("Aanmelden")} description={t("Welkom terug bij je VME-platform.")} footer={<>{t("Nog geen account?")} <Link className="font-medium text-primary hover:underline" to="/register">{t("Registreer als syndicus")}</Link></>}>
     <form onSubmit={submit} className="grid gap-4">
       <Field label={t("E-mail")}><Input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></Field>

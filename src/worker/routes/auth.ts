@@ -8,6 +8,7 @@ import { HttpError, plusMs, randomToken, uid } from "../lib/util";
 import { layout, sendEmail } from "../lib/email";
 import { audit } from "../lib/notify";
 import { rateLimit } from "../lib/ratelimit";
+import { generateRecoveryCodes, generateSecret, otpauthUrl, sha256Hex, verifyTotp } from "../lib/totp";
 
 const auth = new Hono<AppEnv>();
 
@@ -48,10 +49,71 @@ auth.post("/register", rateLimit({ name: "register", limit: 10, windowSec: 3600 
 
 auth.post("/login", rateLimit({ name: "login", limit: 10, windowSec: 900, keyFrom: (_c, b) => b?.email ?? null, failuresOnly: true }), async (c) => {
   const { email, password } = z.object({ email: z.string().email(), password: z.string() }).parse(await c.req.json());
-  const user = await c.env.DB.prepare("SELECT id, password_hash FROM users WHERE email = ?").bind(email.toLowerCase().trim()).first<{ id: string; password_hash: string }>();
+  const user = await c.env.DB.prepare("SELECT id, password_hash, totp_enabled_at FROM users WHERE email = ?").bind(email.toLowerCase().trim()).first<{ id: string; password_hash: string; totp_enabled_at: string | null }>();
   if (!user || !(await verifyPassword(password, user.password_hash))) throw new HttpError(401, "Ongeldige e-mail of wachtwoord");
+  if (user.totp_enabled_at) {
+    // Tweede stap: kortlevende uitdaging in KV; pas na een geldige code (of herstelcode) komt er een sessie.
+    const challenge = randomToken(24);
+    await c.env.KV.put(`totp:login:${challenge}`, user.id, { expirationTtl: 300 });
+    return c.json({ totp_required: true, challenge });
+  }
   await createSession(c, user.id);
   return c.json({ ok: true });
+});
+
+auth.post("/login/totp", rateLimit({ name: "totp", limit: 8, windowSec: 900, keyFrom: (_c, b) => b?.challenge ?? null }), async (c) => {
+  const { challenge, code } = z.object({ challenge: z.string(), code: z.string().min(6).max(12) }).parse(await c.req.json());
+  const userId = await c.env.KV.get(`totp:login:${challenge}`);
+  if (!userId) throw new HttpError(401, "Uitdaging verlopen; meld opnieuw aan");
+  const u = await c.env.DB.prepare("SELECT totp_secret, totp_recovery FROM users WHERE id = ?").bind(userId).first<{ totp_secret: string; totp_recovery: string | null }>();
+  if (!u?.totp_secret) throw new HttpError(401, "Tweestapsverificatie niet actief");
+  let ok = await verifyTotp(u.totp_secret, code);
+  if (!ok && u.totp_recovery) {
+    const hashes: string[] = JSON.parse(u.totp_recovery); const h = await sha256Hex(code.toLowerCase().replace(/\s/g, ""));
+    if (hashes.includes(h)) { ok = true; await c.env.DB.prepare("UPDATE users SET totp_recovery = ? WHERE id = ?").bind(JSON.stringify(hashes.filter((x) => x !== h)), userId).run(); await audit(c.env, null, userId, "user.totp_recovery_used"); }
+  }
+  if (!ok) throw new HttpError(401, "Ongeldige code");
+  await c.env.KV.delete(`totp:login:${challenge}`);
+  await createSession(c, userId);
+  return c.json({ ok: true });
+});
+
+/** Stap 1 van activatie: geheim genereren (10 min geldig in KV) en als otpauth-URL teruggeven voor de authenticator-app. */
+auth.post("/totp/setup", requireAuth, async (c) => {
+  const user = c.get("user");
+  const secret = generateSecret();
+  await c.env.KV.put(`totp:setup:${user.id}`, secret, { expirationTtl: 600 });
+  return c.json({ secret, otpauth: otpauthUrl(c.env.APP_NAME || "Trustee", user.email, secret) });
+});
+/** Stap 2: eerste geldige code bevestigt; herstelcodes worden één keer getoond. */
+auth.post("/totp/enable", requireAuth, async (c) => {
+  const user = c.get("user");
+  const { code } = z.object({ code: z.string() }).parse(await c.req.json());
+  const secret = await c.env.KV.get(`totp:setup:${user.id}`);
+  if (!secret) throw new HttpError(400, "Start de activatie opnieuw (geheim verlopen)");
+  if (!(await verifyTotp(secret, code))) throw new HttpError(400, "Ongeldige code; controleer de tijd op je toestel");
+  const codes = generateRecoveryCodes();
+  await c.env.DB.prepare("UPDATE users SET totp_secret = ?, totp_enabled_at = ?, totp_recovery = ? WHERE id = ?").bind(secret, new Date().toISOString(), JSON.stringify(await Promise.all(codes.map(sha256Hex))), user.id).run();
+  await c.env.KV.delete(`totp:setup:${user.id}`);
+  await audit(c.env, null, user.id, "user.totp_enabled");
+  return c.json({ ok: true, recovery_codes: codes });
+});
+auth.post("/totp/disable", requireAuth, async (c) => {
+  const user = c.get("user");
+  const { password, code } = z.object({ password: z.string(), code: z.string() }).parse(await c.req.json());
+  const u = await c.env.DB.prepare("SELECT password_hash, totp_secret FROM users WHERE id = ?").bind(user.id).first<any>();
+  if (!u || !(await verifyPassword(password, u.password_hash))) throw new HttpError(401, "Wachtwoord onjuist");
+  if (!u.totp_secret || !(await verifyTotp(u.totp_secret, code))) throw new HttpError(400, "Ongeldige code");
+  await c.env.DB.prepare("UPDATE users SET totp_secret = NULL, totp_enabled_at = NULL, totp_recovery = NULL WHERE id = ?").bind(user.id).run();
+  await audit(c.env, null, user.id, "user.totp_disabled");
+  return c.json({ ok: true });
+});
+/** Alle sessies beëindigen (verloren toestel, verdachte activiteit); de huidige sessie blijft. */
+auth.post("/logout-all", requireAuth, async (c) => {
+  const user = c.get("user");
+  const r = await c.env.DB.prepare("DELETE FROM sessions WHERE user_id = ? AND id != ?").bind(user.id, c.get("sessionId")).run();
+  await audit(c.env, null, user.id, "user.logout_all", undefined, undefined, { sessions: r.meta.changes });
+  return c.json({ ok: true, ended: r.meta.changes });
 });
 
 auth.post("/logout", async (c) => { await destroySession(c); return c.json({ ok: true }); });
@@ -84,7 +146,8 @@ auth.get("/me", async (c) => {
      ORDER BY 2`
   ).bind(user.id).all();
   const unread = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL").bind(user.id).first<{ n: number }>();
-  return c.json({ user, orgs: orgs.results, buildings: buildings.results, unread: unread?.n ?? 0, vapidPublicKey: c.env.VAPID_PUBLIC_KEY || null, consents_required: await pendingConsents(c.env, user.id), legal_versions: LEGAL_VERSIONS });
+  const sec = await c.env.DB.prepare("SELECT (SELECT totp_enabled_at FROM users WHERE id = ?1) AS totp_enabled_at, (SELECT COUNT(*) FROM sessions WHERE user_id = ?1) AS sessions").bind(user.id).first<any>();
+  return c.json({ user, security: { totp_enabled: !!sec?.totp_enabled_at, sessions: sec?.sessions ?? 0 }, orgs: orgs.results, buildings: buildings.results, unread: unread?.n ?? 0, vapidPublicKey: c.env.VAPID_PUBLIC_KEY || null, consents_required: await pendingConsents(c.env, user.id), legal_versions: LEGAL_VERSIONS });
 });
 
 auth.patch("/me", requireAuth, async (c) => {

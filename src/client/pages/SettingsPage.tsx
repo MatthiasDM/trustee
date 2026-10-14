@@ -12,6 +12,7 @@ import { Separator } from "../components/ui/separator";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { api, fmtDateTime, fmtSize } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { SecurityCard } from "../components/SecurityCard";
 import { getPushSubscription, pushSupported, subscribePush, unsubscribePush } from "../lib/push";
 import { LOCALES, useT } from "../lib/i18n";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
@@ -66,6 +67,8 @@ export function SettingsPage() {
         <div className="grid gap-4 sm:grid-cols-2"><Input type="password" placeholder="Huidig wachtwoord" autoComplete="current-password" required value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} /><Input type="password" placeholder="Nieuw wachtwoord" autoComplete="new-password" minLength={8} required value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} /></div>
         <ErrorBox error={pwErr} /><Button variant="outline" className="w-fit">Wijzigen</Button></form>
     </CardContent></Card>
+
+    <SecurityCard />
 
     {b.isManager && bf && <Card><CardHeader><CardTitle>Gebouw (VME)</CardTitle></CardHeader><CardContent>
       <form className="grid gap-4" onSubmit={async (e: FormEvent) => { e.preventDefault(); await api.patch(`/api/buildings/${b.id}`, { ...bf, total_shares: Number(bf.total_shares), av_period_start: bf.av_period_start || null, av_period_days: Number(bf.av_period_days), legal_proceedings: bf.legal_proceedings || null, insurance_info: bf.insurance_info || null }); await refresh(); toast.success("Gebouw opgeslagen"); }}>

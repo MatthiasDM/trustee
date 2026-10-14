@@ -10,7 +10,7 @@ export class Client {
     const send = () => fetch(BASE + path, { method, headers: { ...(this.cookie ? { cookie: this.cookie } : {}), ...(body !== undefined && !form ? { "content-type": "application/json" } : {}) }, body: form ?? (body !== undefined ? JSON.stringify(body) : undefined), redirect: "manual" });
     let res = await send();
     // De Vite-devserver geeft sporadisch een HTML-500 (herladen van de worker); dat is geen API-fout: één keer opnieuw proberen.
-    if (res.status === 500 && (res.headers.get("content-type") ?? "").includes("text/html") && !form) { await new Promise((r) => setTimeout(r, 700)); res = await send(); }
+    if (res.status === 500 && !form && (await res.clone().text()).includes("<!DOCTYPE")) { await new Promise((r) => setTimeout(r, 700)); res = await send(); }
     const sc = res.headers.get("set-cookie"); if (sc) this.cookie = sc.split(";")[0];
     return res;
   }

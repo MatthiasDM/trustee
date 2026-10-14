@@ -1,7 +1,7 @@
 // Start een geïsoleerde testomgeving: eigen D1/R2/KV-state, verse migraties en seed, Vite op poort 5199.
 // Gebruik: node scripts/test-env.mjs start | stop | reset
 import { spawn, execSync } from "node:child_process";
-import { existsSync, rmSync, writeFileSync, readFileSync, mkdirSync } from "node:fs";
+import { existsSync, rmSync, writeFileSync, readFileSync, mkdirSync, openSync } from "node:fs";
 
 const STATE = ".wrangler/test-state";
 const PORT = process.env.TEST_PORT ?? "5199";
@@ -25,7 +25,7 @@ if (cmd === "reset") reset();
 if (cmd === "start") {
   killPort();
   if (!existsSync(`${STATE}/v3`)) reset();
-  const child = spawn("npx", ["vite", "--port", PORT, "--strictPort", "--host", "127.0.0.1"], { env: { ...process.env, TRUSTEE_STATE: STATE, CLOUDFLARE_ENV: "test" }, stdio: process.env.TEST_VERBOSE ? "inherit" : "ignore", detached: true });
+  const child = spawn("npx", ["vite", "--port", PORT, "--strictPort", "--host", "127.0.0.1"], { env: { ...process.env, TRUSTEE_STATE: STATE, CLOUDFLARE_ENV: "test" }, stdio: process.env.TEST_VERBOSE ? "inherit" : ["ignore", openSync(`${STATE}/server.log`, "a"), openSync(`${STATE}/server.log`, "a")], detached: true });
   child.unref();
   writeFileSync(PID, String(child.pid));
   await waitHealthy();

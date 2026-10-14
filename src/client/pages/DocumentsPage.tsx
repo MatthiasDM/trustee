@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useBuilding, useFetch } from "../components/Layout";
 import { DocCommentsDialog } from "../components/DocComments";
 import { ComplianceTab } from "../components/ComplianceTab";
+import { TrashDialog } from "../components/TrashDialog";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { ShieldCheck } from "lucide-react";
 import { Empty, ErrorBox, Field, PageHeader, Spinner } from "../components/ui";
@@ -32,17 +33,19 @@ export function DocumentsPage() {
   const [q, setQ] = useState("");
   const folders = useFetch<FolderT[]>(`/api/buildings/${b.id}/folders`);
   const docs = useFetch<Doc[]>(`/api/buildings/${b.id}/documents?${q ? `q=${encodeURIComponent(q)}` : `folder=${folderId}`}`);
+  const [trash, setTrash] = useState(false);
   const [upload, setUpload] = useState(false); const [newFolder, setNewFolder] = useState(false); const [edit, setEdit] = useState<Doc | null>(null); const [review, setReview] = useState<Doc | null>(null); const [preview, setPreview] = useState<Doc | null>(null);
   const current = folders.data?.find((f) => f.id === folderId);
   const children = useMemo(() => (folders.data ?? []).filter((f) => (f.parent_id ?? "root") === folderId), [folders.data, folderId]);
   const crumbs = useMemo(() => { const out: FolderT[] = []; let f = current; while (f) { out.unshift(f); f = folders.data?.find((x) => x.id === f!.parent_id); } return out; }, [current, folders.data]);
   const go = (id: string) => { setQ(""); setSp(id === "root" ? {} : { folder: id }); };
-  const del = async (d: Doc) => { if (!confirm(`"${d.name}" verwijderen?`)) return; await api.del(`/api/buildings/${b.id}/documents/${d.id}`); docs.reload(); toast.success("Document verwijderd"); };
+  const del = async (d: Doc) => { if (!confirm(`"${d.name}" verwijderen?`)) return; await api.del(`/api/buildings/${b.id}/documents/${d.id}`); docs.reload(); toast.success("Document naar de prullenbak verplaatst (30 dagen herstelbaar)"); };
   const delFolder = async (f: FolderT) => { if (!confirm(`Map "${f.name}" verwijderen?`)) return; try { await api.del(`/api/buildings/${b.id}/folders/${f.id}`); folders.reload(); } catch (e) { toast.error((e as Error).message); } };
 
   return <div>
-    <PageHeader title={t("Documenten")} subtitle={b.role === "commissaris" ? "Je hebt inzage in alle stukken en kan opmerkingen en bevindingen noteren (art. 3.91 BW). Bij stukken \"enkel syndicus\" wordt de syndicus automatisch van je inzage verwittigd." : b.role === "raad" ? "De raad heeft inzage- en kopierecht in alle beheersdocumenten (art. 3.90 BW). Open je een stuk \"enkel syndicus\", dan geldt dat als kennisgeving: de syndicus krijgt automatisch een melding." : t("Statuten, verslagen, afrekeningen, offertes en meer.")} actions={<>{b.isBoard && <Button variant="outline" onClick={() => setNewFolder(true)}><FolderPlus />{t("Map")}</Button>}{(b.isOwner || b.isBoard) && <Button onClick={() => setUpload(true)}><Upload />{t("Uploaden")}</Button>}</>} />
+    <PageHeader title={t("Documenten")} subtitle={b.role === "commissaris" ? "Je hebt inzage in alle stukken en kan opmerkingen en bevindingen noteren (art. 3.91 BW). Bij stukken \"enkel syndicus\" wordt de syndicus automatisch van je inzage verwittigd." : b.role === "raad" ? "De raad heeft inzage- en kopierecht in alle beheersdocumenten (art. 3.90 BW). Open je een stuk \"enkel syndicus\", dan geldt dat als kennisgeving: de syndicus krijgt automatisch een melding." : t("Statuten, verslagen, afrekeningen, offertes en meer.")} actions={<>{b.isManager && <Button variant="ghost" size="icon" aria-label="Prullenbak" title="Prullenbak" onClick={() => setTrash(true)}><Trash2 /></Button>}{b.isBoard && <Button variant="outline" onClick={() => setNewFolder(true)}><FolderPlus />{t("Map")}</Button>}{(b.isOwner || b.isBoard) && <Button onClick={() => setUpload(true)}><Upload />{t("Uploaden")}</Button>}</>} />
     <Tabs value={view} onValueChange={(v) => setSp(v === "compliance" ? { tab: "compliance" } : {})} className="mb-4"><TabsList><TabsTrigger value="docs"><Folder />{t("Documenten")}</TabsTrigger><TabsTrigger value="compliance"><ShieldCheck />Keuringen & attesten</TabsTrigger></TabsList></Tabs>
+    {trash && <TrashDialog onClose={() => setTrash(false)} onRestored={() => docs.reload()} />}
     {view === "compliance" ? <ComplianceTab /> : <>
     <div className="mb-4 flex flex-wrap items-center gap-3">
       <nav className="flex min-w-0 flex-1 items-center gap-1 text-sm"><button className="flex items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-accent cursor-pointer" onClick={() => go("root")}><Folder className="size-4 text-muted-foreground" />{t("Alle documenten")}</button>{crumbs.map((f) => <span key={f.id} className="flex items-center gap-1"><ChevronRight className="size-4 text-muted-foreground" /><button className="rounded-md px-1.5 py-1 hover:bg-accent cursor-pointer" onClick={() => go(f.id)}>{f.name}</button></span>)}</nav>

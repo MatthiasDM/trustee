@@ -19,7 +19,7 @@ test("document uploaden, terugvinden via zoeken, voorvertonen en verwijderen", a
   page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Acties" }).first().click();
   await page.getByRole("menuitem", { name: "Verwijderen" }).click();
-  await expect(page.getByText("Document verwijderd")).toBeVisible();
+  await expect(page.getByText(/Document naar de prullenbak/)).toBeVisible();
 });
 
 test("huurder ziet geen map 'enkel syndicus' en geen uploadknop voor beperkte zichtbaarheid", async ({ page }) => {
@@ -38,4 +38,25 @@ test("keuringen: tab toont lege staat en syndicus registreert een keuring", asyn
   await dlg.getByRole("button", { name: "Bewaren" }).click();
   await expect(page.getByText("Liftkeuring").first()).toBeVisible();
   await expect(page.getByText(/vervalt/)).toBeVisible();
+});
+
+test("syndicus herstelt een verwijderd document uit de prullenbak", async ({ page }) => {
+  await login(page, "syndicus@demo.be");
+  await page.goto("/b/b-zeezicht/documents");
+  await page.getByRole("button", { name: "Uploaden" }).click();
+  const dlg = page.getByRole("dialog");
+  await dlg.locator('input[type="file"]').setInputFiles({ name: "e2e-herstel.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n% e2e herstel\n") });
+  await dlg.getByRole("button", { name: "Uploaden", exact: true }).click();
+  await expect(page.getByText("Document geüpload")).toBeVisible();
+  await page.getByPlaceholder("Zoeken in alle documenten…").fill("e2e-herstel");
+  await expect(page.getByText("e2e-herstel.pdf")).toBeVisible();
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "Acties" }).first().click();
+  await page.getByRole("menuitem", { name: "Verwijderen" }).click();
+  await expect(page.getByText(/naar de prullenbak/)).toBeVisible();
+  await page.getByRole("button", { name: "Prullenbak" }).click();
+  const trash = page.getByRole("dialog", { name: "Prullenbak" });
+  await expect(trash.getByText("e2e-herstel.pdf")).toBeVisible();
+  await trash.getByRole("button", { name: "Herstellen" }).first().click();
+  await expect(page.getByText("Document hersteld")).toBeVisible();
 });

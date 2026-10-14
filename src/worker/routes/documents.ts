@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { isBoard, isManager, isOwner, requireAuth, requireBuilding } from "../lib/auth";
-import { HttpError, safeFilename, uid } from "../lib/util";
+import { HttpError, safeFilename, uid, now } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 import { safeContentType, validateUpload } from "../lib/files";
 
@@ -11,14 +11,15 @@ docs.use("*", requireAuth);
 
 
 /** SQL-filter op zichtbaarheid volgens rol. */
-export function documentVisibility(role: string, userId?: string, alias = ""): string {
+export function documentVisibility(role: string, userId?: string, alias = "", opts: { includeDeleted?: boolean } = {}): string {
   const a = alias ? `${alias}.` : "";
+  const live = opts.includeDeleted ? "1=1" : `${a}deleted_at IS NULL`; // prullenbak: zacht verwijderde stukken zijn onzichtbaar
   // Raad en commissaris hebben wettelijk inzagerecht in alle beheersdocumenten (art. 3.90 en 3.91 BW)
-  if (isManager(role) || isBoard(role)) return "1=1";
+  if (isManager(role) || isBoard(role)) return live;
   // documenten van één kavel (afrekening, herinnering) enkel voor de eigenaars van die kavel
   const unitScope = userId ? `(${a}unit_id IS NULL OR ${a}unit_id IN (SELECT uo.unit_id FROM unit_owners uo WHERE uo.user_id = '${userId.replace(/'/g, "")}'))` : `${a}unit_id IS NULL`;
-  if (isOwner(role)) return `(${a}visibility IN ('all','owners_only') AND ${unitScope})`;
-  return `(${a}visibility = 'all' AND ${a}unit_id IS NULL)`;
+  if (isOwner(role)) return `(${live} AND ${a}visibility IN ('all','owners_only') AND ${unitScope})`;
+  return `(${live} AND ${a}visibility = 'all' AND ${a}unit_id IS NULL)`;
 }
 
 docs.get("/:buildingId/folders", requireBuilding(), async (c) => {
@@ -81,7 +82,7 @@ docs.post("/:buildingId/documents", requireBuilding("syndicus", "raad", "eigenaa
     folder_id: z.string().nullable().optional(),
     category: z.string().max(40).default("overig"),
     visibility: z.enum(["all", "raad", "syndicus", "owners_only"]).default("all"),
-    description: z.string().max(1000).optional(),
+    description: z.string().max(1000).nullable().optional(), // leeg veld komt als null binnen
     notify: z.coerce.boolean().default(false),
   }).parse(Object.fromEntries([...form.entries()].filter(([k]) => k !== "file").map(([k, v]) => [k, v === "null" || v === "" ? null : v])));
   // eigenaars mogen enkel in 'all' uploaden en niet notifiëren
@@ -167,11 +168,34 @@ docs.delete("/:buildingId/documents/:docId", requireBuilding("syndicus", "raad",
   const user = c.get("user");
   const d = await loadDoc(c);
   if (!isBoard(b.role) && d.uploaded_by !== user.id) throw new HttpError(403, "Enkel eigen documenten verwijderen");
-  await c.env.DOCS.delete(d.r2_key);
-  await c.env.DB.prepare("DELETE FROM documents WHERE id = ?").bind(d.id).run();
+  // Zacht verwijderen: 30 dagen herstelbaar via de prullenbak; het bestand blijft zolang in de opslag.
+  await c.env.DB.prepare("UPDATE documents SET deleted_at = ?, deleted_by = ? WHERE id = ?").bind(now(), user.id, d.id).run();
   await audit(c.env, b.id, user.id, "document.delete", "document", d.id, { name: d.name });
   return c.json({ ok: true });
 });
+
+/** Prullenbak: zacht verwijderde documenten (enkel syndicus), met wie en wanneer. */
+docs.get("/:buildingId/trash", requireBuilding("syndicus"), async (c) => {
+  const b = c.get("building");
+  const rows = await c.env.DB.prepare("SELECT d.id, d.name, d.category, d.size, d.deleted_at, u.name AS deleted_by_name FROM documents d LEFT JOIN users u ON u.id = d.deleted_by WHERE d.building_id = ? AND d.deleted_at IS NOT NULL ORDER BY d.deleted_at DESC").bind(b.id).all();
+  return c.json(rows.results);
+});
+docs.post("/:buildingId/trash/:docId/restore", requireBuilding("syndicus"), async (c) => {
+  const b = c.get("building");
+  const d = await c.env.DB.prepare("SELECT id, name FROM documents WHERE id = ? AND building_id = ? AND deleted_at IS NOT NULL").bind(c.req.param("docId"), b.id).first<any>();
+  if (!d) throw new HttpError(404, "Niet in de prullenbak");
+  await c.env.DB.prepare("UPDATE documents SET deleted_at = NULL, deleted_by = NULL WHERE id = ?").bind(d.id).run();
+  await audit(c.env, b.id, c.get("user").id, "document.restore", "document", d.id, { name: d.name });
+  return c.json({ ok: true });
+});
+
+/** Cron: definitief wissen van documenten die meer dan 30 dagen in de prullenbak zitten. */
+export async function purgeTrash(env: AppEnv["Bindings"]) {
+  const limit = new Date(Date.now() - 30 * 86400_000).toISOString();
+  const rows = (await env.DB.prepare("SELECT id, r2_key FROM documents WHERE deleted_at IS NOT NULL AND deleted_at < ? LIMIT 200").bind(limit).all<{ id: string; r2_key: string }>()).results;
+  for (const d of rows) { await env.DOCS.delete(d.r2_key); await env.DB.prepare("DELETE FROM documents WHERE id = ?").bind(d.id).run(); }
+  return rows.length;
+}
 
 // ---- Opmerkingen op documenten (controle door commissaris / raad; geen bewerking) ----
 docs.get("/:buildingId/documents/:docId/comments", requireBuilding(), async (c) => {

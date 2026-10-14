@@ -22,16 +22,18 @@ export async function exportBuilding(env: Env, buildingId: string) {
   return { format: "trustee-backup", version: 1, exported_at: new Date().toISOString(), building_id: buildingId, ...out };
 }
 
-/** Maandelijkse back-up van elk gebouw naar R2 (backups/<building>/<datum>.json); bewaart 36 maanden. */
+/** Dagelijkse back-up van elk gebouw naar R2 (backups/<building>/<datum>.json). */
 export async function runBackups(env: Env) {
   const buildings = (await env.DB.prepare("SELECT id FROM buildings").all()).results as { id: string }[];
   const date = new Date().toISOString().slice(0, 10);
   for (const b of buildings) {
     const data = await exportBuilding(env, b.id);
     await env.DOCS.put(`backups/${b.id}/${date}.json`, JSON.stringify(data), { httpMetadata: { contentType: "application/json" } });
+    // bewaarbeleid: dagelijkse back-ups 60 dagen, back-ups van de 1e van de maand 36 maanden
     const list = await env.DOCS.list({ prefix: `backups/${b.id}/` });
-    const old = list.objects.sort((x, y) => (x.key < y.key ? -1 : 1)).slice(0, -36);
-    for (const o of old) await env.DOCS.delete(o.key);
+    const keepDaily = new Date(Date.now() - 60 * 86400_000).toISOString().slice(0, 10);
+    const keepMonthly = new Date(Date.now() - 36 * 30.5 * 86400_000).toISOString().slice(0, 10);
+    for (const o of list.objects) { const dt = o.key.split("/").pop()!.replace(".json", ""); const monthly = dt.endsWith("-01"); if ((monthly && dt < keepMonthly) || (!monthly && dt < keepDaily)) await env.DOCS.delete(o.key); }
   }
   return buildings.length;
 }

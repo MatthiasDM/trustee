@@ -15,6 +15,7 @@ import agenda from "./routes/agenda";
 import mandates, { ORGAN_RULES } from "./routes/mandates";
 import ledger, { postDueScheduled } from "./routes/ledger";
 import { runBackups } from "./lib/backup";
+import { purgeTrash } from "./routes/documents";
 import { loadUser } from "./lib/auth";
 import reports, { autoReminders } from "./routes/reports";
 import orgs from "./routes/orgs";
@@ -62,7 +63,8 @@ export async function runCron(env: AppEnv["Bindings"], cron = "manual") {
       try {
       // maandelijkse back-up op de 1e, in het eerste kwartier van de dag
       const d = new Date();
-      if (d.getUTCDate() === 1 && d.getUTCHours() === 2 && d.getUTCMinutes() < 15) log.backups = await runBackups(env);
+      // dagelijkse back-up om 02:00 UTC (dagelijks 60 dagen bewaard, maandelijkse 36 maanden); prullenbak leegmaken
+      if (d.getUTCHours() === 2 && d.getUTCMinutes() < 15) { log.backups = await runBackups(env); log.purged = await purgeTrash(env); }
       const expired = await env.DB.prepare("SELECT id, building_id, title FROM polls WHERE status = 'open' AND closes_at IS NOT NULL AND closes_at < ?").bind(nowIso).all<any>();
       for (const p of expired.results) {
         await env.DB.prepare("UPDATE polls SET status = 'closed' WHERE id = ?").bind(p.id).run();

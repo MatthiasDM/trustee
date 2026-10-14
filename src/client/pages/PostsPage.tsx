@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, HelpCircle, Lock, Megaphone, MessageSquare, Pin, PinOff, Trash2, Wrench } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Flag, HelpCircle, Lock, Megaphone, MessageSquare, Pin, PinOff, Trash2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { useBuilding, useFetch } from "../components/Layout";
 import { Empty, ErrorBox, Field, PageHeader, PriorityBadge, RoleBadge, Spinner, StatusBadge, STATUS_LABELS, UserAvatar } from "../components/ui";
@@ -114,6 +114,7 @@ export function PostDetailPage() {
         {b.isBoard && post.supplier_name && <div className="mt-3 text-xs text-muted-foreground">{post.supplier_email && <span className="mr-3">{post.supplier_email}</span>}{post.supplier_phone && <span className="mr-3">{post.supplier_phone}</span>}{post.assignee_name && <span>opgevolgd door {post.assignee_name}</span>}</div>}
         {b.isBoard && ledger.length > 0 && <div className="mt-3"><div className="mb-1 flex items-center gap-1 text-xs font-medium"><Receipt className="size-3.5" />Boekingen bij {post.supplier_name} sinds de melding</div><ul className="text-xs text-muted-foreground">{ledger.map((e: any) => <li key={e.id}>{e.date} · {e.description} · € {(e.amount ?? 0).toFixed(2)}</li>)}</ul></div>}
       </div>}
+      {!mine && <div className="mt-4 text-right"><Button size="sm" variant="ghost" className="text-muted-foreground" onClick={async () => { const reason = prompt("Waarom meld je dit bericht? (bv. kwetsend, onjuist, privégegevens van iemand anders)"); if (reason && reason.trim().length >= 3) { await api.post(`/api/buildings/${b.id}/posts/${post.id}/report`, { reason }); toast.success("Gemeld aan de syndicus"); } }}><Flag />Melden</Button></div>}
       {canManage && <><Separator className="my-5" /><div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="text-muted-foreground">Status:</span>
         {(post.type === "incident" ? ["open", "in_progress", "resolved", "closed"] : ["open", "answered", "closed"]).map((s) => <Button key={s} size="sm" variant={post.status === s ? "default" : "outline"} onClick={() => setStatus(s)}>{STATUS_LABELS[s]}</Button>)}

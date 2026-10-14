@@ -116,6 +116,17 @@ posts.delete("/:buildingId/posts/:postId", requireBuilding(), async (c) => {
   return c.json({ ok: true });
 });
 
+/** Inhoud melden (notice-and-takedown): de syndicus als beheerder beoordeelt; gelogd. */
+posts.post("/:buildingId/posts/:postId/report", requireBuilding(), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  const { reason } = z.object({ reason: z.string().min(3).max(1000) }).parse(await c.req.json());
+  const post = await c.env.DB.prepare("SELECT id, title FROM posts WHERE id = ? AND building_id = ?").bind(c.req.param("postId"), b.id).first<any>();
+  if (!post) throw new HttpError(404, "Bericht niet gevonden");
+  await audit(c.env, b.id, user.id, "post.report", "post", post.id, { reason });
+  await notifyBuilding(c.env, { buildingId: b.id, type: "report", title: `Bericht gemeld: ${post.title}`, body: `${user.name} meldt dit bericht als ongepast of onjuist. Reden: ${reason}. Beoordeel en verwijder het indien nodig.`, link: `/b/${b.id}/posts/${post.id}`, roles: ["syndicus"] });
+  return c.json({ ok: true });
+});
+
 posts.post("/:buildingId/posts/:postId/comments", requireBuilding(), async (c) => {
   const b = c.get("building");
   const user = c.get("user");

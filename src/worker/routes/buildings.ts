@@ -7,6 +7,7 @@ import { layout, sendEmail } from "../lib/email";
 import { audit, escapeHtml, notifyBuilding } from "../lib/notify";
 import { rateLimit } from "../lib/ratelimit";
 import { exportBuilding } from "../lib/backup";
+import { zipSync } from "fflate";
 
 const buildings = new Hono<AppEnv>();
 buildings.use("*", requireAuth);
@@ -120,11 +121,20 @@ buildings.delete("/:buildingId/members/:userId", requireBuilding("syndicus"), as
   const b = c.get("building");
   const target = c.req.param("userId");
   if (target === c.get("user").id) throw new HttpError(400, "Je kan jezelf niet verwijderen");
+  const tm = await c.env.DB.prepare("SELECT bm.role, u.name FROM building_members bm JOIN users u ON u.id = bm.user_id WHERE bm.building_id = ? AND bm.user_id = ?").bind(b.id, target).first<any>();
+  if (!tm) throw new HttpError(404, "Geen lid van dit gebouw");
+  if (tm.role === "syndicus") {
+    const others = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM building_members WHERE building_id = ? AND role = 'syndicus' AND user_id != ?").bind(b.id, target).first<{ n: number }>();
+    const org = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM org_members om JOIN buildings bb ON bb.org_id = om.org_id WHERE bb.id = ?").bind(b.id).first<{ n: number }>();
+    if (!(others?.n ?? 0) && !(org?.n ?? 0)) throw new HttpError(400, "Dit is de enige syndicus van het gebouw: nodig eerst een opvolger uit, anders kan niemand het gebouw nog beheren");
+  }
   await c.env.DB.batch([
     c.env.DB.prepare("DELETE FROM building_members WHERE building_id = ? AND user_id = ?").bind(b.id, target),
     c.env.DB.prepare("DELETE FROM unit_owners WHERE user_id = ? AND unit_id IN (SELECT id FROM units WHERE building_id = ?)").bind(target, b.id),
   ]);
-  await audit(c.env, b.id, c.get("user").id, "member.remove", "user", target);
+  await audit(c.env, b.id, c.get("user").id, "member.remove", "user", target, { name: tm.name, role: tm.role });
+  // Toezicht: de raad wordt verwittigd wanneer een lid verwijderd wordt (tegen stil verwijderen van kritische stemmen).
+  await notifyBuilding(c.env, { buildingId: b.id, type: "member", title: `Lid verwijderd: ${tm.name}`, body: `${c.get("user").name} heeft ${tm.name} (${tm.role}) uit ${b.name} verwijderd.`, link: `/b/${b.id}/members`, roles: ["raad", "commissaris"], excludeUserId: c.get("user").id, email: false });
   return c.json({ ok: true });
 });
 
@@ -241,6 +251,27 @@ buildings.post("/:buildingId/broadcast", requireBuilding("syndicus"), async (c) 
   await notifyBuilding(c.env, { buildingId: b.id, type: "broadcast", title, body, roles, link: `/b/${b.id}` });
   await audit(c.env, b.id, c.get("user").id, "broadcast", undefined, undefined, { title });
   return c.json({ ok: true });
+});
+
+/** Volledig archief als zip: JSON-export + alle documenten (mapstructuur) + leeswijzer. Zo bezit de VME haar archief, los van Trustee of het kantoor. */
+buildings.get("/:buildingId/archive.zip", requireBuilding("syndicus", "raad"), async (c) => {
+  const b = c.get("building");
+  const data = await exportBuilding(c.env, b.id) as any;
+  const folders = new Map<string, string>(); for (const f of data.folders as any[]) folders.set(f.id, f.name.replace(/[\\/:*?"<>|]/g, "_"));
+  const files: Record<string, Uint8Array> = {};
+  files["export.json"] = new TextEncoder().encode(JSON.stringify(data, null, 1));
+  files["LEESMIJ.txt"] = new TextEncoder().encode(`Archief van ${b.name}, gemaakt op ${new Date().toISOString()} met Trustee.\n\nexport.json: alle gegevens (leden, kavels, vergaderingen, beslissingen, stemmingen, boekhouding, logboek) in open JSON-formaat.\ndocumenten/: alle documenten in hun mapstructuur; afrekeningen en herinneringen per kavel staan in documenten/kavels/.\n\nDe wettelijke bewaarplicht (o.m. 7 jaar voor boekhoudkundige stukken) rust op de syndicus. Bewaar dit archief op een veilige plaats.\n`);
+  const used = new Set<string>();
+  for (const d of data.documents as any[]) {
+    if (d.deleted_at) continue;
+    const obj = await c.env.DOCS.get(d.r2_key); if (!obj) continue;
+    const dir = d.unit_id ? "documenten/kavels" : `documenten/${d.folder_id ? folders.get(d.folder_id) ?? "overig" : "algemeen"}`;
+    let name = `${dir}/${d.name.replace(/[\\/:*?"<>|]/g, "_")}`; let i = 2; while (used.has(name)) { name = name.replace(/(\.[^.]+)?$/, ` (${i++})$1`); } used.add(name);
+    files[name] = new Uint8Array(await obj.arrayBuffer());
+  }
+  const zip = zipSync(files, { level: 6 });
+  await audit(c.env, b.id, c.get("user").id, "building.archive", undefined, undefined, { documents: used.size });
+  return new Response(zip as any, { headers: { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="archief-${b.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.zip"` } });
 });
 
 // ---- Back-up / export van alle gegevens van het gebouw (JSON) ----

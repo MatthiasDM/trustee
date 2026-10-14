@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { isBoard, requireAuth, requireBuilding } from "../lib/auth";
-import { HttpError, patchOf, uid } from "../lib/util";
+import { HttpError, patchOf, uid, now } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 import { generateAnnualReport, generateOwnerStatements, overdueUnits, renderCommissionerReport, storeDocument } from "../lib/reports";
 import { Pdf, dateNl, money } from "../lib/pdf";
@@ -88,7 +88,8 @@ reports.get("/:buildingId/ledger/overdue", requireBuilding("syndicus", "raad", "
   const units = await overdueUnits(c.env, b.id);
   const cfg = await c.env.DB.prepare("SELECT reminder_auto, reminder_days_1, reminder_days_2, reminder_fee_2 FROM buildings WHERE id = ?").bind(b.id).first();
   const history = (await c.env.DB.prepare("SELECT pr.*, un.label, u.name AS sent_by_name FROM payment_reminders pr JOIN units un ON un.id = pr.unit_id LEFT JOIN users u ON u.id = pr.sent_by WHERE pr.building_id = ? ORDER BY pr.sent_at DESC LIMIT 100").bind(b.id).all()).results;
-  return c.json({ units, config: cfg, history });
+  const proposals = (await c.env.DB.prepare("SELECT rp.*, un.label FROM reminder_proposals rp JOIN units un ON un.id = rp.unit_id WHERE rp.building_id = ? AND rp.status = 'proposed' ORDER BY rp.created_at").bind(b.id).all()).results;
+  return c.json({ units, config: cfg, history, proposals });
 });
 
 export async function sendReminder(env: AppEnv["Bindings"], buildingId: string, userId: string | null, unitId: string, level: number, fee: number): Promise<string> {
@@ -124,21 +125,45 @@ reports.post("/:buildingId/ledger/reminders", requireBuilding("syndicus"), async
   return c.json({ id }, 201);
 });
 
-/** Automatische opvolging (cron): herinnering na X dagen, aanmaning na Y dagen, enkel voor gebouwen die dit aanzetten. */
+/**
+ * Automatische opvolging (cron): zet VOORSTELLEN klaar (herinnering na X dagen, aanmaning na Y dagen) voor gebouwen die dit aanzetten.
+ * Er wordt niets verstuurd zonder dat de syndicus het voorstel goedkeurt: een brief met kosten heeft rechtsgevolg (mens in de lus).
+ */
 export async function autoReminders(env: AppEnv["Bindings"]) {
   const buildings = (await env.DB.prepare("SELECT id, reminder_days_1, reminder_days_2, reminder_fee_2 FROM buildings WHERE reminder_auto = 1").all()).results as any[];
-  let sent = 0;
+  let proposed = 0;
   for (const b of buildings) {
+    let n = 0;
     for (const u of await overdueUnits(env, b.id)) {
       if (!u.oldest_due) continue;
       const lvl = u.last_level ?? 0;
       const sinceLast = u.last_sent ? (Date.now() - new Date(u.last_sent).getTime()) / 86400_000 : 999;
-      if (lvl === 0 && u.days_overdue >= b.reminder_days_1) { await sendReminder(env, b.id, null, u.unit_id, 1, 0); sent++; }
-      else if (lvl === 1 && u.days_overdue >= b.reminder_days_2 && sinceLast >= 7) { await sendReminder(env, b.id, null, u.unit_id, 2, b.reminder_fee_2); sent++; }
+      let level = 0; let fee = 0;
+      if (lvl === 0 && u.days_overdue >= b.reminder_days_1) level = 1;
+      else if (lvl === 1 && u.days_overdue >= b.reminder_days_2 && sinceLast >= 7) { level = 2; fee = b.reminder_fee_2; }
+      if (!level) continue;
+      const open = await env.DB.prepare("SELECT id FROM reminder_proposals WHERE building_id = ? AND unit_id = ? AND status = 'proposed'").bind(b.id, u.unit_id).first();
+      if (open) continue;
+      await env.DB.prepare("INSERT INTO reminder_proposals (id, building_id, unit_id, level, fee, outstanding, days_overdue) VALUES (?,?,?,?,?,?,?)").bind(uid(), b.id, u.unit_id, level, fee, u.outstanding, u.days_overdue).run();
+      n++; proposed++;
     }
+    if (n) await notifyBuilding(env, { buildingId: b.id, type: "reminder_proposal", title: `${n} voorstel${n > 1 ? "len" : ""} voor betalingsopvolging`, body: "Controleer en verstuur de herinneringen onder Boekhouding › Opvolging. Er wordt niets verstuurd zonder jouw goedkeuring.", link: `/b/${b.id}/ledger?tab=followup`, roles: ["syndicus"], email: false });
   }
-  return sent;
+  return proposed;
 }
+
+/** Voorstel goedkeuren (verstuurt de brief) of afwijzen. */
+reports.post("/:buildingId/ledger/reminder-proposals/:id", requireBuilding("syndicus"), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  const { action, fee } = z.object({ action: z.enum(["send", "dismiss"]), fee: z.number().min(0).optional() }).parse(await c.req.json());
+  const p = await c.env.DB.prepare("SELECT * FROM reminder_proposals WHERE id = ? AND building_id = ? AND status = 'proposed'").bind(c.req.param("id"), b.id).first<any>();
+  if (!p) throw new HttpError(404, "Voorstel niet gevonden of al afgehandeld");
+  let reminderId: string | null = null;
+  if (action === "send") reminderId = await sendReminder(c.env, b.id, user.id, p.unit_id, p.level, fee ?? p.fee);
+  await c.env.DB.prepare("UPDATE reminder_proposals SET status = ?, reminder_id = ?, resolved_by = ?, resolved_at = ? WHERE id = ?").bind(action === "send" ? "sent" : "dismissed", reminderId, user.id, now(), p.id).run();
+  await audit(c.env, b.id, user.id, `reminder_proposal.${action}`, "unit", p.unit_id, { level: p.level });
+  return c.json({ ok: true, reminder_id: reminderId });
+});
 
 // ---------- Vereenvoudigde boekhouding (kasboek) ----------
 reports.get("/:buildingId/ledger/mode", requireBuilding(), async (c) => {

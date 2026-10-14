@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { requireAuth, requireBuilding } from "../lib/auth";
-import { HttpError, patchOf, plusMs, randomToken, uid } from "../lib/util";
+import { HttpError, patchOf, plusMs, randomToken, uid, now } from "../lib/util";
 import { layout, sendEmail } from "../lib/email";
 import { audit, escapeHtml, notifyBuilding } from "../lib/notify";
 import { rateLimit } from "../lib/ratelimit";
@@ -91,7 +91,7 @@ buildings.patch("/:buildingId", requireBuilding("syndicus"), async (c) => {
 buildings.get("/:buildingId/members", requireBuilding(), async (c) => {
   const b = c.get("building");
   const rows = await c.env.DB.prepare(
-    `SELECT bm.user_id, u.name, u.email, u.phone, bm.role, bm.joined_at,
+    `SELECT bm.user_id, u.name, u.email, u.phone, bm.role, bm.joined_at, bm.ecomm_consent_at, bm.ecomm_consent_via,
             (SELECT GROUP_CONCAT(un.label, ', ') FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE uo.user_id = bm.user_id AND un.building_id = bm.building_id) AS units
      FROM building_members bm JOIN users u ON u.id = bm.user_id WHERE bm.building_id = ? ORDER BY bm.role, u.name`
   ).bind(b.id).all();
@@ -103,9 +103,16 @@ buildings.get("/:buildingId/members", requireBuilding(), async (c) => {
 
 buildings.patch("/:buildingId/members/:userId", requireBuilding("syndicus"), async (c) => {
   const b = c.get("building");
-  const { role } = z.object({ role: z.enum(ROLES) }).parse(await c.req.json());
-  await c.env.DB.prepare("UPDATE building_members SET role = ? WHERE building_id = ? AND user_id = ?").bind(role, b.id, c.req.param("userId")).run();
-  await audit(c.env, b.id, c.get("user").id, "member.role", "user", c.req.param("userId"), { role });
+  const body = z.object({ role: z.enum(ROLES).optional(), ecomm_consent_at: z.string().nullable().optional() }).parse(await c.req.json());
+  if (body.role) {
+    await c.env.DB.prepare("UPDATE building_members SET role = ? WHERE building_id = ? AND user_id = ?").bind(body.role, b.id, c.req.param("userId")).run();
+    await audit(c.env, b.id, c.get("user").id, "member.role", "user", c.req.param("userId"), { role: body.role });
+  }
+  // Schriftelijk akkoord voor elektronische communicatie, ontvangen door de syndicus (datum van het document); bewaar het document zelf onder Documenten.
+  if (body.ecomm_consent_at !== undefined) {
+    await c.env.DB.prepare("UPDATE building_members SET ecomm_consent_at = ?, ecomm_consent_via = ? WHERE building_id = ? AND user_id = ?").bind(body.ecomm_consent_at, body.ecomm_consent_at ? "written" : null, b.id, c.req.param("userId")).run();
+    await audit(c.env, b.id, c.get("user").id, "member.ecomm_consent_written", "user", c.req.param("userId"), { date: body.ecomm_consent_at });
+  }
   return c.json({ ok: true });
 });
 
@@ -124,13 +131,18 @@ buildings.delete("/:buildingId/members/:userId", requireBuilding("syndicus"), as
 /** Eigen notificatievoorkeuren voor dit gebouw. */
 buildings.patch("/:buildingId/me/preferences", requireBuilding(), async (c) => {
   const b = c.get("building");
-  const body = z.object({ notify_email: z.boolean().optional(), notify_push: z.boolean().optional() }).parse(await c.req.json());
+  const body = z.object({ notify_email: z.boolean().optional(), notify_push: z.boolean().optional(), ecomm_consent: z.boolean().optional() }).parse(await c.req.json());
   await c.env.DB.prepare("UPDATE building_members SET notify_email = COALESCE(?, notify_email), notify_push = COALESCE(?, notify_push) WHERE building_id = ? AND user_id = ?")
     .bind(body.notify_email === undefined ? null : +body.notify_email, body.notify_push === undefined ? null : +body.notify_push, b.id, c.get("user").id).run();
+  // Akkoord met elektronische oproeping en kennisgeving (in plaats van aangetekend): door het lid zelf gegeven, gelogd.
+  if (body.ecomm_consent !== undefined) {
+    await c.env.DB.prepare("UPDATE building_members SET ecomm_consent_at = ?, ecomm_consent_via = ? WHERE building_id = ? AND user_id = ?").bind(body.ecomm_consent ? now() : null, body.ecomm_consent ? "app" : null, b.id, c.get("user").id).run();
+    await audit(c.env, b.id, c.get("user").id, body.ecomm_consent ? "member.ecomm_consent" : "member.ecomm_consent_withdrawn", "user", c.get("user").id);
+  }
   return c.json({ ok: true });
 });
 buildings.get("/:buildingId/me/preferences", requireBuilding(), async (c) => {
-  const row = await c.env.DB.prepare("SELECT notify_email, notify_push FROM building_members WHERE building_id = ? AND user_id = ?").bind(c.get("building").id, c.get("user").id).first();
+  const row = await c.env.DB.prepare("SELECT notify_email, notify_push, ecomm_consent_at, ecomm_consent_via FROM building_members WHERE building_id = ? AND user_id = ?").bind(c.get("building").id, c.get("user").id).first();
   return c.json(row ?? { notify_email: 1, notify_push: 1 });
 });
 

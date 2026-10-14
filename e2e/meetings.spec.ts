@@ -47,3 +47,24 @@ test("syndicus zonder kavel ziet geen aanwezigheids- of volmachtknoppen, wel 'Pu
   await expect(page.getByRole("button", { name: "Volmacht" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Verzoek starten" })).toHaveCount(0);
 });
+
+test("syndicus plant een AV zonder bericht, ziet 'nog niet opgeroepen', opent de oproeping en bevestigt de waarschuwingen", async ({ page }) => {
+  await login(page, "syndicus@demo.be");
+  await page.goto("/b/b-zeezicht/meetings");
+  await page.getByRole("button", { name: "Vergadering plannen" }).click();
+  const dlg = page.getByRole("dialog", { name: "Vergadering plannen" });
+  await dlg.getByLabel("Titel").fill("E2E: AV oproeping");
+  const d = new Date(Date.now() + 30 * 86400_000); d.setMinutes(0);
+  await dlg.getByLabel("Datum & uur").fill(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+  await dlg.getByRole("button", { name: "Opslaan" }).click();
+  const card = page.locator("div.rounded-xl", { hasText: "E2E: AV oproeping" }).first();
+  await expect(card.getByText("Nog niet opgeroepen")).toBeVisible();
+  await card.getByRole("button", { name: "Oproepen", exact: true }).click();
+  const cd = page.getByRole("dialog", { name: "Oproeping versturen" });
+  await expect(cd.getByText(/aangetekend/).first()).toBeVisible();
+  await expect(cd.getByRole("button", { name: "Oproeping versturen" })).toBeDisabled();
+  await cd.getByRole("checkbox").check();
+  await cd.getByRole("button", { name: "Oproeping versturen" }).click();
+  await expect(page.getByText(/Oproeping verstuurd aan/)).toBeVisible();
+  await expect(card.getByText("Opgeroepen", { exact: true })).toBeVisible();
+});

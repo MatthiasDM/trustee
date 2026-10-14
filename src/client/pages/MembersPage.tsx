@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from "react";
-import { AlertTriangle, CheckCircle2, FileOutput, Gavel, Home, Pencil, Plus, Trash2, UserPlus, Users, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileCheck, FileOutput, Gavel, Home, Mail, Pencil, Plus, Trash2, UserPlus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import { useBuilding, useFetch } from "../components/Layout";
 import { MandatesTab } from "../components/MandatesTab";
 import { Empty, ErrorBox, Field, PageHeader, RoleBadge, Spinner, UserAvatar } from "../components/ui";
 import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
@@ -36,6 +37,8 @@ export function MembersPage() {
     {tab === "members" && (members.loading ? <Spinner /> : <>
       <div className="divide-y rounded-xl border bg-card shadow-xs">{members.data?.members.map((m) => <div key={m.user_id} className="flex items-center gap-3 px-4 py-3">
         <UserAvatar name={m.name} /><div className="min-w-0 flex-1"><div className="text-sm font-medium">{m.name}</div><div className="truncate text-xs text-muted-foreground">{b.isBoard ? `${m.email}${m.phone ? ` · ${m.phone}` : ""} · ` : ""}{m.units ? `Kavel ${m.units}` : "geen kavel"}</div></div>
+        {m.role !== "huurder" && (m.ecomm_consent_at ? <Badge variant="success" title={`Akkoord elektronische oproeping (${m.ecomm_consent_via === "written" ? "schriftelijk" : "in de app"}) op ${fmtDate(m.ecomm_consent_at)}`}><Mail />e-oproeping</Badge> : <Badge variant="warning" title="Geen akkoord voor elektronische oproeping: aangetekend versturen">aangetekend</Badge>)}
+        {b.isManager && m.role !== "huurder" && !m.ecomm_consent_at && <Button variant="ghost" size="sm" title="Schriftelijk akkoord voor elektronische communicatie registreren" onClick={async () => { const d = prompt(`Datum van het schriftelijk akkoord van ${m.name} voor elektronische oproeping (JJJJ-MM-DD). Bewaar het document zelf onder Documenten.`, new Date().toISOString().slice(0, 10)); if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) { await api.patch(`/api/buildings/${b.id}/members/${m.user_id}`, { ecomm_consent_at: d }); reload(); toast.success("Akkoord geregistreerd"); } }}><FileCheck />Akkoord</Button>}
         {b.isManager ? <div className="w-56"><RoleSelect size="sm" value={m.role} onChange={async (v) => { await api.patch(`/api/buildings/${b.id}/members/${m.user_id}`, { role: v }); reload(); toast.success("Rol bijgewerkt"); }} /></div> : <RoleBadge role={m.role} />}
         {b.isManager && <Button variant="ghost" size="icon-sm" onClick={async () => { if (confirm(`${m.name} verwijderen uit dit gebouw?`)) { try { await api.del(`/api/buildings/${b.id}/members/${m.user_id}`); reload(); } catch (e) { toast.error((e as Error).message); } } }}><Trash2 /></Button>}
       </div>)}</div>

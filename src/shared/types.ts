@@ -37,7 +37,7 @@ export const MAJORITY_LABELS: Record<Majority, string> = {
 export interface User { id: string; email: string; name: string; phone?: string | null; locale: string; is_superadmin: number; created_at: string }
 export interface Building { id: string; org_id: string; name: string; address: string; city?: string | null; postal_code?: string | null; enterprise_number?: string | null; total_shares: number; role?: Role; org_name?: string; units?: number }
 export interface Unit { id: string; building_id: string; label: string; type: string; floor?: string | null; shares: number; owners?: { user_id: string; name: string; email: string; share_pct: number }[] }
-export interface Member { user_id: string; name: string; email: string; phone?: string | null; role: Role; joined_at: string; units?: string }
+export interface Member { user_id: string; name: string; email: string; phone?: string | null; role: Role; joined_at: string; units?: string; ecomm_consent_at?: string | null; ecomm_consent_via?: string | null }
 export interface Folder { id: string; parent_id: string | null; name: string; visibility: string }
 export interface Doc { id: string; folder_id: string | null; name: string; description?: string | null; category: string; size: number; mime: string; visibility: DocVisibility; uploaded_by_name?: string; created_at: string; version: number }
 export interface Post { id: string; type: PostType; title: string; body: string; status: PostStatus; priority: string; pinned: number; visibility: string; author_id: string; author_name: string; author_role?: Role; created_at: string; updated_at: string; comment_count?: number }

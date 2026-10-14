@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { requireAuth, requireBuilding } from "../lib/auth";
@@ -26,12 +26,12 @@ const schema = z.object({
 meetings.get("/:buildingId/meetings", requireBuilding(), async (c) => {
   const b = c.get("building");
   const rows = await c.env.DB.prepare(
-    `SELECT m.*, d.name AS minutes_name, ch.name AS chair_name, se.name AS secretary_name,
+    `SELECT m.*, d.name AS minutes_name, ch.name AS chair_name, se.name AS secretary_name, cv.name AS convened_by_name, cb.name AS cancelled_by_name,
        (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.status='attending') AS attending,
        (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.status='proxy') AS proxy,
        (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.status='absent') AS absent,
        (SELECT status FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.user_id = ?2) AS my_rsvp
-     FROM meetings m LEFT JOIN documents d ON d.id = m.minutes_document_id LEFT JOIN users ch ON ch.id = m.chair_user_id LEFT JOIN users se ON se.id = m.secretary_user_id WHERE m.building_id = ?1 ORDER BY m.starts_at DESC`
+     FROM meetings m LEFT JOIN documents d ON d.id = m.minutes_document_id LEFT JOIN users ch ON ch.id = m.chair_user_id LEFT JOIN users se ON se.id = m.secretary_user_id LEFT JOIN users cv ON cv.id = m.convened_by LEFT JOIN users cb ON cb.id = m.cancelled_by WHERE m.building_id = ?1 ORDER BY m.starts_at DESC`
   ).bind(b.id, c.get("user").id).all();
   return c.json(rows.results);
 });
@@ -44,7 +44,8 @@ meetings.post("/:buildingId/meetings", requireBuilding("syndicus", "raad"), asyn
   await c.env.DB.prepare("INSERT INTO meetings (id, building_id, title, type, starts_at, location, agenda, minutes_document_id, created_by) VALUES (?,?,?,?,?,?,?,?,?)")
     .bind(id, b.id, body.title, body.type, body.starts_at, body.location ?? null, body.agenda ?? null, body.minutes_document_id ?? null, user.id).run();
   await audit(c.env, b.id, user.id, "meeting.create", "meeting", id, { title: body.title });
-  if (body.notify) {
+  // De oproeping is een aparte, bewuste handeling (POST .../convene) met voorbeeld en termijncontrole; aanmaken verstuurt niets.
+  if (body.notify && false) {
     const when = new Date(body.starts_at).toLocaleString("nl-BE", { timeZone: "Europe/Brussels", dateStyle: "full", timeStyle: "short" });
     await notifyBuilding(c.env, { buildingId: b.id, type: "meeting", title: `Uitnodiging: ${body.title}`, body: `${when}${body.location ? ` — ${body.location}` : ""}. Laat weten of je aanwezig bent.`, link: `/b/${b.id}/meetings`, roles: body.type === "raad" ? ["syndicus", "raad", "commissaris"] : ["syndicus", "raad", "eigenaar", "commissaris"], excludeUserId: user.id });
   }
@@ -55,8 +56,19 @@ meetings.patch("/:buildingId/meetings/:meetingId", requireBuilding("syndicus", "
   const b = c.get("building");
   const body = patchOf(schema.partial(), await c.req.json());
   const { notify: _n, ...rest } = body;
+  const before = await c.env.DB.prepare("SELECT * FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
+  if (!before) throw new HttpError(404, "Vergadering niet gevonden");
+  if (before.cancelled_at) throw new HttpError(400, "Deze vergadering is geannuleerd");
   const fields = Object.entries(rest).filter(([, v]) => v !== undefined).map(([k, v]) => [k, typeof v === "boolean" ? +v : v]);
   if (fields.length) await c.env.DB.prepare(`UPDATE meetings SET ${fields.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ? AND building_id = ?`).bind(...fields.map(([, v]) => v), c.req.param("meetingId"), b.id).run();
+  // Al opgeroepen en datum of plaats gewijzigd: iedereen verwittigen en de oproeping als "opnieuw te versturen" markeren (nieuwe termijn van 15 dagen).
+  const moved = before.convened_at && ((rest.starts_at && rest.starts_at !== before.starts_at) || (rest.location !== undefined && (rest.location ?? null) !== (before.location ?? null)));
+  if (moved) {
+    await c.env.DB.prepare("UPDATE meetings SET convened_at = NULL, convened_by = NULL WHERE id = ?").bind(before.id).run();
+    const when = new Date(rest.starts_at ?? before.starts_at).toLocaleString("nl-BE", { timeZone: "Europe/Brussels", dateStyle: "full", timeStyle: "short" });
+    await notifyBuilding(c.env, { buildingId: b.id, type: "meeting", title: `Gewijzigd: ${before.title}`, body: `Nieuwe datum of plaats: ${when}${(rest.location ?? before.location) ? ` — ${rest.location ?? before.location}` : ""}. De syndicus verstuurt een nieuwe oproeping.`, link: `/b/${b.id}/meetings`, roles: before.type === "raad" ? ["syndicus", "raad"] : undefined, excludeUserId: c.get("user").id });
+    await audit(c.env, b.id, c.get("user").id, "meeting.moved", "meeting", before.id, { from: before.starts_at, to: rest.starts_at ?? before.starts_at });
+  }
   if (body.minutes_document_id) {
     const m = await c.env.DB.prepare("SELECT title FROM meetings WHERE id = ?").bind(c.req.param("meetingId")).first<any>();
     await notifyBuilding(c.env, { buildingId: b.id, type: "minutes", title: `Verslag beschikbaar: ${m?.title}`, body: "Het verslag van de vergadering staat online.", link: `/b/${b.id}/meetings`, excludeUserId: c.get("user").id });
@@ -65,16 +77,79 @@ meetings.patch("/:buildingId/meetings/:meetingId", requireBuilding("syndicus", "
 });
 
 meetings.delete("/:buildingId/meetings/:meetingId", requireBuilding("syndicus"), async (c) => {
-  await c.env.DB.prepare("DELETE FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), c.get("building").id).run();
+  const b = c.get("building");
+  const m = await c.env.DB.prepare("SELECT id, title, convened_at FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
+  if (!m) throw new HttpError(404, "Vergadering niet gevonden");
+  if (m.convened_at) throw new HttpError(400, "Deze vergadering is al opgeroepen: annuleer ze (met reden) in plaats van ze te verwijderen, zodat de leden verwittigd worden");
+  await c.env.DB.prepare("DELETE FROM meetings WHERE id = ?").bind(m.id).run();
+  await audit(c.env, b.id, c.get("user").id, "meeting.delete", "meeting", m.id, { title: m.title });
   return c.json({ ok: true });
+});
+
+/** Annuleren in plaats van verwijderen: blijft zichtbaar als geannuleerd, iedereen krijgt bericht, agendapunten vallen terug naar "voorgesteld". */
+meetings.post("/:buildingId/meetings/:meetingId/cancel", requireBuilding("syndicus", "raad"), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  const { reason } = z.object({ reason: z.string().min(3).max(1000) }).parse(await c.req.json());
+  const m = await c.env.DB.prepare("SELECT * FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
+  if (!m) throw new HttpError(404, "Vergadering niet gevonden");
+  if (m.cancelled_at) throw new HttpError(400, "Al geannuleerd");
+  await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE meetings SET cancelled_at = ?, cancelled_by = ?, cancel_reason = ? WHERE id = ?").bind(now(), user.id, reason, m.id),
+    c.env.DB.prepare("UPDATE agenda_items SET meeting_id = NULL, status = 'proposed', updated_at = ? WHERE meeting_id = ? AND status = 'scheduled'").bind(now(), m.id),
+    c.env.DB.prepare("DELETE FROM meeting_rsvps WHERE meeting_id = ?").bind(m.id),
+  ]);
+  await audit(c.env, b.id, user.id, "meeting.cancel", "meeting", m.id, { reason });
+  await notifyBuilding(c.env, { buildingId: b.id, type: "meeting", title: `Geannuleerd: ${m.title}`, body: `De vergadering van ${new Date(m.starts_at).toLocaleString("nl-BE", { timeZone: "Europe/Brussels", dateStyle: "full", timeStyle: "short" })} gaat niet door. Reden: ${reason}`, link: `/b/${b.id}/meetings`, roles: m.type === "raad" ? ["syndicus", "raad"] : undefined, excludeUserId: user.id });
+  return c.json({ ok: true });
+});
+
+/** Voorbeeld van de oproeping: ontvangers, akkoord elektronische communicatie, termijn (art. 3.87 §3: minstens 15 dagen), agenda. */
+async function convenePreview(c: Context<AppEnv>, m: any) {
+  const b = c.get("building");
+  const roles = m.type === "raad" ? ["syndicus", "raad"] : ["syndicus", "raad", "eigenaar", "commissaris", "huurder"];
+  const recipients = (await c.env.DB.prepare(`SELECT bm.user_id, u.name, u.email, bm.role, bm.ecomm_consent_at, bm.ecomm_consent_via, bm.notify_email,
+      (SELECT GROUP_CONCAT(un.label, ', ') FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE uo.user_id = bm.user_id AND un.building_id = bm.building_id) AS units
+     FROM building_members bm JOIN users u ON u.id = bm.user_id WHERE bm.building_id = ? AND bm.role IN (${roles.map(() => "?").join(",")}) ORDER BY bm.role, u.name`).bind(b.id, ...roles).all()).results as any[];
+  const days = Math.floor((new Date(m.starts_at).getTime() - Date.now()) / 86400_000);
+  const minDays = m.type === "raad" ? 0 : 15;
+  const agenda = (await c.env.DB.prepare("SELECT COUNT(*) AS n FROM agenda_items WHERE meeting_id = ? AND status = 'scheduled'").bind(m.id).first<{ n: number }>())?.n ?? 0;
+  const warnings: string[] = [];
+  if (days < minDays) warnings.push(`De oproeping moet minstens ${minDays} dagen vóór de vergadering verstuurd worden (art. 3.87 §3 BW); er resten ${days} dagen. Verzet de vergadering, of roep enkel op bij hoogdringendheid.`);
+  if (m.type !== "raad" && agenda === 0 && !m.agenda) warnings.push("De agenda is leeg: de oproeping moet de agenda bevatten (art. 3.87 §3 BW). Agendeer eerst de punten.");
+  const voters = recipients.filter((r) => r.role !== "huurder" && (r.units || r.role === "eigenaar" || r.role === "raad"));
+  const registered = voters.filter((r) => !r.ecomm_consent_at);
+  if (registered.length) warnings.push(`${registered.length} stemgerechtigde(n) zonder akkoord voor elektronische oproeping: aan hen moet de oproeping per aangetekende brief worden verstuurd. Registreer hun schriftelijk akkoord onder Leden, of verstuur aangetekend.`);
+  if (m.convened_at) warnings.push(`Al opgeroepen op ${m.convened_at.slice(0, 10)}. Opnieuw versturen stuurt een herinnering aan iedereen.`);
+  return { meeting: { id: m.id, title: m.title, starts_at: m.starts_at, type: m.type, convened_at: m.convened_at, is_second_call: !!m.is_second_call }, days_until: days, min_days: minDays, agenda_items: agenda, recipients, registered_needed: registered.map((r) => r.user_id), warnings };
+}
+meetings.get("/:buildingId/meetings/:meetingId/convene", requireBuilding("syndicus", "raad"), async (c) => {
+  const m = await c.env.DB.prepare("SELECT * FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), c.get("building").id).first<any>();
+  if (!m) throw new HttpError(404, "Vergadering niet gevonden");
+  return c.json(await convenePreview(c, m));
+});
+/** Oproeping versturen: bewuste handeling met bevestiging van de waarschuwingen; gelogd met wie, wanneer en aan wie. */
+meetings.post("/:buildingId/meetings/:meetingId/convene", requireBuilding("syndicus", "raad"), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  const { acknowledge } = z.object({ acknowledge: z.boolean().default(false) }).parse(await c.req.json().catch(() => ({})));
+  const m = await c.env.DB.prepare("SELECT * FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
+  if (!m) throw new HttpError(404, "Vergadering niet gevonden");
+  if (m.cancelled_at) throw new HttpError(400, "Deze vergadering is geannuleerd");
+  const p = await convenePreview(c, m);
+  if (p.warnings.length && !acknowledge) throw new HttpError(400, `Bevestig eerst de waarschuwingen: ${p.warnings[0]}`);
+  const when = new Date(m.starts_at).toLocaleString("nl-BE", { timeZone: "Europe/Brussels", dateStyle: "full", timeStyle: "short" });
+  await c.env.DB.prepare("UPDATE meetings SET convened_at = ?, convened_by = ? WHERE id = ?").bind(now(), user.id, m.id).run();
+  await notifyBuilding(c.env, { buildingId: b.id, type: "meeting", title: `${m.convened_at ? "Herinnering oproeping" : "Oproeping"}: ${m.title}`, body: `${when}${m.location ? ` — ${m.location}` : ""}. De agenda staat in Trustee. Laat weten of je aanwezig bent of geef een volmacht.`, link: `/b/${b.id}/meetings`, userIds: p.recipients.map((r: any) => r.user_id), excludeUserId: user.id });
+  await audit(c.env, b.id, user.id, "meeting.convene", "meeting", m.id, { recipients: p.recipients.length, registered_needed: p.registered_needed, days_until: p.days_until, acknowledged: p.warnings });
+  return c.json({ ok: true, recipients: p.recipients.length, registered_needed: p.registered_needed.length });
 });
 
 meetings.put("/:buildingId/meetings/:meetingId/rsvp", requireBuilding(), async (c) => {
   const b = c.get("building");
   const user = c.get("user");
   const { status, proxy_user_id } = z.object({ status: z.enum(["attending", "proxy", "absent"]), proxy_user_id: z.string().nullable().optional() }).parse(await c.req.json());
-  const m = await c.env.DB.prepare("SELECT id FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first();
+  const m = await c.env.DB.prepare("SELECT id, cancelled_at FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
   if (!m) throw new HttpError(404, "Vergadering niet gevonden");
+  if (m.cancelled_at) throw new HttpError(400, "Deze vergadering is geannuleerd");
   if (!isCoOwner(b)) throw new HttpError(403, "Enkel mede-eigenaars melden hun aanwezigheid of geven een volmacht; de syndicus woont de AV ambtshalve bij");
   if (status === "proxy") { if (!proxy_user_id) throw new HttpError(400, "Kies wie je volmacht krijgt"); await validateProxy(c.env, b.id, c.req.param("meetingId"), user.id, proxy_user_id); }
   await c.env.DB.prepare("INSERT INTO meeting_rsvps (meeting_id, user_id, status, proxy_user_id, updated_at) VALUES (?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(meeting_id, user_id) DO UPDATE SET status = excluded.status, proxy_user_id = excluded.proxy_user_id, updated_at = excluded.updated_at")
@@ -260,7 +335,7 @@ meetings.get("/:buildingId/meetings/:meetingId/ics", requireBuilding(), async (c
   if (!m) throw new HttpError(404, "Vergadering niet gevonden");
   const dt = (s: string) => s.replace(/[-:]/g, "").replace(/\.\d{3}/, "");
   const start = new Date(m.starts_at); const end = new Date(start.getTime() + 2 * 3600_000);
-  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Trustee//NL", "BEGIN:VEVENT", `UID:${m.id}@trustee`, `DTSTAMP:${dt(new Date().toISOString())}`, `DTSTART:${dt(start.toISOString())}`, `DTEND:${dt(end.toISOString())}`, `SUMMARY:${m.title}`, m.location ? `LOCATION:${m.location}` : "", m.agenda ? `DESCRIPTION:${m.agenda.replace(/\n/g, "\\n")}` : "", "END:VEVENT", "END:VCALENDAR"].filter(Boolean).join("\r\n");
+  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Trustee//NL", "BEGIN:VEVENT", `UID:${m.id}@trustee`, `DTSTAMP:${dt(new Date().toISOString())}`, `DTSTART:${dt(start.toISOString())}`, `DTEND:${dt(end.toISOString())}`, `SUMMARY:${m.cancelled_at ? "GEANNULEERD: " : ""}${m.title}`, m.cancelled_at ? "STATUS:CANCELLED" : "STATUS:CONFIRMED", m.location ? `LOCATION:${m.location}` : "", m.agenda ? `DESCRIPTION:${m.agenda.replace(/\n/g, "\\n")}` : "", "END:VEVENT", "END:VCALENDAR"].filter(Boolean).join("\r\n");
   return new Response(ics, { headers: { "Content-Type": "text/calendar; charset=utf-8", "Content-Disposition": `attachment; filename="vergadering.ics"` } });
 });
 

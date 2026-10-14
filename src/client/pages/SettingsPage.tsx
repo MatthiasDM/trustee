@@ -26,7 +26,7 @@ export function SettingsPage() {
   const nav = useNavigate();
   const backups = useFetch<any>(b.isBoard ? `/api/buildings/${b.id}/backups` : null);
   const [delPw, setDelPw] = useState(""); const [delErr, setDelErr] = useState<unknown>(null);
-  const prefs = useFetch<{ notify_email: number; notify_push: number }>(`/api/buildings/${b.id}/me/preferences`);
+  const prefs = useFetch<{ notify_email: number; notify_push: number; ecomm_consent_at?: string | null; ecomm_consent_via?: string | null }>(`/api/buildings/${b.id}/me/preferences`);
   const info = useFetch<any>(b.isManager ? `/api/buildings/${b.id}` : null);
   const audit = useFetch<any[]>(b.isBoard ? `/api/buildings/${b.id}/audit` : null);
   const [pushOn, setPushOn] = useState(false);
@@ -51,7 +51,8 @@ export function SettingsPage() {
         <Row label={t("Push-meldingen op dit toestel")} hint="Werkt ook wanneer de app gesloten is" checked={pushOn} onChange={togglePush} />}
       {pushOn && <Button size="sm" variant="outline" onClick={() => api.post("/api/notifications/push/test").then(() => toast.success("Testmelding verstuurd"))}>Test-push sturen</Button>}
       <Separator className="my-4" /><p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Voor {b.name}</p>
-      {prefs.data && <><Row label={t("E-mailmeldingen")} checked={!!prefs.data.notify_email} onChange={(v) => setPref("notify_email", v)} /><Row label={t("Push-meldingen")} checked={!!prefs.data.notify_push} onChange={(v) => setPref("notify_push", v)} /></>}
+      {prefs.data && <><Row label={t("E-mailmeldingen")} checked={!!prefs.data.notify_email} onChange={(v) => setPref("notify_email", v)} /><Row label={t("Push-meldingen")} checked={!!prefs.data.notify_push} onChange={(v) => setPref("notify_push", v)} />
+        {b.role !== "huurder" && <><Separator className="my-3" /><Row label="Elektronische oproeping en kennisgeving" hint={prefs.data.ecomm_consent_at ? `Akkoord gegeven op ${new Date(prefs.data.ecomm_consent_at).toLocaleDateString("nl-BE")}${prefs.data.ecomm_consent_via === "written" ? " (schriftelijk, geregistreerd door de syndicus)" : ""}. Je ontvangt oproepingen voor de AV en de notulen via Trustee en e-mail in plaats van per aangetekende brief.` : "Zonder dit akkoord moet de syndicus je oproepingen en notulen per aangetekende brief sturen. Je kan het akkoord altijd intrekken."} checked={!!prefs.data.ecomm_consent_at} onChange={async (v) => { await api.patch(`/api/buildings/${b.id}/me/preferences`, { ecomm_consent: v }); prefs.reload(); toast.success(v ? "Akkoord geregistreerd" : "Akkoord ingetrokken"); }} /></>}</>}
     </CardContent></Card>
 
     <Card><CardHeader><CardTitle>{t("Profiel")}</CardTitle></CardHeader><CardContent>

@@ -5,6 +5,13 @@ import { Toaster } from "sonner";
 import { useAuth } from "../lib/auth";
 import { ConsentGate } from "./ConsentGate";
 import { DemoBar } from "./DemoBar";
+import { LandingPage } from "../pages/LandingPage";
+import { Outlet as RouterOutlet } from "react-router-dom";
+
+/** Handleiding zonder account: dezelfde pagina in een eenvoudige openbare schil. */
+function PublicHelp() {
+  return <div className="min-h-screen bg-muted/40"><div className="mx-auto max-w-6xl px-4 py-4 sm:px-6"><div className="mb-4 flex items-center justify-between"><Link to="/" className="flex items-center gap-2.5"><img src="/icon.svg" className="size-8 rounded-lg" alt="" /><span className="font-semibold tracking-tight">Trustee</span></Link><Button variant="outline" size="sm" asChild><Link to="/login">Aanmelden</Link></Button></div><RouterOutlet /></div></div>;
+}
 import { LegalLinks } from "../pages/LegalPage";
 import { api } from "../lib/api";
 import { RoleBadge, Spinner, UserAvatar } from "./ui";
@@ -40,10 +47,12 @@ export function AppShell() {
   const [open, setOpen] = useState(false);
   const t = useT();
   const { dark, toggle } = useTheme();
-  useEffect(() => { if (!loading && !user) nav("/login", { replace: true }); }, [loading, user, nav]);
   const location = useLocation();
+  const publicRoot = location.pathname === "/" || location.pathname === "/help"; // startpagina en handleiding zijn openbaar
+  useEffect(() => { if (!loading && !user && !publicRoot) nav(`/login?next=${encodeURIComponent(location.pathname + location.search)}`, { replace: true }); }, [loading, user, nav, publicRoot]);
   useEffect(() => { setOpen(false); }, [location.pathname, location.search]);
-  if (loading || !user) return <Spinner />;
+  if (loading) return <Spinner />;
+  if (!user) return location.pathname === "/" ? <LandingPage /> : location.pathname === "/help" ? <PublicHelp /> : <Spinner />;
   const current = buildings.find((b) => b.id === buildingId);
 
   const sidebar = <nav className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
@@ -84,14 +93,14 @@ export function AppShell() {
   </nav>;
 
   return <TooltipProvider><div className="flex min-h-screen">
-    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r lg:block">{sidebar}</aside>
+    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r lg:block" style={demo ? { height: "calc(100vh - var(--demo-bar-h, 56px))" } : undefined}>{sidebar}</aside>
     <div className="min-w-0 flex-1">
       <header className="sticky top-0 z-30 flex items-center gap-2 border-b bg-background/80 px-3 py-2.5 backdrop-blur lg:hidden">
         <Sheet open={open} onOpenChange={setOpen}><SheetTrigger asChild><Button variant="ghost" size="icon" aria-label="Menu"><Menu /></Button></SheetTrigger><SheetContent className="w-72 p-0">{sidebar}</SheetContent></Sheet>
         <span className="flex-1 truncate font-semibold">{current?.name ?? "Trustee"}</span>
         <Button variant="ghost" size="icon" asChild><Link to="/notifications" className="relative"><Bell />{unread > 0 && <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">{unread}</span>}</Link></Button>
       </header>
-      <main className={cn("mx-auto max-w-6xl p-4 sm:p-6 lg:p-8", demo && "pb-24")}><Outlet /></main>
+      <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8" style={demo ? { paddingBottom: "calc(var(--demo-bar-h, 56px) + 1.5rem)" } : undefined}><Outlet /></main>
       <ConsentGate />
       <DemoBar />
     </div>

@@ -50,3 +50,31 @@ test("juridische pagina's zijn openbaar; registratie vereist aanvaarding; nieuwe
   await dlg.getByRole("button", { name: "Aanvaarden en verdergaan" }).click();
   await expect(dlg).toHaveCount(0);
 });
+
+test("startpagina is openbaar met link naar demo en handleiding; na aanmelden toont / de gebouwenlijst", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /De mede-eigenaars beslissen/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Probeer de demo zonder account" })).toHaveAttribute("href", "/demo");
+  await page.getByRole("link", { name: "Lees de handleiding" }).click();
+  await expect(page).toHaveURL(/\/help/);
+  await expect(page.getByText("Wat jij als mede-eigenaar kan en mag").first()).toBeVisible();
+  await login(page, "marie@demo.be");
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /Welkom/ })).toBeVisible();
+});
+
+test("demobalk neemt geen ruimte van de inhoud: de laatste knop van de pagina blijft bereikbaar", async ({ page }) => {
+  await page.goto("/demo");
+  await page.getByRole("button", { name: "Start de demo" }).click();
+  await expect(page.getByRole("region", { name: "Demo" })).toBeVisible();
+  await page.getByRole("link", { name: "Instellingen" }).click();
+  const last = page.getByRole("button", { name: "Verwijderen", exact: true }).last();
+  await last.scrollIntoViewIfNeeded();
+  const bar = await page.getByRole("region", { name: "Demo" }).boundingBox(); const box = await last.boundingBox();
+  expect(box!.y + box!.height).toBeLessThanOrEqual(bar!.y + 1);
+  // zijbalk: profielmenu onderaan niet verborgen achter de balk
+  const menu = await page.getByRole("button", { name: /Sofie Vermeulen/ }).first().boundingBox();
+  expect(menu!.y + menu!.height).toBeLessThanOrEqual(bar!.y + 1);
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "Beëindigen" }).click();
+});

@@ -16,6 +16,7 @@ import mandates, { ORGAN_RULES } from "./routes/mandates";
 import ledger, { postDueScheduled } from "./routes/ledger";
 import { runBackups } from "./lib/backup";
 import { purgeTrash } from "./routes/documents";
+import { cleanupDemos, demo } from "./routes/demo";
 import { loadUser } from "./lib/auth";
 import reports, { autoReminders } from "./routes/reports";
 import orgs from "./routes/orgs";
@@ -42,6 +43,7 @@ app.route("/api/buildings", suppliers);
 app.route("/api/buildings", compliance);
 app.route("/api/notifications", notifications);
 app.route("/api/orgs", orgs);
+app.route("/api/demo", demo);
 
 app.post("/api/admin/run-cron", async (c) => { if (c.env.TEST_MODE !== "1") return c.json({ error: "Niet gevonden" }, 404); return c.json(await runCron(c.env, "test")); });
 /** Testomgeving: wist de aanvaardingen van de aangemelde gebruiker, om de aanvaardingsdialoog bij een nieuwe versie te testen. */
@@ -86,6 +88,7 @@ export async function runCron(env: AppEnv["Bindings"], cron = "manual") {
       }
       log.posted_scheduled = await postDueScheduled(env); // geplande afschrijvingen boeken
       const force = cron === "test"; // testomgeving: tijdsvensters negeren
+      if (env.DEMO_MODE === "1") log.demos_removed = await cleanupDemos(env);
       if (force || (new Date().getUTCHours() === 5 && new Date().getUTCMinutes() < 15)) { log.recurring = await runDueRecurring(env); log.compliance = await complianceReminders(env); }
       if (force || (new Date().getUTCHours() === 7 && new Date().getUTCMinutes() < 15)) log.reminders = await autoReminders(env); // dagelijks om 9u Belgische zomertijd
       await env.DB.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(nowIso).run();

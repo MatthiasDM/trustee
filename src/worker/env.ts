@@ -12,10 +12,11 @@ export interface Env {
   EMAIL_FROM: string;
   SESSION_SECRET?: string;
   TEST_MODE?: string; // "1" in de testomgeving: uitnodigingstokens in API-antwoord, geen e-mail
+  DEMO_MODE?: string; // "1": iedereen kan een wegwerp-demogebouw starten en van gebruiker wisselen
 }
 
-export interface AuthUser { id: string; email: string; name: string; locale: string; is_superadmin: number; phone: string | null }
-export interface BuildingCtx { id: string; org_id: string; name: string; total_shares: number; role: string; units: number }
+export interface AuthUser { id: string; email: string; name: string; locale: string; is_superadmin: number; phone: string | null; demo_group?: string | null }
+export interface BuildingCtx { id: string; org_id: string; name: string; total_shares: number; role: string; units: number; demo_group?: string | null }
 
 export type Vars = { user: AuthUser; building: BuildingCtx; sessionId: string };
 export type AppEnv = { Bindings: Env; Variables: Vars };

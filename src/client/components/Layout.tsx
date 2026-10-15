@@ -4,6 +4,7 @@ import { Bell, BookOpen, Briefcase, Building2, Calculator, Calendar, ChevronsUpD
 import { Toaster } from "sonner";
 import { useAuth } from "../lib/auth";
 import { ConsentGate } from "./ConsentGate";
+import { DemoBar } from "./DemoBar";
 import { LegalLinks } from "../pages/LegalPage";
 import { api } from "../lib/api";
 import { RoleBadge, Spinner, UserAvatar } from "./ui";
@@ -33,7 +34,7 @@ function useTheme() {
 }
 
 export function AppShell() {
-  const { user, loading, unread, logout, buildings, orgs } = useAuth();
+  const { user, loading, unread, logout, buildings, orgs, demo } = useAuth();
   const nav = useNavigate();
   const { buildingId } = useParams();
   const [open, setOpen] = useState(false);
@@ -90,8 +91,9 @@ export function AppShell() {
         <span className="flex-1 truncate font-semibold">{current?.name ?? "Trustee"}</span>
         <Button variant="ghost" size="icon" asChild><Link to="/notifications" className="relative"><Bell />{unread > 0 && <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">{unread}</span>}</Link></Button>
       </header>
-      <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8"><Outlet /></main>
+      <main className={cn("mx-auto max-w-6xl p-4 sm:p-6 lg:p-8", demo && "pb-24")}><Outlet /></main>
       <ConsentGate />
+      <DemoBar />
     </div>
     <Toaster richColors position="bottom-center" theme={dark ? "dark" : "light"} />
   </div></TooltipProvider>;

@@ -1,7 +1,7 @@
 import type { Env } from "../env";
 
 export async function sendEmail(env: Env, to: string, subject: string, html: string, text?: string) {
-  if (!env.RESEND_API_KEY || env.TEST_MODE === "1") {
+  if (!env.RESEND_API_KEY || env.TEST_MODE === "1" || /@[^@]+\.invalid$/i.test(to)) { // demo-accounts hebben geen echt adres
     console.log(`[email:dev] to=${to} subject=${subject}\n${text ?? html}`);
     return;
   }

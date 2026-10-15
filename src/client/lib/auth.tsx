@@ -3,7 +3,7 @@ import { api } from "./api";
 import type { Building, User } from "../../shared/types";
 
 interface Org { id: string; name: string; plan: string; role: string }
-interface Me { user: User | null; orgs: Org[]; buildings: Building[]; unread: number; vapidPublicKey: string | null; consents_required?: string[]; security?: { totp_enabled: boolean; sessions: number } }
+interface Me { user: User | null; orgs: Org[]; buildings: Building[]; unread: number; vapidPublicKey: string | null; consents_required?: string[]; security?: { totp_enabled: boolean; sessions: number }; demo_enabled?: boolean; demo?: { group: string; ttl_hours: number; users: { id: string; name: string; role: string; building_id: string }[] } | null }
 interface AuthCtx extends Me { loading: boolean; refresh: () => Promise<void>; logout: () => Promise<void>; setUnread: (n: number) => void }
 
 const Ctx = createContext<AuthCtx>(null!);

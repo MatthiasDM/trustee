@@ -105,6 +105,10 @@ Wat je **niet** alleen kan: de syndicus opdrachten geven buiten de AV om, AV-bes
 
 Huurders en andere bewoners zijn geen lid van de VME en stemmen niet, maar mogen vóór de AV schriftelijk vragen of opmerkingen over de gemene delen indienen; in Trustee doe je dat via *Vragen & meldingen*.
 
+## Demo proberen
+
+Op omgevingen waar de demo-modus aanstaat (zoals de preview) kan iedereen via *Probeer de demo* op het aanmeldscherm, of rechtstreeks op `/demo`, met één klik een volledig ingevuld demogebouw aanmaken: vijf kavels, vijf gebruikers (syndicus, raad, twee mede-eigenaars, huurder), een geplande AV, een stemming, meldingen, documentenmappen en een jaar boekhouding. Je start als syndicus; met de balk onderaan wissel je met één klik van gebruiker om te zien wat elke rol kan en mag. Alle gegevens zijn fictief en het gebouw wordt met gebruikers en bestanden verwijderd na 24 uur zonder activiteit (of meteen via *Beëindigen*).
+
 ## Beveiliging, archief en herstel
 
 - **Tweestapsverificatie.** Onder *Instellingen › Beveiliging* schakel je een authenticator-app in; daarna vraagt elke aanmelding een code. Je krijgt acht herstelcodes voor als je je toestel kwijt bent. Sterk aanbevolen voor syndici en kantoorleden. Daar beëindig je ook alle andere sessies van je account.

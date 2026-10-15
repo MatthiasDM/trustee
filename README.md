@@ -113,3 +113,7 @@ Alle routes onder `/api`, sessiecookie-auth. Gebouwroutes controleren lidmaatsch
 - `…/polls`, `…/polls/:id`, `…/polls/:id/vote`, `…/polls/:id/export.csv`
 - `…/meetings`, `…/meetings/:id/rsvp|rsvps|ics`
 - `GET /notifications`, `POST /notifications/read`, `POST /notifications/push/subscribe|unsubscribe|test`
+
+## Demo-modus
+
+Met `DEMO_MODE=1` (preview en testomgeving; lokaal via `.dev.vars`) is `/demo` actief: één klik maakt een volledig geseed wegwerpgebouw met vijf gebruikers (`seed/template.mjs` met een unieke suffix per demo), de demobalk onderaan wisselt van gebruiker (`POST /api/demo/switch`), en de cron verwijdert demo's na 24 uur zonder activiteit (gebouw met cascade, organisatie, gebruikers en R2-bestanden). Demo-accounts hebben adressen op `demo.invalid`; daarnaar wordt nooit e-mail verstuurd. In productie staat `DEMO_MODE` op `0`.

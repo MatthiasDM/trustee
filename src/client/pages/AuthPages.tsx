@@ -26,7 +26,7 @@ function AuthCard({ title, description, children, footer }: { title: string; des
 }
 
 export function LoginPage() {
-  const { refresh, user } = useAuth();
+  const { refresh, user, demo_enabled } = useAuth();
   const nav = useNavigate();
   const [sp] = useSearchParams();
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
@@ -57,6 +57,7 @@ export function LoginPage() {
       <ErrorBox error={error} />
       <Button className="w-full" disabled={busy}>{t("Aanmelden")}</Button>
       <p className="text-center text-sm"><Link to="/forgot-password" className="text-muted-foreground hover:text-primary">{t("Wachtwoord vergeten?")}</Link></p>
+      {demo_enabled && <Button type="button" variant="outline" className="w-full" asChild><Link to="/demo">Probeer de demo zonder account</Link></Button>}
     </form>
   </AuthCard>;
 }

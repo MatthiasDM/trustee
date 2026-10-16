@@ -18,6 +18,7 @@ import { runBackups } from "./lib/backup";
 import { purgeTrash } from "./routes/documents";
 import { cleanupDemos, demo } from "./routes/demo";
 import { decisionReminders, decisions } from "./routes/decisions";
+import { transfers } from "./routes/transfers";
 import { loadUser } from "./lib/auth";
 import reports, { autoReminders } from "./routes/reports";
 import orgs from "./routes/orgs";
@@ -46,6 +47,7 @@ app.route("/api/notifications", notifications);
 app.route("/api/orgs", orgs);
 app.route("/api/demo", demo);
 app.route("/api/buildings", decisions);
+app.route("/api/buildings", transfers);
 
 app.post("/api/admin/run-cron", async (c) => { if (c.env.TEST_MODE !== "1") return c.json({ error: "Niet gevonden" }, 404); return c.json(await runCron(c.env, "test")); });
 /** Testomgeving: de termijn van 30 dagen van een 1/5-verzoek laten verstrijken. */

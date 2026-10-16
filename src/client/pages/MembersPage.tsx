@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { AlertTriangle, CheckCircle2, FileCheck, FileOutput, Gavel, Home, Mail, Pencil, Plus, Trash2, UserPlus, Users, X } from "lucide-react";
+import { AlertTriangle, ArrowRightLeft, CheckCircle2, FileCheck, FileOutput, Gavel, Home, Mail, Pencil, Plus, Trash2, UserPlus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import { useBuilding, useFetch } from "../components/Layout";
@@ -17,6 +17,7 @@ import { api, fmtDate } from "../lib/api";
 import { ROLE_LABELS, type Member, type Unit, RIGHT_LABELS } from "../../shared/types";
 import { useT } from "../lib/i18n";
 import { DocumentPicker } from "../ledger/DocumentPicker";
+import { TransferDialog } from "../components/TransferDialog";
 
 const NONE = "__none__";
 const RoleSelect = ({ value, onChange, size }: { value: string; onChange: (v: string) => void; size?: "sm" | "default" }) => <Select value={value} onValueChange={onChange}><SelectTrigger size={size} className="w-full"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(ROLE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select>;
@@ -28,7 +29,7 @@ export function MembersPage() {
   const [sp, setSp] = useSearchParams();
   const tab = sp.get("tab") ?? "members"; const setTab = (t: string) => setSp(t === "members" ? {} : { tab: t });
   const meetingsQ = useFetch<any[]>(`/api/buildings/${b.id}/meetings`);
-  const [invite, setInvite] = useState(false); const [unitModal, setUnitModal] = useState<Unit | null | "new">(null);
+  const [invite, setInvite] = useState(false); const [unitModal, setUnitModal] = useState<Unit | null | "new">(null); const [transferFor, setTransferFor] = useState<Unit | null>(null);
   const reload = () => { members.reload(); units.reload(); };
   const ok = units.data && units.data.sum_shares === units.data.total_shares;
   return <div>
@@ -48,10 +49,11 @@ export function MembersPage() {
     {tab === "units" && (units.loading || !units.data ? <Spinner /> : <>
       <div className={`mb-3 flex items-center gap-2 text-sm ${ok ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>{ok ? <CheckCircle2 className="size-4" /> : <AlertTriangle className="size-4" />}Som quotiteiten: {units.data.sum_shares} / {units.data.total_shares}{!ok && " — komt niet overeen met het totaal van het gebouw"}</div>
       {units.data.units.length ? <div className="rounded-xl border bg-card shadow-xs"><Table><TableHeader><TableRow><TableHead>Kavel</TableHead><TableHead>Type</TableHead><TableHead>Verdieping</TableHead><TableHead className="text-right">Aandelen</TableHead><TableHead>Eigenaar(s)</TableHead>{b.isManager && <TableHead />}</TableRow></TableHeader>
-        <TableBody>{units.data.units.map((u) => <TableRow key={u.id}><TableCell className="font-medium">{u.label}</TableCell><TableCell className="capitalize">{u.type}</TableCell><TableCell>{u.floor}</TableCell><TableCell className="text-right tabular-nums">{u.shares}</TableCell><TableCell>{u.owners?.map((o) => `${o.name}${o.right_type && o.right_type !== "vol" ? ` (${RIGHT_LABELS[o.right_type]})` : o.share_pct < 100 ? ` (${o.share_pct}%)` : ""}`).join(", ") || <span className="text-muted-foreground">—</span>}{u.split && <div className="mt-0.5">{u.suspended ? <Badge variant="warning" title="Gesplitste eigendom zonder lasthebber: deelnamerecht geschorst (art. 3.87 §1, lid 2 BW)">geen lasthebber: stemrecht geschorst</Badge> : <Badge variant="secondary">lasthebber: {u.voter_name}</Badge>}</div>}</TableCell>{b.isManager && <TableCell className="text-right whitespace-nowrap"><Button variant="ghost" size="sm" title="Overdrachtsdossier bij verkoop (art. 3.94)" onClick={async () => { const r = await api.post<any>(`/api/buildings/${b.id}/ledger/units/${u.id}/transfer-dossier`); toast.success("Overdrachtsdossier als PDF bewaard onder Documenten"); window.open(`/api/buildings/${b.id}/documents/${r.documentId}/download`, "_blank"); }}><FileOutput />Overdracht</Button><Button variant="ghost" size="icon-sm" onClick={() => setUnitModal(u)}><Pencil /></Button></TableCell>}</TableRow>)}</TableBody></Table></div>
+        <TableBody>{units.data.units.map((u) => <TableRow key={u.id}><TableCell className="font-medium">{u.label}</TableCell><TableCell className="capitalize">{u.type}</TableCell><TableCell>{u.floor}</TableCell><TableCell className="text-right tabular-nums">{u.shares}</TableCell><TableCell>{u.owners?.map((o) => `${o.name}${o.right_type && o.right_type !== "vol" ? ` (${RIGHT_LABELS[o.right_type]})` : o.share_pct < 100 ? ` (${o.share_pct}%)` : ""}`).join(", ") || <span className="text-muted-foreground">—</span>}{u.split && <div className="mt-0.5">{u.suspended ? <Badge variant="warning" title="Gesplitste eigendom zonder lasthebber: deelnamerecht geschorst (art. 3.87 §1, lid 2 BW)">geen lasthebber: stemrecht geschorst</Badge> : <Badge variant="secondary">lasthebber: {u.voter_name}</Badge>}</div>}</TableCell>{b.isManager && <TableCell className="text-right whitespace-nowrap"><Button variant="ghost" size="sm" title="Overdrachtsdossier bij verkoop (art. 3.94)" onClick={async () => { const r = await api.post<any>(`/api/buildings/${b.id}/ledger/units/${u.id}/transfer-dossier`); toast.success("Overdrachtsdossier als PDF bewaard onder Documenten"); window.open(`/api/buildings/${b.id}/documents/${r.documentId}/download`, "_blank"); }}><FileOutput />Overdracht</Button>{!!u.owners?.length && <Button variant="ghost" size="sm" title="Verkoop afrekenen en eigenaar wisselen (art. 3.94 §5)" onClick={() => setTransferFor(u)}><ArrowRightLeft />Verkoop</Button>}<Button variant="ghost" size="icon-sm" onClick={() => setUnitModal(u)}><Pencil /></Button></TableCell>}</TableRow>)}</TableBody></Table></div>
         : <Empty icon={<Home />} title="Nog geen kavels" hint="Voeg appartementen, garages en bergingen toe met hun quotiteiten." />}
     </>)}
     {invite && <InviteModal units={units.data?.units ?? []} onClose={() => setInvite(false)} onDone={(n) => { setInvite(false); reload(); toast.success(`${n} uitnodiging(en) verstuurd`); }} />}
+    {transferFor && <TransferDialog unit={transferFor} members={members.data?.members ?? []} onClose={() => setTransferFor(null)} onDone={() => { setTransferFor(null); reload(); }} />}
     {unitModal && <UnitModal unit={unitModal === "new" ? null : unitModal} members={members.data?.members ?? []} onClose={() => setUnitModal(null)} onDone={() => { setUnitModal(null); reload(); }} />}
   </div>;
 }

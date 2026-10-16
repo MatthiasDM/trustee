@@ -6,6 +6,7 @@ import { HttpError, now, patchOf, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 import { isBoard, isCoOwner } from "../lib/auth";
 import { attendance, majorityReached, MAJ, renderMinutesHtml, validateProxy } from "../lib/meeting";
+import { canManageMeeting, hasSyndicus, ownerConveneRight } from "../lib/governance";
 
 const meetings = new Hono<AppEnv>();
 meetings.use("*", requireAuth);
@@ -23,27 +24,50 @@ const schema = z.object({
   notify: z.boolean().default(true),
 });
 
+/** Laadt de vergadering en controleert dat de gebruiker ze mag beheren (orgaan, of de mede-eigenaar die ze wettig zelf bijeenriep). */
+async function managedMeeting(c: Context<AppEnv>, opts: { finalize?: boolean } = {}) {
+  const b = c.get("building"); const user = c.get("user");
+  const m = await c.env.DB.prepare("SELECT * FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
+  if (!m) throw new HttpError(404, "Vergadering niet gevonden");
+  if (!canManageMeeting(b, user.id, m, opts)) throw new HttpError(403, opts.finalize ? "Enkel de syndicus of wie de vergadering wettig bijeenriep kan de notulen definitief maken" : "Onvoldoende rechten voor deze vergadering");
+  return m;
+}
+
 meetings.get("/:buildingId/meetings", requireBuilding(), async (c) => {
   const b = c.get("building");
   const rows = await c.env.DB.prepare(
-    `SELECT m.*, d.name AS minutes_name, ch.name AS chair_name, se.name AS secretary_name, cv.name AS convened_by_name, cb.name AS cancelled_by_name,
+    `SELECT m.*, d.name AS minutes_name, ch.name AS chair_name, se.name AS secretary_name, cv.name AS convened_by_name, cb.name AS cancelled_by_name, cr.name AS created_by_name,
        (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.status='attending') AS attending,
        (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.status='proxy') AS proxy,
        (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.status='absent') AS absent,
        (SELECT status FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.user_id = ?2) AS my_rsvp
-     FROM meetings m LEFT JOIN documents d ON d.id = m.minutes_document_id LEFT JOIN users ch ON ch.id = m.chair_user_id LEFT JOIN users se ON se.id = m.secretary_user_id LEFT JOIN users cv ON cv.id = m.convened_by LEFT JOIN users cb ON cb.id = m.cancelled_by WHERE m.building_id = ?1 ORDER BY m.starts_at DESC`
+     FROM meetings m LEFT JOIN documents d ON d.id = m.minutes_document_id LEFT JOIN users ch ON ch.id = m.chair_user_id LEFT JOIN users se ON se.id = m.secretary_user_id LEFT JOIN users cv ON cv.id = m.convened_by LEFT JOIN users cb ON cb.id = m.cancelled_by LEFT JOIN users cr ON cr.id = m.created_by WHERE m.building_id = ?1 ORDER BY m.starts_at DESC`
   ).bind(b.id, c.get("user").id).all();
-  return c.json(rows.results);
+  return c.json((rows.results as any[]).map((m) => ({ ...m, can_manage: canManageMeeting(b, c.get("user").id, m) })));
 });
 
-meetings.post("/:buildingId/meetings", requireBuilding("syndicus", "raad"), async (c) => {
+meetings.post("/:buildingId/meetings", requireBuilding(), async (c) => {
   const b = c.get("building");
   const user = c.get("user");
   const body = schema.parse(await c.req.json());
+  // Organen plannen vrij. Een mede-eigenaar enkel op een wettelijke grond (art. 3.87 §2, lid 3 of 4): dan is het een "eigen" vergadering die hij ook zelf beheert.
+  const right = isBoard(b.role) ? null : await ownerConveneRight(c.env, b, user.id);
+  if (!isBoard(b.role) && !right) throw new HttpError(403, "Enkel de syndicus of de raad plant vergaderingen. Mede-eigenaars mogen zelf bijeenroepen als de syndicus binnen 30 dagen geen gevolg gaf aan een 1/5-verzoek, of bij gebreke van een syndicus (art. 3.87 §2 BW).");
+  if (right && body.type === "raad") throw new HttpError(400, "Mede-eigenaars roepen een algemene vergadering bijeen, geen raad");
   const id = uid();
-  await c.env.DB.prepare("INSERT INTO meetings (id, building_id, title, type, starts_at, location, agenda, minutes_document_id, created_by) VALUES (?,?,?,?,?,?,?,?,?)")
-    .bind(id, b.id, body.title, body.type, body.starts_at, body.location ?? null, body.agenda ?? null, body.minutes_document_id ?? null, user.id).run();
-  await audit(c.env, b.id, user.id, "meeting.create", "meeting", id, { title: body.title });
+  await c.env.DB.prepare("INSERT INTO meetings (id, building_id, title, type, starts_at, location, agenda, minutes_document_id, created_by, convened_by_owners, legal_basis, request_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+    .bind(id, b.id, body.title, body.type, body.starts_at, body.location ?? null, body.agenda ?? null, body.minutes_document_id ?? null, user.id, right ? 1 : 0, right?.text ?? null, right?.request_id ?? null).run();
+  await audit(c.env, b.id, user.id, right ? "meeting.create_by_owner" : "meeting.create", "meeting", id, { title: body.title, basis: right?.basis ?? null });
+  if (right) {
+    // het verzoek is hiermee ingewilligd door de ondertekenaar zelf; onderwerp op de agenda, en bij gebreke van een syndicus ook de aanwijzing
+    const req = right.request_id ? await c.env.DB.prepare("SELECT * FROM meeting_requests WHERE id = ?").bind(right.request_id).first<any>() : null;
+    const items: [string, string | null][] = [];
+    if (req) items.push([req.subject, [req.body, right.text].filter(Boolean).join("\n\n")]);
+    if (right.basis === "no_syndicus" && !items.some(([t]) => /syndicus/i.test(t))) items.push(["Aanwijzing van een syndicus", "Bij gebreke van een syndicus bijeengeroepen om een syndicus aan te wijzen (art. 3.87 §2, lid 4 BW)."]);
+    for (const [i, [title, desc]] of items.entries()) await c.env.DB.prepare("INSERT INTO agenda_items (id, building_id, meeting_id, submitted_by, title, description, required_majority, status, position) VALUES (?,?,?,?,?,?,'simple','scheduled',?)").bind(uid(), b.id, id, req?.created_by ?? user.id, title, desc, i).run();
+    if (req && req.status !== "fulfilled") await c.env.DB.prepare("UPDATE meeting_requests SET status = 'fulfilled', fulfilled_meeting_id = ?, resolved_at = ?, resolved_by = ?, resolution_note = ? WHERE id = ?").bind(id, now(), user.id, "Zelf bijeengeroepen door een ondertekenaar (art. 3.87 §2 BW)", req.id).run();
+    await notifyBuilding(c.env, { buildingId: b.id, type: "meeting", title: `Vergadering bijeengeroepen door mede-eigenaars: ${body.title}`, body: `${user.name} plant een algemene vergadering. ${right.text}. De oproeping volgt.`, link: `/b/${b.id}/meetings`, roles: ["syndicus", "raad", "commissaris"], excludeUserId: user.id });
+  }
   // De oproeping is een aparte, bewuste handeling (POST .../convene) met voorbeeld en termijncontrole; aanmaken verstuurt niets.
   if (body.notify && false) {
     const when = new Date(body.starts_at).toLocaleString("nl-BE", { timeZone: "Europe/Brussels", dateStyle: "full", timeStyle: "short" });
@@ -52,12 +76,11 @@ meetings.post("/:buildingId/meetings", requireBuilding("syndicus", "raad"), asyn
   return c.json({ id }, 201);
 });
 
-meetings.patch("/:buildingId/meetings/:meetingId", requireBuilding("syndicus", "raad"), async (c) => {
+meetings.patch("/:buildingId/meetings/:meetingId", requireBuilding(), async (c) => {
   const b = c.get("building");
   const body = patchOf(schema.partial(), await c.req.json());
   const { notify: _n, ...rest } = body;
-  const before = await c.env.DB.prepare("SELECT * FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
-  if (!before) throw new HttpError(404, "Vergadering niet gevonden");
+  const before = await managedMeeting(c);
   if (before.cancelled_at) throw new HttpError(400, "Deze vergadering is geannuleerd");
   const fields = Object.entries(rest).filter(([, v]) => v !== undefined).map(([k, v]) => [k, typeof v === "boolean" ? +v : v]);
   if (fields.length) await c.env.DB.prepare(`UPDATE meetings SET ${fields.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ? AND building_id = ?`).bind(...fields.map(([, v]) => v), c.req.param("meetingId"), b.id).run();
@@ -87,11 +110,10 @@ meetings.delete("/:buildingId/meetings/:meetingId", requireBuilding("syndicus"),
 });
 
 /** Annuleren in plaats van verwijderen: blijft zichtbaar als geannuleerd, iedereen krijgt bericht, agendapunten vallen terug naar "voorgesteld". */
-meetings.post("/:buildingId/meetings/:meetingId/cancel", requireBuilding("syndicus", "raad"), async (c) => {
+meetings.post("/:buildingId/meetings/:meetingId/cancel", requireBuilding(), async (c) => {
   const b = c.get("building"); const user = c.get("user");
   const { reason } = z.object({ reason: z.string().min(3).max(1000) }).parse(await c.req.json());
-  const m = await c.env.DB.prepare("SELECT * FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
-  if (!m) throw new HttpError(404, "Vergadering niet gevonden");
+  const m = await managedMeeting(c);
   if (m.cancelled_at) throw new HttpError(400, "Al geannuleerd");
   await c.env.DB.batch([
     c.env.DB.prepare("UPDATE meetings SET cancelled_at = ?, cancelled_by = ?, cancel_reason = ? WHERE id = ?").bind(now(), user.id, reason, m.id),
@@ -122,17 +144,15 @@ async function convenePreview(c: Context<AppEnv>, m: any) {
   if (m.convened_at) warnings.push(`Al opgeroepen op ${m.convened_at.slice(0, 10)}. Opnieuw versturen stuurt een herinnering aan iedereen.`);
   return { meeting: { id: m.id, title: m.title, starts_at: m.starts_at, type: m.type, convened_at: m.convened_at, is_second_call: !!m.is_second_call }, days_until: days, min_days: minDays, agenda_items: agenda, recipients, registered_needed: registered.map((r) => r.user_id), warnings };
 }
-meetings.get("/:buildingId/meetings/:meetingId/convene", requireBuilding("syndicus", "raad"), async (c) => {
-  const m = await c.env.DB.prepare("SELECT * FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), c.get("building").id).first<any>();
-  if (!m) throw new HttpError(404, "Vergadering niet gevonden");
+meetings.get("/:buildingId/meetings/:meetingId/convene", requireBuilding(), async (c) => {
+  const m = await managedMeeting(c);
   return c.json(await convenePreview(c, m));
 });
 /** Oproeping versturen: bewuste handeling met bevestiging van de waarschuwingen; gelogd met wie, wanneer en aan wie. */
-meetings.post("/:buildingId/meetings/:meetingId/convene", requireBuilding("syndicus", "raad"), async (c) => {
+meetings.post("/:buildingId/meetings/:meetingId/convene", requireBuilding(), async (c) => {
   const b = c.get("building"); const user = c.get("user");
   const { acknowledge } = z.object({ acknowledge: z.boolean().default(false) }).parse(await c.req.json().catch(() => ({})));
-  const m = await c.env.DB.prepare("SELECT * FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
-  if (!m) throw new HttpError(404, "Vergadering niet gevonden");
+  const m = await managedMeeting(c);
   if (m.cancelled_at) throw new HttpError(400, "Deze vergadering is geannuleerd");
   const p = await convenePreview(c, m);
   if (p.warnings.length && !acknowledge) throw new HttpError(400, `Bevestig eerst de waarschuwingen: ${p.warnings[0]}`);
@@ -157,7 +177,8 @@ meetings.put("/:buildingId/meetings/:meetingId/rsvp", requireBuilding(), async (
   return c.json({ ok: true });
 });
 
-meetings.get("/:buildingId/meetings/:meetingId/rsvps", requireBuilding("syndicus", "raad"), async (c) => {
+meetings.get("/:buildingId/meetings/:meetingId/rsvps", requireBuilding(), async (c) => {
+  await managedMeeting(c);
   const rows = await c.env.DB.prepare("SELECT r.status, r.updated_at, u.name, u.email, pu.name AS proxy_name FROM meeting_rsvps r JOIN users u ON u.id = r.user_id LEFT JOIN users pu ON pu.id = r.proxy_user_id WHERE r.meeting_id = ? ORDER BY r.status, u.name").bind(c.req.param("meetingId")).all();
   return c.json(rows.results);
 });
@@ -165,10 +186,10 @@ meetings.get("/:buildingId/meetings/:meetingId/rsvps", requireBuilding("syndicus
 /** Aanwezigheid per kavel en quorum. Leden zien de telling; de lijst met namen is voor syndicus en raad. */
 meetings.get("/:buildingId/meetings/:meetingId/attendance", requireBuilding(), async (c) => {
   const b = c.get("building");
-  const m = await c.env.DB.prepare("SELECT id FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first();
+  const m = await c.env.DB.prepare("SELECT id, convened_by_owners, created_by FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first();
   if (!m) throw new HttpError(404, "Vergadering niet gevonden");
   const a = await attendance(c.env, b.id, c.req.param("meetingId"));
-  return c.json(isBoard(b.role) ? a : { quorum: a.quorum, rows: [] });
+  return c.json(canManageMeeting(b, c.get("user").id, m as any) ? a : { quorum: a.quorum, rows: [] });
 });
 
 /** Stemgerechtigde leden (voor volmachten): mede-eigenaars (kavelbezitters), nooit de syndicus, geen huurders. */
@@ -182,8 +203,9 @@ meetings.get("/:buildingId/meetings/:meetingId/proxy-candidates", requireBuildin
  * Stemming per agendapunt tijdens de AV registreren (syndicus/raad): keuze per kavel, gewogen naar aandelen.
  * Onthoudingen tellen niet mee voor de meerderheid (art. 3.88 §1). Namen van tegenstemmers worden bewaard voor de notulen (art. 3.87 §12).
  */
-meetings.post("/:buildingId/meetings/:meetingId/agenda/:itemId/vote", requireBuilding("syndicus", "raad"), async (c) => {
+meetings.post("/:buildingId/meetings/:meetingId/agenda/:itemId/vote", requireBuilding(), async (c) => {
   const b = c.get("building"); const user = c.get("user");
+  await managedMeeting(c);
   const item = await c.env.DB.prepare("SELECT * FROM agenda_items WHERE id = ? AND meeting_id = ? AND building_id = ?").bind(c.req.param("itemId"), c.req.param("meetingId"), b.id).first<any>();
   if (!item) throw new HttpError(404, "Agendapunt niet gevonden op deze vergadering");
   const { votes, decision } = z.object({ votes: z.array(z.object({ unit_id: z.string(), choice: z.enum(["for", "against", "abstain", "absent"]) })), decision: z.string().max(3000).optional() }).parse(await c.req.json());
@@ -200,8 +222,9 @@ meetings.post("/:buildingId/meetings/:meetingId/agenda/:itemId/vote", requireBui
 });
 
 /** Ontwerp van de notulen genereren uit vergadering, aanwezigheid en agendapunten. */
-meetings.post("/:buildingId/meetings/:meetingId/minutes/generate", requireBuilding("syndicus", "raad"), async (c) => {
+meetings.post("/:buildingId/meetings/:meetingId/minutes/generate", requireBuilding(), async (c) => {
   const b = c.get("building");
+  await managedMeeting(c);
   const m = await c.env.DB.prepare("SELECT m.*, ch.name AS chair_name, se.name AS secretary_name FROM meetings m LEFT JOIN users ch ON ch.id = m.chair_user_id LEFT JOIN users se ON se.id = m.secretary_user_id WHERE m.id = ? AND m.building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
   if (!m) throw new HttpError(404, "Vergadering niet gevonden");
   if (m.minutes_status === "final") throw new HttpError(400, "De notulen zijn al definitief");
@@ -228,8 +251,9 @@ meetings.post("/:buildingId/meetings/:meetingId/minutes/generate", requireBuildi
   return c.json({ body });
 });
 
-meetings.patch("/:buildingId/meetings/:meetingId/minutes", requireBuilding("syndicus", "raad"), async (c) => {
+meetings.patch("/:buildingId/meetings/:meetingId/minutes", requireBuilding(), async (c) => {
   const b = c.get("building");
+  await managedMeeting(c);
   const { body } = z.object({ body: z.string().max(200000) }).parse(await c.req.json());
   const m = await c.env.DB.prepare("SELECT minutes_status FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
   if (!m) throw new HttpError(404, "Vergadering niet gevonden");
@@ -239,10 +263,9 @@ meetings.patch("/:buildingId/meetings/:meetingId/minutes", requireBuilding("synd
 });
 
 /** Notulen definitief maken: document in Documenten (Verslagen AV), koppelen, verzenden aan alle stemgerechtigden (art. 3.87 §12: binnen 30 dagen). */
-meetings.post("/:buildingId/meetings/:meetingId/minutes/finalize", requireBuilding("syndicus"), async (c) => {
+meetings.post("/:buildingId/meetings/:meetingId/minutes/finalize", requireBuilding(), async (c) => {
   const b = c.get("building"); const user = c.get("user");
-  const m = await c.env.DB.prepare("SELECT * FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
-  if (!m) throw new HttpError(404, "Vergadering niet gevonden");
+  const m = await managedMeeting(c, { finalize: true });
   if (m.minutes_status !== "draft" || !m.minutes_body) throw new HttpError(400, "Maak eerst een ontwerp van de notulen");
   const html = renderMinutesHtml(`Notulen ${m.title}`, b.name, m.minutes_body);
   const docId = uid();
@@ -268,15 +291,18 @@ async function requestWithProgress(env: AppEnv["Bindings"], buildingId: string, 
 }
 meetings.get("/:buildingId/meeting-requests", requireBuilding(), async (c) => {
   const b = c.get("building");
+  const present = await hasSyndicus(c.env, b.id);
+  const right = isBoard(b.role) ? null : await ownerConveneRight(c.env, b, c.get("user").id);
   const rows = (await c.env.DB.prepare("SELECT r.*, u.name AS created_by_name, ru.name AS resolved_by_name, m.title AS meeting_title, m.starts_at AS meeting_starts_at, ai.status AS agenda_status FROM meeting_requests r JOIN users u ON u.id = r.created_by LEFT JOIN users ru ON ru.id = r.resolved_by LEFT JOIN meetings m ON m.id = r.fulfilled_meeting_id LEFT JOIN agenda_items ai ON ai.id = r.agenda_item_id WHERE r.building_id = ? ORDER BY r.created_at DESC").bind(b.id).all()).results as any[];
-  return c.json(await Promise.all(rows.map((r) => requestWithProgress(c.env, b.id, r))));
+  const list = await Promise.all(rows.map((r) => requestWithProgress(c.env, b.id, r)));
+  return c.json(list.map((r) => ({ ...r, can_convene: !!right && (right.request_id === r.id || (right.basis === "no_syndicus" && r.status === "threshold_reached")), convene_basis: right?.text ?? null, syndicus_present: present })));
 });
 meetings.post("/:buildingId/meeting-requests", requireBuilding(), async (c) => {
   const b = c.get("building"); const user = c.get("user");
   if (!isCoOwner(b)) throw new HttpError(403, "Enkel mede-eigenaars kunnen een vergadering vragen");
-  const { subject, body } = z.object({ subject: z.string().min(3).max(200), body: z.string().max(5000).optional() }).parse(await c.req.json());
+  const { subject, body, purpose } = z.object({ subject: z.string().min(3).max(200), body: z.string().max(5000).optional(), purpose: z.enum(["general", "appoint_syndicus"]).default("general") }).parse(await c.req.json());
   const id = uid();
-  await c.env.DB.batch([c.env.DB.prepare("INSERT INTO meeting_requests (id, building_id, subject, body, created_by) VALUES (?,?,?,?,?)").bind(id, b.id, subject, body ?? null, user.id), c.env.DB.prepare("INSERT INTO meeting_request_signatures (request_id, user_id) VALUES (?,?)").bind(id, user.id)]);
+  await c.env.DB.batch([c.env.DB.prepare("INSERT INTO meeting_requests (id, building_id, subject, body, created_by, purpose) VALUES (?,?,?,?,?,?)").bind(id, b.id, subject, body ?? null, user.id, purpose), c.env.DB.prepare("INSERT INTO meeting_request_signatures (request_id, user_id) VALUES (?,?)").bind(id, user.id)]);
   await notifyBuilding(c.env, { buildingId: b.id, type: "meeting_request", title: `Verzoek tot algemene vergadering: ${subject}`, body: `${user.name} vraagt een AV. Onderteken mee als je het verzoek steunt; vanaf 1/5 van de aandelen moet de syndicus binnen 30 dagen bijeenroepen.`, link: `/b/${b.id}/meetings`, roles: ["eigenaar", "raad", "commissaris"], excludeUserId: user.id, email: false });
   return c.json({ id }, 201);
 });
@@ -288,7 +314,9 @@ meetings.post("/:buildingId/meeting-requests/:id/sign", requireBuilding(), async
   await c.env.DB.prepare("INSERT OR IGNORE INTO meeting_request_signatures (request_id, user_id) VALUES (?,?)").bind(req.id, user.id).run();
   const p = await requestWithProgress(c.env, b.id, req);
   if (p.reached && req.status === "collecting") {
-    const deadline = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10);
+    // bij gebreke van een syndicus is er geen termijn van 30 dagen: de ondertekenaars mogen meteen bijeenroepen (art. 3.87 §2, lid 4)
+    const immediate = req.purpose === "appoint_syndicus" && !(await hasSyndicus(c.env, b.id));
+    const deadline = new Date(Date.now() + (immediate ? 0 : 30 * 86400_000)).toISOString().slice(0, 10);
     await c.env.DB.prepare("UPDATE meeting_requests SET status = 'threshold_reached', threshold_reached_at = ?, deadline = ? WHERE id = ?").bind(new Date().toISOString(), deadline, req.id).run();
     await notifyBuilding(c.env, { buildingId: b.id, type: "meeting_request", title: `Verplichte bijeenroeping: ${req.subject}`, body: `Mede-eigenaars met ${p.shares}/${p.total_shares} aandelen (≥ 1/5) vragen een AV. De syndicus moet de bijeenroeping versturen vóór ${deadline} (art. 3.87 §2 BW).`, link: `/b/${b.id}/meetings`, roles: ["syndicus", "raad"] });
   }

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { isBoard, isCoOwner, requireAuth, requireBuilding } from "../lib/auth";
+import { canManageMeeting } from "../lib/governance";
 import { HttpError, now, patchOf, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 
@@ -48,7 +49,8 @@ agenda.post("/:buildingId/agenda", requireBuilding(), async (c) => {
   if (!isCoOwner(b) && !["syndicus", "raad"].includes(b.role)) throw new HttpError(403, "Enkel mede-eigenaars kunnen agendapunten indienen; de syndicus en de raad agenderen zelf");
   const body = itemSchema.parse(await c.req.json());
   const id = uid();
-  const scheduled = !!body.meeting_id && isBoard(b.role);
+  const targetMeeting = body.meeting_id ? await c.env.DB.prepare("SELECT convened_by_owners, created_by FROM meetings WHERE id = ? AND building_id = ?").bind(body.meeting_id, b.id).first<any>() : null;
+  const scheduled = !!body.meeting_id && (isBoard(b.role) || (!!targetMeeting && canManageMeeting(b, user.id, targetMeeting)));
   await c.env.DB.prepare("INSERT INTO agenda_items (id, building_id, meeting_id, submitted_by, title, description, required_majority, status) VALUES (?,?,?,?,?,?,?,?)")
     .bind(id, b.id, scheduled ? body.meeting_id : null, user.id, body.title, body.description ?? null, body.required_majority, scheduled ? "scheduled" : "proposed").run();
   await audit(c.env, b.id, user.id, "agenda.propose", "agenda_item", id, { title: body.title });
@@ -66,7 +68,11 @@ agenda.patch("/:buildingId/agenda/:itemId", requireBuilding(), async (c) => {
     decision: z.string().max(5000).nullable().optional(),
   }), await c.req.json());
   const isAuthor = item.submitted_by === user.id;
-  if (!isBoard(b.role)) {
+  // wie een vergadering wettig zelf bijeenriep, beheert ook haar agenda
+  const targetId = body.meeting_id ?? item.meeting_id;
+  const target = targetId ? await c.env.DB.prepare("SELECT convened_by_owners, created_by FROM meetings WHERE id = ? AND building_id = ?").bind(targetId, b.id).first<any>() : null;
+  const managesTarget = !!target && canManageMeeting(b, user.id, target);
+  if (!isBoard(b.role) && !managesTarget) {
     // indiener mag enkel eigen, nog niet geagendeerd punt aanpassen of intrekken
     if (!isAuthor || item.status !== "proposed") throw new HttpError(403, "Geen rechten");
     if (body.status && body.status !== "withdrawn") throw new HttpError(403, "Je kan enkel intrekken");
@@ -87,10 +93,14 @@ agenda.delete("/:buildingId/agenda/:itemId", requireBuilding("syndicus", "raad")
 });
 
 /** Maakt een stemming aan vanuit een agendapunt en koppelt ze. */
-agenda.post("/:buildingId/agenda/:itemId/poll", requireBuilding("syndicus", "raad"), async (c) => {
+agenda.post("/:buildingId/agenda/:itemId/poll", requireBuilding(), async (c) => {
   const b = c.get("building"); const user = c.get("user");
   const item = await c.env.DB.prepare("SELECT * FROM agenda_items WHERE id = ? AND building_id = ?").bind(c.req.param("itemId"), b.id).first<any>();
   if (!item) throw new HttpError(404, "Agendapunt niet gevonden");
+  if (!isBoard(b.role)) {
+    const mt = item.meeting_id ? await c.env.DB.prepare("SELECT convened_by_owners, created_by FROM meetings WHERE id = ?").bind(item.meeting_id).first<any>() : null;
+    if (!mt || !canManageMeeting(b, user.id, mt)) throw new HttpError(403, "Onvoldoende rechten");
+  }
   if (item.poll_id) throw new HttpError(400, "Er is al een stemming gekoppeld");
   const body = z.object({ options: z.array(z.string().min(1)).min(2).default(["Voor", "Tegen", "Onthouding"]), closes_at: z.string().datetime().nullable().optional(), anonymous: z.boolean().default(false), status: z.enum(["draft", "open"]).default("open"), document_ids: z.array(z.string()).max(20).default([]) }).parse(await c.req.json().catch(() => ({})));
   const pollId = uid();

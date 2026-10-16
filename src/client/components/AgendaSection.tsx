@@ -53,8 +53,8 @@ export function AgendaSection({ meetings }: { meetings: { id: string; title: str
 }
 
 /** Agenda van één vergadering (geagendeerde punten, volgorde, stemming, beslissing). */
-export function MeetingAgenda({ meetingId, meetingStartsAt }: { meetingId: string; meetingStartsAt?: string }) {
-  const b = useBuilding();
+export function MeetingAgenda({ meetingId, meetingStartsAt, canManage }: { meetingId: string; meetingStartsAt?: string; canManage?: boolean }) {
+  const b0 = useBuilding(); const b = { ...b0, isBoard: b0.isBoard || !!canManage };
   const { data, reload } = useFetch<{ items: AgendaItem[] }>(`/api/buildings/${b.id}/agenda?meeting=${meetingId}`);
   const [pollFor, setPollFor] = useState<AgendaItem | null>(null);
   const [decide, setDecide] = useState<AgendaItem | null>(null); const [voteFor, setVoteFor] = useState<AgendaItem | null>(null);

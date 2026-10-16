@@ -35,7 +35,7 @@ export const MAJORITY_LABELS: Record<Majority, string> = {
 };
 
 export interface User { id: string; email: string; name: string; phone?: string | null; locale: string; is_superadmin: number; created_at: string }
-export interface Building { id: string; org_id: string; name: string; address: string; city?: string | null; postal_code?: string | null; enterprise_number?: string | null; total_shares: number; role?: Role; org_name?: string; units?: number }
+export interface Building { id: string; org_id: string; name: string; address: string; city?: string | null; postal_code?: string | null; enterprise_number?: string | null; total_shares: number; role?: Role; org_name?: string; units?: number; acting?: number }
 export interface Unit { id: string; building_id: string; label: string; type: string; floor?: string | null; shares: number; owners?: { user_id: string; name: string; email: string; share_pct: number }[] }
 export interface Member { user_id: string; name: string; email: string; phone?: string | null; role: Role; joined_at: string; units?: string; ecomm_consent_at?: string | null; ecomm_consent_via?: string | null }
 export interface Folder { id: string; parent_id: string | null; name: string; visibility: string }
@@ -46,9 +46,10 @@ export interface PollOption { id: string; label: string; position: number; votes
 export interface Poll { id: string; title: string; description?: string | null; weighted: number; anonymous: number; multiple: number; owners_only: number; required_majority: Majority; opens_at: string; closes_at?: string | null; status: string; created_by: string; created_by_name?: string; created_at: string; options?: PollOption[]; my_votes?: string[]; total_weight?: number; total_voters?: number; eligible_weight?: number; eligible_voters?: number; documents?: PollDocument[] }
 export interface PollDocument { id: string; name: string; category: string; size: number; mime: string }
 export interface Meeting { id: string; title: string; type: string; starts_at: string; location?: string | null; agenda?: string | null; minutes_document_id?: string | null; rsvp_counts?: { attending: number; proxy: number; absent: number }; my_rsvp?: string | null }
-export type Organ = "syndicus" | "raad" | "commissaris";
-export const ORGAN_LABELS: Record<Organ, string> = { syndicus: "Syndicus", raad: "Raad van mede-eigendom", commissaris: "Commissaris van de rekeningen" };
+export type Organ = "syndicus" | "raad" | "commissaris" | "voorlopig_syndicus";
+export const ORGAN_LABELS: Record<Organ, string> = { syndicus: "Syndicus", raad: "Raad van mede-eigendom", commissaris: "Commissaris van de rekeningen", voorlopig_syndicus: "Voorlopig syndicus" };
+export const MANDATE_BASIS_LABELS: Record<string, string> = { av: "Toegevoegd door de AV (art. 3.89 §7)", rechter: "Aangewezen door de rechter (art. 3.89 §8)", delegatie: "Bevoegdheidsoverdracht met toestemming van de AV (art. 3.89 §6)" };
 export interface AgendaItem { id: string; meeting_id: string | null; submitted_by: string; submitted_by_name: string; title: string; description?: string | null; required_majority: Majority; status: "proposed" | "scheduled" | "decided" | "deferred" | "withdrawn"; position: number; poll_id?: string | null; poll_status?: string | null; decision?: string | null; meeting_title?: string | null; meeting_starts_at?: string | null; created_at: string }
-export interface Mandate { id: string; organ: Organ; user_id?: string | null; user_name?: string | null; user_email?: string | null; holder_name?: string | null; function_title?: string | null; start_date: string; end_date: string; appointed_by_meeting_id?: string | null; meeting_title?: string | null; notes?: string | null }
+export interface Mandate { id: string; organ: Organ; basis?: string | null; scope?: string | null; document_id?: string | null; user_id?: string | null; user_name?: string | null; user_email?: string | null; holder_name?: string | null; function_title?: string | null; start_date: string; end_date: string; appointed_by_meeting_id?: string | null; meeting_title?: string | null; notes?: string | null }
 export interface DocComment { id: string; document_id: string; author_id: string; author_name: string; author_role?: Role; body: string; kind: "remark" | "finding" | "approved"; created_at: string }
 export interface Notification { id: string; building_id?: string | null; type: string; title: string; body?: string | null; link?: string | null; read_at?: string | null; created_at: string }

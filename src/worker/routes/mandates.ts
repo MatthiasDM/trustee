@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
-import { requireAuth, requireBuilding } from "../lib/auth";
+import { isBoard, requireAuth, requireBuilding } from "../lib/auth";
+import { canRegisterSyndicus, hasSyndicus } from "../lib/governance";
 import { HttpError, patchOf, uid } from "../lib/util";
 import { audit } from "../lib/notify";
 
@@ -12,7 +13,9 @@ export const ORGAN_RULES = {
   syndicus: { label: "Syndicus", maxYears: 3, basis: "art. 3.89 §1 BW: mandaat max. 3 jaar, hernieuwbaar bij uitdrukkelijke AV-beslissing" },
   raad: { label: "Raad van mede-eigendom", maxYears: null, basis: "art. 3.90 BW: verplicht vanaf 20 kavels; enkel stemgerechtigde mede-eigenaars; jaarlijks verslag aan de AV" },
   commissaris: { label: "Commissaris van de rekeningen", maxYears: 1, basis: "art. 3.91 BW: jaarlijks door de AV aangewezen; controleert de rekeningen" },
+  voorlopig_syndicus: { label: "Voorlopig syndicus", maxYears: 3, basis: "art. 3.89 §7 BW (toegevoegd door de AV, voor welbepaalde duur of doeleinden), §8 (aangewezen door de rechter bij verhindering of in gebreke blijven) of §6 (bevoegdheidsoverdracht met toestemming van de AV)" },
 } as const;
+export const BASIS_LABELS: Record<string, string> = { av: "Toegevoegd door de AV (art. 3.89 §7)", rechter: "Aangewezen door de rechter (art. 3.89 §8)", delegatie: "Bevoegdheidsoverdracht met toestemming van de AV (art. 3.89 §6)" };
 
 mandates.get("/:buildingId/mandates", requireBuilding(), async (c) => {
   const b = c.get("building");
@@ -26,7 +29,10 @@ mandates.get("/:buildingId/mandates", requireBuilding(), async (c) => {
 });
 
 const schema = z.object({
-  organ: z.enum(["syndicus", "raad", "commissaris"]),
+  organ: z.enum(["syndicus", "raad", "commissaris", "voorlopig_syndicus"]),
+  basis: z.enum(["av", "rechter", "delegatie"]).nullable().optional(),
+  scope: z.string().max(2000).nullable().optional(),
+  document_id: z.string().nullable().optional(),
   user_id: z.string().nullable().optional(),
   holder_name: z.string().max(160).nullable().optional(),
   function_title: z.string().max(80).nullable().optional(),
@@ -39,6 +45,8 @@ const schema = z.object({
 function validate(body: z.infer<typeof schema>) {
   if (!body.user_id && !body.holder_name) throw new HttpError(400, "Kies een lid of vul een naam in");
   if (body.end_date <= body.start_date) throw new HttpError(400, "Einddatum moet na startdatum liggen");
+  if (body.organ === "voorlopig_syndicus" && !body.basis) throw new HttpError(400, "Kies de rechtsgrond: AV-beslissing (art. 3.89 §7), vonnis van de rechter (§8) of bevoegdheidsoverdracht (§6)");
+  if (body.organ === "voorlopig_syndicus" && !body.user_id) throw new HttpError(400, "Een voorlopig syndicus moet een lid van het platform zijn, anders kan hij niets uitvoeren");
   const max = ORGAN_RULES[body.organ].maxYears;
   if (max) {
     const limit = new Date(body.start_date); limit.setFullYear(limit.getFullYear() + max);
@@ -46,7 +54,14 @@ function validate(body: z.infer<typeof schema>) {
   }
 }
 
-mandates.post("/:buildingId/mandates", requireBuilding("syndicus", "raad"), async (c) => {
+mandates.post("/:buildingId/mandates", requireBuilding(), async (c) => {
+  // Organen registreren mandaten. Zonder syndicus mag ook de voorzitter van de laatste AV of een ondertekenaar van een bereikt
+  // verzoek "syndicus aanwijzen" de (voorlopig) syndicus registreren, zodat de VME nooit vastzit (art. 3.87 §2, lid 4 BW).
+  {
+    const b0 = c.get("building"); const u0 = c.get("user"); const peek = (await c.req.raw.clone().json().catch(() => ({}))) as { organ?: string };
+    const syndicusType = peek?.organ === "syndicus" || peek?.organ === "voorlopig_syndicus";
+    if (!isBoard(b0.role) && !(syndicusType && (await canRegisterSyndicus(c.env, b0, u0.id)))) throw new HttpError(403, "Onvoldoende rechten");
+  }
   const b = c.get("building");
   const body = schema.parse(await c.req.json());
   validate(body);
@@ -55,10 +70,10 @@ mandates.post("/:buildingId/mandates", requireBuilding("syndicus", "raad"), asyn
     if (m?.role === "huurder") throw new HttpError(400, "Enkel stemgerechtigde mede-eigenaars kunnen in de raad zetelen (art. 3.90 BW)");
   }
   const id = uid();
-  await c.env.DB.prepare("INSERT INTO mandates (id, building_id, organ, user_id, holder_name, function_title, start_date, end_date, appointed_by_meeting_id, notes) VALUES (?,?,?,?,?,?,?,?,?,?)")
-    .bind(id, b.id, body.organ, body.user_id ?? null, body.holder_name ?? null, body.function_title ?? null, body.start_date, body.end_date, body.appointed_by_meeting_id ?? null, body.notes ?? null).run();
+  await c.env.DB.prepare("INSERT INTO mandates (id, building_id, organ, user_id, holder_name, function_title, start_date, end_date, appointed_by_meeting_id, notes, basis, scope, document_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .bind(id, b.id, body.organ, body.user_id ?? null, body.holder_name ?? null, body.function_title ?? null, body.start_date, body.end_date, body.appointed_by_meeting_id ?? null, body.notes ?? null, body.basis ?? null, body.scope ?? null, body.document_id ?? null).run();
   // rol van het lid automatisch afstemmen op het mandaat
-  if (body.user_id && body.organ !== "syndicus") await c.env.DB.prepare("UPDATE building_members SET role = ? WHERE building_id = ? AND user_id = ? AND role IN ('eigenaar','raad','commissaris')").bind(body.organ, b.id, body.user_id).run();
+  if (body.user_id && body.organ !== "syndicus" && body.organ !== "voorlopig_syndicus") await c.env.DB.prepare("UPDATE building_members SET role = ? WHERE building_id = ? AND user_id = ? AND role IN ('eigenaar','raad','commissaris')").bind(body.organ, b.id, body.user_id).run();
   if (body.user_id && body.organ === "syndicus") await c.env.DB.prepare("INSERT INTO building_members (building_id, user_id, role) VALUES (?, ?, 'syndicus') ON CONFLICT(building_id, user_id) DO UPDATE SET role = 'syndicus'").bind(b.id, body.user_id).run();
   await audit(c.env, b.id, c.get("user").id, "mandate.create", "mandate", id, { organ: body.organ, end: body.end_date });
   return c.json({ id }, 201);
@@ -94,7 +109,9 @@ mandates.get("/:buildingId/organs", requireBuilding(), async (c) => {
   const byOrgan = (o: string) => active.filter((m) => m.organ === o).map((m) => ({ ...m, name: m.user_name ?? m.holder_name, expiring: m.end_date <= soon }));
   return c.json({
     av: { next: nextAv, last: lastAv, proposed_items: proposed?.n ?? 0, period_start: info?.av_period_start ?? null },
-    syndicus: byOrgan("syndicus"), raad: byOrgan("raad"), commissaris: byOrgan("commissaris"),
+    syndicus: [...byOrgan("syndicus"), ...byOrgan("voorlopig_syndicus").map((m) => ({ ...m, name: `${m.name} (voorlopig syndicus${m.basis ? `, ${m.basis === "rechter" ? "door de rechter" : m.basis === "av" ? "door de AV" : "bevoegdheidsoverdracht"}` : ""})` }))],
+    raad: byOrgan("raad"), commissaris: byOrgan("commissaris"),
+    syndicus_present: await hasSyndicus(c.env, b.id),
     raad_required: (units?.n ?? 0) >= 20,
     warnings: [
       ...(byOrgan("syndicus").length === 0 ? ["Geen actief syndicusmandaat geregistreerd (art. 3.89 BW)."] : []),

@@ -67,7 +67,7 @@ export function AppShell() {
           {buildings.map((b) => <DropdownMenuItem key={b.id} onClick={() => nav(`/b/${b.id}`)}><Building2 className="text-muted-foreground" /><span className="truncate">{b.name}</span></DropdownMenuItem>)}
           <DropdownMenuSeparator /><DropdownMenuItem onClick={() => nav("/")}>{t("Alle gebouwen")}</DropdownMenuItem></DropdownMenuContent>
       </DropdownMenu>
-      <div className="mt-2 px-1"><RoleBadge role={current.role} /></div>
+      <div className="mt-2 flex flex-wrap items-center gap-1 px-1"><RoleBadge role={current.role} />{!!current.acting && <span className="text-[11px] text-muted-foreground" title="Actief mandaat als (voorlopig) syndicus">voorlopig</span>}</div>
     </div>}
     <div className="flex-1 overflow-y-auto px-3 py-2">
       <div className="mb-1 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{current ? t("Jouw VME") : t("Navigatie")}</div>

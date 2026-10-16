@@ -105,6 +105,12 @@ Wat je **niet** alleen kan: de syndicus opdrachten geven buiten de AV om, AV-bes
 
 Huurders en andere bewoners zijn geen lid van de VME en stemmen niet, maar mogen vóór de AV schriftelijk vragen of opmerkingen over de gemene delen indienen; in Trustee doe je dat via *Vragen & meldingen*.
 
+## Als de syndicus wegvalt
+
+- **Voorlopig syndicus.** Is de syndicus langdurig ziek, afwezig of blijft hij in gebreke, dan kan de AV hem een voorlopig syndicus toevoegen (art. 3.89 §7), kan elke mede-eigenaar de vrederechter er een laten aanwijzen (§8), of kan de syndicus met toestemming van de AV bevoegdheden tijdelijk overdragen (§6). Registreer dat onder *Mede-eigenaars & organen › Mandaten* als mandaat *Voorlopig syndicus*, met de rechtsgrond, het doel en het vonnis of de notulen als bewijsstuk. De houder krijgt meteen de rechten van de syndicus, precies zolang het mandaat loopt.
+- **De syndicus roept niet op.** Zodra een 1/5-verzoek de drempel haalt, heeft de syndicus 30 dagen. Verstrijkt die termijn, dan verschijnt bij het verzoek de knop *Zelf bijeenroepen* voor elke ondertekenaar (art. 3.87 §2, lid 3). Die vergadering beheer je dan zelf: agenda, oproeping met termijncontrole, aanwezigheden en volmachten, stemmingen registreren en notulen definitief maken. Het onderwerp van het verzoek staat automatisch op de agenda.
+- **Er is geen syndicus.** Start een verzoek met als doel *syndicus aanwijzen*. Zodra 1/5 bereikt is, mag een ondertekenaar meteen bijeenroepen; het punt *Aanwijzing van een syndicus* komt automatisch op de agenda (art. 3.87 §2, lid 4). Raadsleden en de voorzitter van de laatste AV mogen in dat geval ook zonder verzoek bijeenroepen en mogen nadien het mandaat van de nieuwe (voorlopige) syndicus registreren, zodat de VME nooit vastzit. De organenkaart op het overzicht toont de waarschuwing *Geen syndicus* met deze volgorde.
+
 ## Demo proberen
 
 Op omgevingen waar de demo-modus aanstaat (zoals de preview) kan iedereen via *Probeer de demo* op het aanmeldscherm, of rechtstreeks op `/demo`, met één klik een volledig ingevuld demogebouw aanmaken: vijf kavels, vijf gebruikers (syndicus, raad, twee mede-eigenaars, huurder), een geplande AV, een stemming, meldingen, documentenmappen en een jaar boekhouding. Je start als syndicus; met de balk onderaan wissel je met één klik van gebruiker om te zien wat elke rol kan en mag. Alle gegevens zijn fictief en het gebouw wordt met gebruikers en bestanden verwijderd na 24 uur zonder activiteit (of meteen via *Beëindigen*).

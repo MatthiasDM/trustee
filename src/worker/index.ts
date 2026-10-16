@@ -46,6 +46,8 @@ app.route("/api/orgs", orgs);
 app.route("/api/demo", demo);
 
 app.post("/api/admin/run-cron", async (c) => { if (c.env.TEST_MODE !== "1") return c.json({ error: "Niet gevonden" }, 404); return c.json(await runCron(c.env, "test")); });
+/** Testomgeving: de termijn van 30 dagen van een 1/5-verzoek laten verstrijken. */
+app.post("/api/admin/age-request/:id", async (c) => { if (c.env.TEST_MODE !== "1") return c.json({ error: "Niet gevonden" }, 404); await c.env.DB.prepare("UPDATE meeting_requests SET deadline = date('now','-1 day'), threshold_reached_at = datetime('now','-31 days') WHERE id = ?").bind(c.req.param("id")).run(); return c.json({ ok: true }); });
 /** Testomgeving: wist de aanvaardingen van de aangemelde gebruiker, om de aanvaardingsdialoog bij een nieuwe versie te testen. */
 app.post("/api/admin/reset-consents", async (c) => { if (c.env.TEST_MODE !== "1") return c.json({ error: "Niet gevonden" }, 404); const u = await loadUser(c); if (!u) return c.json({ error: "Niet aangemeld" }, 401); await c.env.DB.prepare("DELETE FROM consents WHERE user_id = ?").bind(u.id).run(); return c.json({ ok: true }); });
 

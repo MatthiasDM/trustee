@@ -10,7 +10,8 @@ import { Badge } from "./ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { api, fmtDate } from "../lib/api";
-import { ORGAN_LABELS, type Mandate, type Member, type Organ } from "../../shared/types";
+import { MANDATE_BASIS_LABELS, ORGAN_LABELS, type Mandate, type Member, type Organ } from "../../shared/types";
+import { DocumentPicker } from "../ledger/DocumentPicker";
 
 const NONE = "__none__";
 
@@ -38,13 +39,19 @@ export function MandatesTab({ members, meetings }: { members: Member[]; meetings
 
 function MandateForm({ mandate, members, meetings, onDone }: { mandate: Mandate | null; members: Member[]; meetings: { id: string; title: string; starts_at: string }[]; onDone: () => void }) {
   const b = useBuilding();
-  const [f, setF] = useState({ organ: mandate?.organ ?? "commissaris", user_id: mandate?.user_id ?? "", holder_name: mandate?.holder_name ?? "", function_title: mandate?.function_title ?? "", start_date: mandate?.start_date ?? new Date().toISOString().slice(0, 10), end_date: mandate?.end_date ?? "", appointed_by_meeting_id: mandate?.appointed_by_meeting_id ?? "", notes: mandate?.notes ?? "" });
+  const [f, setF] = useState({ organ: mandate?.organ ?? "commissaris", basis: mandate?.basis ?? "", scope: mandate?.scope ?? "", document_id: mandate?.document_id ?? "", user_id: mandate?.user_id ?? "", holder_name: mandate?.holder_name ?? "", function_title: mandate?.function_title ?? "", start_date: mandate?.start_date ?? new Date().toISOString().slice(0, 10), end_date: mandate?.end_date ?? "", appointed_by_meeting_id: mandate?.appointed_by_meeting_id ?? "", notes: mandate?.notes ?? "" });
   const [error, setError] = useState<unknown>(null);
   const eligible = members.filter((m) => f.organ === "raad" ? m.role !== "huurder" : true);
-  return <form className="grid gap-4" onSubmit={async (e: FormEvent) => { e.preventDefault(); setError(null); const body = { ...f, user_id: f.user_id || null, holder_name: f.holder_name || null, function_title: f.function_title || null, appointed_by_meeting_id: f.appointed_by_meeting_id || null, notes: f.notes || null }; try { if (mandate) await api.patch(`/api/buildings/${b.id}/mandates/${mandate.id}`, body); else await api.post(`/api/buildings/${b.id}/mandates`, body); onDone(); } catch (err) { setError(err); } }}>
+  return <form className="grid gap-4" onSubmit={async (e: FormEvent) => { e.preventDefault(); setError(null); const body = { ...f, basis: f.basis || null, scope: f.scope || null, document_id: f.document_id || null, user_id: f.user_id || null, holder_name: f.holder_name || null, function_title: f.function_title || null, appointed_by_meeting_id: f.appointed_by_meeting_id || null, notes: f.notes || null }; try { if (mandate) await api.patch(`/api/buildings/${b.id}/mandates/${mandate.id}`, body); else await api.post(`/api/buildings/${b.id}/mandates`, body); onDone(); } catch (err) { setError(err); } }}>
     <Field label="Orgaan"><Select value={f.organ} onValueChange={(v) => setF({ ...f, organ: v as Organ })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(ORGAN_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select></Field>
     <Field label="Lid van het platform" hint={f.organ === "raad" ? "Enkel stemgerechtigde mede-eigenaars (art. 3.90 BW)." : "Laat leeg voor een externe (bv. accountant of syndicuskantoor) en vul hieronder de naam in."}><Select value={f.user_id || NONE} onValueChange={(v) => setF({ ...f, user_id: v === NONE ? "" : v })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={NONE}>— extern / geen account —</SelectItem>{eligible.map((m) => <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>)}</SelectContent></Select></Field>
-    {!f.user_id && <Field label="Naam (extern)"><Input value={f.holder_name} onChange={(e) => setF({ ...f, holder_name: e.target.value })} placeholder="bv. Accountantskantoor Dewulf" /></Field>}
+    {f.organ === "voorlopig_syndicus" && <>
+      <p className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">Een voorlopig syndicus krijgt in Trustee de rechten van de syndicus zolang het mandaat loopt (art. 3.89 §6-§8 BW). Registreer de rechtsgrond en koppel het vonnis, de notulen of de akte als bewijs.</p>
+      <Field label="Rechtsgrond"><Select value={f.basis || NONE} onValueChange={(v) => setF({ ...f, basis: v === NONE ? "" : v })}><SelectTrigger className="w-full"><SelectValue placeholder="Kies…" /></SelectTrigger><SelectContent><SelectItem value={NONE}>— kies —</SelectItem>{Object.entries(MANDATE_BASIS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select></Field>
+      <Field label="Doel of beperking (optioneel)" hint="Bv. enkel het dagelijks beheer tot de volgende AV, of enkel de dakrenovatie afhandelen."><Textarea value={f.scope} onChange={(e) => setF({ ...f, scope: e.target.value })} /></Field>
+      <Field label="Bewijsstuk (vonnis, notulen of akte)"><DocumentPicker value={f.document_id} onChange={(id) => setF({ ...f, document_id: id })} suggestedName="Aanwijzing voorlopig syndicus" /></Field>
+    </>}
+    {!f.user_id && f.organ !== "voorlopig_syndicus" && <Field label="Naam (extern)"><Input value={f.holder_name} onChange={(e) => setF({ ...f, holder_name: e.target.value })} placeholder="bv. Accountantskantoor Dewulf" /></Field>}
     <Field label="Functie (optioneel)"><Input value={f.function_title} onChange={(e) => setF({ ...f, function_title: e.target.value })} placeholder="bv. Voorzitter raad" /></Field>
     <div className="grid grid-cols-2 gap-3"><Field label="Start"><Input type="date" required value={f.start_date} onChange={(e) => setF({ ...f, start_date: e.target.value })} /></Field><Field label="Einde"><Input type="date" required value={f.end_date} onChange={(e) => setF({ ...f, end_date: e.target.value })} /></Field></div>
     <Field label="Benoemd op (AV)"><Select value={f.appointed_by_meeting_id || NONE} onValueChange={(v) => setF({ ...f, appointed_by_meeting_id: v === NONE ? "" : v })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={NONE}>— niet gekoppeld —</SelectItem>{meetings.map((m) => <SelectItem key={m.id} value={m.id}>{m.title} · {fmtDate(m.starts_at)}</SelectItem>)}</SelectContent></Select></Field>

@@ -153,6 +153,8 @@ polls.post("/:buildingId/polls/:pollId/vote", requireBuilding(), async (c) => {
   if (!poll) throw new HttpError(404, "Stemming niet gevonden");
   if (poll.status !== "open" || (poll.closes_at && poll.closes_at < now())) throw new HttpError(400, "Deze stemming is gesloten");
   if (poll.owners_only && !isCoOwner(b)) throw new HttpError(403, "Enkel mede-eigenaars mogen stemmen");
+  const linked = await c.env.DB.prepare("SELECT conflict_user_ids FROM agenda_items WHERE poll_id = ? AND building_id = ?").bind(poll.id, b.id).first<{ conflict_user_ids: string | null }>();
+  if (linked?.conflict_user_ids && (JSON.parse(linked.conflict_user_ids) as string[]).includes(user.id)) throw new HttpError(403, "Je neemt niet deel aan deze stemming wegens belangenconflict (art. 3.87 §9 BW)");
   if (!poll.multiple && option_ids.length > 1) throw new HttpError(400, "Slechts één keuze toegestaan");
   const valid = (await c.env.DB.prepare("SELECT id FROM poll_options WHERE poll_id = ?").bind(poll.id).all<{ id: string }>()).results.map((o) => o.id);
   if (option_ids.some((o) => !valid.includes(o))) throw new HttpError(400, "Ongeldige optie");

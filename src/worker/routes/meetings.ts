@@ -5,7 +5,7 @@ import { requireAuth, requireBuilding } from "../lib/auth";
 import { HttpError, now, patchOf, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 import { isBoard, isCoOwner } from "../lib/auth";
-import { attendance, majorityReached, MAJ, renderMinutesHtml, validateProxy } from "../lib/meeting";
+import { attendance, MAJ, renderMinutesHtml, tally, validateProxy } from "../lib/meeting";
 import { canManageMeeting, hasSyndicus, ownerConveneRight } from "../lib/governance";
 import { suspendedFor, votingUnits, weightOf } from "../lib/voting";
 
@@ -217,20 +217,24 @@ meetings.post("/:buildingId/meetings/:meetingId/agenda/:itemId/vote", requireBui
   await managedMeeting(c);
   const item = await c.env.DB.prepare("SELECT * FROM agenda_items WHERE id = ? AND meeting_id = ? AND building_id = ?").bind(c.req.param("itemId"), c.req.param("meetingId"), b.id).first<any>();
   if (!item) throw new HttpError(404, "Agendapunt niet gevonden op deze vergadering");
-  const { votes, decision } = z.object({ votes: z.array(z.object({ unit_id: z.string(), choice: z.enum(["for", "against", "abstain", "absent"]) })), decision: z.string().max(3000).optional() }).parse(await c.req.json());
-  const vunits = await votingUnits(c.env, b.id);
-  const blocked = votes.filter((v) => v.choice !== "absent" && vunits.find((u) => u.unit_id === v.unit_id)?.suspended);
-  if (blocked.length) throw new HttpError(400, `Kavel ${blocked.map((v) => vunits.find((u) => u.unit_id === v.unit_id)!.label).join(", ")}: deelnamerecht geschorst, er is geen lasthebber aangewezen (art. 3.87 §1, lid 2 BW). Registreer als afwezig.`);
-  const units = vunits.map((u) => ({ id: u.unit_id, label: u.label, shares: u.shares, owners: u.owners.length ? (u.split ? `${u.voter_name} (lasthebber voor ${u.owners.map((o) => o.name).join(", ")})` : u.owners.map((o) => o.name).join(", ")) : null }));
-  const eligible = units.filter((u) => u.owners).reduce((s, u) => s + u.shares, 0);
-  let vf = 0, va = 0, vab = 0, nf = 0, na = 0, nab = 0; const dissenters: string[] = [];
-  for (const v of votes) { const u = units.find((x) => x.id === v.unit_id); if (!u) continue; if (v.choice === "for") { vf += u.shares; nf++; } else if (v.choice === "against") { va += u.shares; na++; if (u.owners) dissenters.push(`${u.owners} (kavel ${u.label})`); } else if (v.choice === "abstain") { vab += u.shares; nab++; } }
-  const res = majorityReached(item.required_majority, vf, va, eligible);
-  const text = decision ?? `${res.reached ? "Goedgekeurd" : "Verworpen"} met ${vf} aandelen vóór, ${va} tegen en ${vab} onthoudingen (${MAJ[item.required_majority]?.label ?? item.required_majority}${item.required_majority !== "none" && item.required_majority !== "unanimous" ? `, ${(res.pct * 100).toFixed(1)} % van de uitgebrachte stemmen` : ""}).`;
-  await c.env.DB.prepare("UPDATE agenda_items SET votes_for = ?, votes_against = ?, votes_abstain = ?, voters_for = ?, voters_against = ?, voters_abstain = ?, dissenters = ?, vote_detail = ?, voted_at = ?, status = 'decided', decision = ?, updated_at = ? WHERE id = ?")
-    .bind(vf, va, vab, nf, na, nab, JSON.stringify(dissenters), JSON.stringify(votes), new Date().toISOString(), text, new Date().toISOString(), item.id).run();
-  await audit(c.env, b.id, user.id, "agenda.vote", "agenda_item", item.id, { for: vf, against: va, abstain: vab, reached: res.reached });
-  return c.json({ ok: true, reached: res.reached, pct: res.pct, decision: text, dissenters });
+  const { votes, decision, dry_run } = z.object({ votes: z.array(z.object({ unit_id: z.string(), choice: z.enum(["for", "against", "abstain", "absent"]) })), decision: z.string().max(3000).optional(), dry_run: z.boolean().default(false) }).parse(await c.req.json());
+  const att = await attendance(c.env, b.id, c.req.param("meetingId"));
+  const conflictIds: string[] = item.conflict_user_ids ? JSON.parse(item.conflict_user_ids) : [];
+  const ids = [...new Set([...att.rows.flatMap((r) => [r.voter_id, r.holder_id]), ...conflictIds].filter(Boolean) as string[])];
+  const names: Record<string, string> = {};
+  if (ids.length) for (const r of (await c.env.DB.prepare(`SELECT id, name FROM users WHERE id IN (${ids.map(() => "?").join(",")})`).bind(...ids).all<{ id: string; name: string }>()).results) names[r.id] = r.name;
+  const t = tally(att.rows, votes, item.required_majority, conflictIds, names);
+  if (t.invalid.length && !dry_run) throw new HttpError(400, `Kavel ${t.invalid.map((x) => x.label).join(", ")}: deelnamerecht geschorst, er is geen lasthebber aangewezen (art. 3.87 §1, lid 2 BW). Registreer als afwezig.`);
+  const notes: string[] = [];
+  if (t.capped.length) notes.push(`Stemplafond toegepast (art. 3.87 §8 BW): ${t.capped.map((x) => `${x.name} telde voor ${x.counted} in plaats van ${x.had} aandelen`).join("; ")}.`);
+  if (t.excluded.length) notes.push(`Niet deelgenomen wegens belangenconflict (art. 3.87 §9 BW)${item.conflict_reason ? ` — ${item.conflict_reason}` : ""}: kavel ${t.excluded.map((x) => `${x.label} (${x.name})`).join(", ")}.`);
+  const fmt = (x: number) => String(Math.round(x * 100) / 100);
+  const text = decision ?? [`${t.reached ? "Goedgekeurd" : "Verworpen"} met ${fmt(t.votes_for)} aandelen vóór, ${fmt(t.votes_against)} tegen en ${fmt(t.votes_abstain)} onthoudingen (${MAJ[item.required_majority]?.label ?? item.required_majority}${item.required_majority !== "none" && item.required_majority !== "unanimous" ? `, ${(t.pct * 100).toFixed(1)} % van de uitgebrachte stemmen` : ""}).`, ...notes].join(" ");
+  if (dry_run) return c.json({ ...t, decision: text });
+  await c.env.DB.prepare("UPDATE agenda_items SET votes_for = ?, votes_against = ?, votes_abstain = ?, voters_for = ?, voters_against = ?, voters_abstain = ?, dissenters = ?, vote_detail = ?, vote_adjustments = ?, voted_at = ?, status = 'decided', decision = ?, updated_at = ? WHERE id = ?")
+    .bind(t.votes_for, t.votes_against, t.votes_abstain, t.voters_for, t.voters_against, t.voters_abstain, JSON.stringify(t.dissenters), JSON.stringify(votes), JSON.stringify({ capped: t.capped, excluded: t.excluded }), new Date().toISOString(), text, new Date().toISOString(), item.id).run();
+  await audit(c.env, b.id, user.id, "agenda.vote", "agenda_item", item.id, { for: t.votes_for, against: t.votes_against, abstain: t.votes_abstain, reached: t.reached, capped: t.capped.length, excluded: t.excluded.length });
+  return c.json({ ok: true, ...t, decision: text });
 });
 
 /** Ontwerp van de notulen genereren uit vergadering, aanwezigheid en agendapunten. */

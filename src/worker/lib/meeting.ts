@@ -67,6 +67,54 @@ export function majorityReached(required: string, votesFor: number, votesAgainst
   return { reached: cast > 0 && pct >= MAJ[required].frac - 1e-9, pct };
 }
 
+export interface TallyResult {
+  votes_for: number; votes_against: number; votes_abstain: number; voters_for: number; voters_against: number; voters_abstain: number;
+  eligible: number; reached: boolean; pct: number; dissenters: string[];
+  capped: { person_id: string; name: string; had: number; counted: number }[];
+  excluded: { unit_id: string; label: string; name: string }[];
+  invalid: { unit_id: string; label: string; reason: string }[];
+}
+
+/**
+ * Telt een stemming tijdens de AV per kavel, met
+ * - stemplafond (art. 3.87 §8, lid 2): niemand stemt, ook niet als lastgever of lasthebber, voor meer stemmen dan alle andere aanwezige of
+ *   vertegenwoordigde mede-eigenaars samen; het teveel wordt evenredig over zijn keuzes geschrapt;
+ * - belangenconflict (art. 3.87 §9): wie in conflictIds staat, neemt niet deel, persoonlijk noch bij volmacht: zijn eigen kavels en de kavels
+ *   waarvoor hij volmacht draagt tellen niet mee;
+ * - geschorste kavels (gesplitste eigendom zonder lasthebber) kunnen niet stemmen.
+ */
+export function tally(rows: AttendanceRow[], votes: { unit_id: string; choice: string }[], required: string, conflictIds: string[], names: Record<string, string>): TallyResult {
+  const conflict = new Set(conflictIds);
+  const invalid: TallyResult["invalid"] = []; const excluded: TallyResult["excluded"] = [];
+  type E = { person: string; shares: number; choice: string; row: AttendanceRow };
+  const entries: E[] = [];
+  for (const v of votes) {
+    const r = rows.find((x) => x.unit_id === v.unit_id); if (!r || !r.owner_ids.length) continue;
+    if (!["for", "against", "abstain"].includes(v.choice)) continue;
+    if (r.suspended) { invalid.push({ unit_id: r.unit_id, label: r.label, reason: "deelnamerecht geschorst, geen lasthebber (art. 3.87 §1, lid 2 BW)" }); continue; }
+    const acting = r.status === "proxy" && r.holder_id ? r.holder_id : r.voter_id;
+    const hit = [acting, r.voter_id].find((p) => p && conflict.has(p));
+    if (hit) { excluded.push({ unit_id: r.unit_id, label: r.label, name: names[hit] ?? hit }); continue; }
+    entries.push({ person: acting ?? `kavel:${r.unit_id}`, shares: r.shares, choice: v.choice, row: r });
+  }
+  const per = new Map<string, number>(); for (const e of entries) per.set(e.person, (per.get(e.person) ?? 0) + e.shares);
+  const total = [...per.values()].reduce((s, x) => s + x, 0);
+  const factor = new Map<string, number>(); const capped: TallyResult["capped"] = [];
+  for (const [p, t] of per) { const others = total - t; if (t > others && per.size > 1) { factor.set(p, others / t); capped.push({ person_id: p, name: names[p] ?? p, had: t, counted: Math.round(others * 100) / 100 }); } }
+  let vf = 0, va = 0, vab = 0, nf = 0, na = 0, nab = 0; const dissenters: string[] = [];
+  for (const e of entries) {
+    const w = e.shares * (factor.get(e.person) ?? 1);
+    if (e.choice === "for") { vf += w; nf++; } else if (e.choice === "against") { va += w; na++; dissenters.push(`${e.row.split ? `${e.row.voter_name} (lasthebber)` : e.row.owner_names} (kavel ${e.row.label})`); } else { vab += w; nab++; }
+  }
+  const r2 = (x: number) => Math.round(x * 100) / 100;
+  const eligibleRows = rows.filter((r) => r.owner_ids.length && !excluded.some((x) => x.unit_id === r.unit_id));
+  const eligible = eligibleRows.reduce((s, r) => s + r.shares, 0);
+  let res = majorityReached(required, vf, va, eligible);
+  // eenparigheid: elke niet-uitgesloten kavel stemde vóór (een stemplafond verandert daar niets aan)
+  if (required === "unanimous") res = { reached: eligibleRows.length > 0 && eligibleRows.every((r) => votes.find((v) => v.unit_id === r.unit_id)?.choice === "for"), pct: res.pct };
+  return { votes_for: r2(vf), votes_against: r2(va), votes_abstain: r2(vab), voters_for: nf, voters_against: na, voters_abstain: nab, eligible, reached: res.reached, pct: res.pct, dissenters, capped, excluded, invalid };
+}
+
 const esc = (s: string) => s.replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[ch]!));
 const nl = (s: string) => esc(s).replace(/\n/g, "<br>");
 

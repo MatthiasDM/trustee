@@ -7,6 +7,7 @@ import { audit, notifyBuilding } from "../lib/notify";
 import { isBoard, isCoOwner } from "../lib/auth";
 import { attendance, majorityReached, MAJ, renderMinutesHtml, validateProxy } from "../lib/meeting";
 import { canManageMeeting, hasSyndicus, ownerConveneRight } from "../lib/governance";
+import { suspendedFor, votingUnits, weightOf } from "../lib/voting";
 
 const meetings = new Hono<AppEnv>();
 meetings.use("*", requireAuth);
@@ -138,7 +139,11 @@ async function convenePreview(c: Context<AppEnv>, m: any) {
   const warnings: string[] = [];
   if (days < minDays) warnings.push(`De oproeping moet minstens ${minDays} dagen vóór de vergadering verstuurd worden (art. 3.87 §3 BW); er resten ${days} dagen. Verzet de vergadering, of roep enkel op bij hoogdringendheid.`);
   if (m.type !== "raad" && agenda === 0 && !m.agenda) warnings.push("De agenda is leeg: de oproeping moet de agenda bevatten (art. 3.87 §3 BW). Agendeer eerst de punten.");
-  const voters = recipients.filter((r) => r.role !== "huurder" && (r.units || r.role === "eigenaar" || r.role === "raad"));
+  const vunits = await votingUnits(c.env, b.id);
+  for (const r of recipients) { const sus = suspendedFor(vunits, r.user_id); if (sus.length && weightOf(vunits, r.user_id) <= 0) r.represented_by = sus.map((u) => u.voter_name ? `${u.voter_name} (lasthebber kavel ${u.label})` : `niemand: kavel ${u.label} geschorst`).join("; "); }
+  const suspendedUnits = vunits.filter((u) => u.suspended);
+  if (suspendedUnits.length) warnings.push(`Kavel ${suspendedUnits.map((u) => u.label).join(", ")}: gesplitste eigendom zonder lasthebber. Het deelnamerecht is geschorst tot de belanghebbenden schriftelijk een lasthebber aanwijzen (art. 3.87 §1, lid 2 BW); registreer die onder Kavels.`);
+  const voters = recipients.filter((r) => r.role !== "huurder" && !r.represented_by && (r.units || r.role === "eigenaar" || r.role === "raad"));
   const registered = voters.filter((r) => !r.ecomm_consent_at);
   if (registered.length) warnings.push(`${registered.length} stemgerechtigde(n) zonder akkoord voor elektronische oproeping: aan hen moet de oproeping per aangetekende brief worden verstuurd. Registreer hun schriftelijk akkoord onder Leden, of verstuur aangetekend.`);
   if (m.convened_at) warnings.push(`Al opgeroepen op ${m.convened_at.slice(0, 10)}. Opnieuw versturen stuurt een herinnering aan iedereen.`);
@@ -171,6 +176,10 @@ meetings.put("/:buildingId/meetings/:meetingId/rsvp", requireBuilding(), async (
   if (!m) throw new HttpError(404, "Vergadering niet gevonden");
   if (m.cancelled_at) throw new HttpError(400, "Deze vergadering is geannuleerd");
   if (!isCoOwner(b)) throw new HttpError(403, "Enkel mede-eigenaars melden hun aanwezigheid of geven een volmacht; de syndicus woont de AV ambtshalve bij");
+  {
+    const vunits = await votingUnits(c.env, b.id); const sus = suspendedFor(vunits, user.id);
+    if (sus.length && weightOf(vunits, user.id) <= 0) throw new HttpError(403, `Voor kavel ${sus.map((u) => u.label).join(", ")} neemt enkel de lasthebber deel aan de algemene vergadering${sus.some((u) => u.suspended) ? "; zolang die niet is aangewezen, is het deelnamerecht geschorst" : ` (${sus.map((u) => u.voter_name).join(", ")})`} (art. 3.87 §1, lid 2 BW)`);
+  }
   if (status === "proxy") { if (!proxy_user_id) throw new HttpError(400, "Kies wie je volmacht krijgt"); await validateProxy(c.env, b.id, c.req.param("meetingId"), user.id, proxy_user_id); }
   await c.env.DB.prepare("INSERT INTO meeting_rsvps (meeting_id, user_id, status, proxy_user_id, updated_at) VALUES (?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(meeting_id, user_id) DO UPDATE SET status = excluded.status, proxy_user_id = excluded.proxy_user_id, updated_at = excluded.updated_at")
     .bind(c.req.param("meetingId"), user.id, status, status === "proxy" ? proxy_user_id ?? null : null).run();
@@ -209,7 +218,10 @@ meetings.post("/:buildingId/meetings/:meetingId/agenda/:itemId/vote", requireBui
   const item = await c.env.DB.prepare("SELECT * FROM agenda_items WHERE id = ? AND meeting_id = ? AND building_id = ?").bind(c.req.param("itemId"), c.req.param("meetingId"), b.id).first<any>();
   if (!item) throw new HttpError(404, "Agendapunt niet gevonden op deze vergadering");
   const { votes, decision } = z.object({ votes: z.array(z.object({ unit_id: z.string(), choice: z.enum(["for", "against", "abstain", "absent"]) })), decision: z.string().max(3000).optional() }).parse(await c.req.json());
-  const units = (await c.env.DB.prepare("SELECT un.id, un.label, un.shares, (SELECT GROUP_CONCAT(u.name, ', ') FROM unit_owners uo JOIN users u ON u.id = uo.user_id WHERE uo.unit_id = un.id) AS owners FROM units un WHERE un.building_id = ?").bind(b.id).all()).results as any[];
+  const vunits = await votingUnits(c.env, b.id);
+  const blocked = votes.filter((v) => v.choice !== "absent" && vunits.find((u) => u.unit_id === v.unit_id)?.suspended);
+  if (blocked.length) throw new HttpError(400, `Kavel ${blocked.map((v) => vunits.find((u) => u.unit_id === v.unit_id)!.label).join(", ")}: deelnamerecht geschorst, er is geen lasthebber aangewezen (art. 3.87 §1, lid 2 BW). Registreer als afwezig.`);
+  const units = vunits.map((u) => ({ id: u.unit_id, label: u.label, shares: u.shares, owners: u.owners.length ? (u.split ? `${u.voter_name} (lasthebber voor ${u.owners.map((o) => o.name).join(", ")})` : u.owners.map((o) => o.name).join(", ")) : null }));
   const eligible = units.filter((u) => u.owners).reduce((s, u) => s + u.shares, 0);
   let vf = 0, va = 0, vab = 0, nf = 0, na = 0, nab = 0; const dissenters: string[] = [];
   for (const v of votes) { const u = units.find((x) => x.id === v.unit_id); if (!u) continue; if (v.choice === "for") { vf += u.shares; nf++; } else if (v.choice === "against") { va += u.shares; na++; if (u.owners) dissenters.push(`${u.owners} (kavel ${u.label})`); } else if (v.choice === "abstain") { vab += u.shares; nab++; } }
@@ -236,7 +248,7 @@ meetings.post("/:buildingId/meetings/:meetingId/minutes/generate", requireBuildi
   L.push(`Vereniging van mede-eigenaars ${b.name}`, `Datum: ${when}${m.location ? ` · Plaats: ${m.location}` : ""}${m.is_second_call ? " · Tweede bijeenroeping" : ""}`);
   L.push(`Voorzitter: ${m.chair_name ?? "…"} · Secretaris: ${m.secretary_name ?? "…"}`, "");
   L.push("## Aanwezigheid en quorum");
-  for (const r of a.rows) L.push(`- Kavel ${r.label} (${r.shares} aandelen) — ${r.owner_names || "geen eigenaar geregistreerd"}: ${r.status === "attending" ? "aanwezig" : r.status === "proxy" ? `vertegenwoordigd bij volmacht door ${r.holder_name}` : r.status === "absent" ? "afwezig" : "niet gemeld"}`);
+  for (const r of a.rows) L.push(`- Kavel ${r.label} (${r.shares} aandelen) — ${r.owner_names || "geen eigenaar geregistreerd"}: ${r.status === "attending" ? "aanwezig" : r.status === "proxy" ? `vertegenwoordigd bij volmacht door ${r.holder_name}` : r.status === "absent" ? "afwezig" : r.status === "suspended" ? "deelnamerecht geschorst (gesplitste eigendom zonder lasthebber, art. 3.87 §1, lid 2 BW)" : "niet gemeld"}`);
   L.push(`Aanwezig of vertegenwoordigd: ${a.quorum.present_owners} van ${a.quorum.total_owners} mede-eigenaars, ${a.quorum.present_shares} van ${a.quorum.total_shares} aandelen. ${a.quorum.explanation}`, "");
   L.push("## Agendapunten en beslissingen");
   items.forEach((it, i) => {
@@ -285,7 +297,8 @@ meetings.post("/:buildingId/meetings/:meetingId/minutes/finalize", requireBuildi
 // ---------- Verzoek tot AV door mede-eigenaars met minstens 1/5 van de aandelen (art. 3.87 §2) ----------
 async function requestWithProgress(env: AppEnv["Bindings"], buildingId: string, req: any) {
   const total = (await env.DB.prepare("SELECT COALESCE(SUM(shares),0) AS s FROM units WHERE building_id = ?").bind(buildingId).first<any>())?.s ?? 0;
-  const sigs = (await env.DB.prepare("SELECT s.user_id, s.signed_at, u.name, (SELECT COALESCE(SUM(un.shares * uo.share_pct / 100.0),0) FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = ? AND uo.user_id = s.user_id) AS shares FROM meeting_request_signatures s JOIN users u ON u.id = s.user_id WHERE s.request_id = ? ORDER BY s.signed_at").bind(buildingId, req.id).all()).results as any[];
+  const vunits = await votingUnits(env, buildingId);
+  const sigs = ((await env.DB.prepare("SELECT s.user_id, s.signed_at, u.name FROM meeting_request_signatures s JOIN users u ON u.id = s.user_id WHERE s.request_id = ? ORDER BY s.signed_at").bind(req.id).all()).results as any[]).map((x) => ({ ...x, shares: weightOf(vunits, x.user_id) }));
   const shares = Math.round(sigs.reduce((a, x) => a + x.shares, 0) * 100) / 100;
   return { ...req, signatures: sigs, shares, total_shares: total, needed: Math.ceil(total / 5), reached: shares >= total / 5 };
 }

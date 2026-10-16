@@ -8,6 +8,7 @@ import { audit, escapeHtml, notifyBuilding } from "../lib/notify";
 import { rateLimit } from "../lib/ratelimit";
 import { exportBuilding } from "../lib/backup";
 import { zipSync } from "fflate";
+import { votingUnits } from "../lib/voting";
 
 const buildings = new Hono<AppEnv>();
 buildings.use("*", requireAuth);
@@ -195,9 +196,11 @@ buildings.get("/:buildingId/units", requireBuilding(), async (c) => {
   const b = c.get("building");
   const units = (await c.env.DB.prepare("SELECT * FROM units WHERE building_id = ? ORDER BY floor, label").bind(b.id).all()).results as any[];
   const owners = (await c.env.DB.prepare(
-    "SELECT uo.unit_id, uo.user_id, uo.share_pct, u.name, u.email FROM unit_owners uo JOIN users u ON u.id = uo.user_id JOIN units un ON un.id = uo.unit_id WHERE un.building_id = ?"
+    "SELECT uo.unit_id, uo.user_id, uo.share_pct, uo.right_type, u.name, u.email FROM unit_owners uo JOIN users u ON u.id = uo.user_id JOIN units un ON un.id = uo.unit_id WHERE un.building_id = ?"
   ).bind(b.id).all()).results as any[];
   for (const u of units) u.owners = owners.filter((o) => o.unit_id === u.id);
+  const vunits = await votingUnits(c.env, b.id);
+  for (const u of units) { const v = vunits.find((x) => x.unit_id === u.id); u.split = !!v?.split; u.suspended = !!v?.suspended; u.voter_id = v?.voter_id ?? null; u.voter_name = v?.voter_name ?? null; }
   const sumShares = units.reduce((s, u) => s + (u.shares ?? 0), 0);
   return c.json({ units, total_shares: b.total_shares, sum_shares: sumShares });
 });
@@ -227,14 +230,37 @@ buildings.delete("/:buildingId/units/:unitId", requireBuilding("syndicus"), asyn
 
 buildings.put("/:buildingId/units/:unitId/owners", requireBuilding("syndicus"), async (c) => {
   const b = c.get("building");
-  const { owners } = z.object({ owners: z.array(z.object({ user_id: z.string(), share_pct: z.number().min(0).max(100).default(100) })) }).parse(await c.req.json());
+  const { owners } = z.object({ owners: z.array(z.object({ user_id: z.string(), share_pct: z.number().min(0).max(100).default(100), right_type: z.enum(["vol", "blote_eigendom", "vruchtgebruik", "erfpacht", "opstal", "gebruik_bewoning"]).default("vol") })) }).parse(await c.req.json());
   const unitId = c.req.param("unitId");
   const unit = await c.env.DB.prepare("SELECT id FROM units WHERE id = ? AND building_id = ?").bind(unitId, b.id).first();
   if (!unit) throw new HttpError(404, "Kavel niet gevonden");
   await c.env.DB.batch([
     c.env.DB.prepare("DELETE FROM unit_owners WHERE unit_id = ?").bind(unitId),
-    ...owners.map((o) => c.env.DB.prepare("INSERT INTO unit_owners (unit_id, user_id, share_pct) VALUES (?,?,?)").bind(unitId, o.user_id, o.share_pct)),
+    ...owners.map((o) => c.env.DB.prepare("INSERT INTO unit_owners (unit_id, user_id, share_pct, right_type) VALUES (?,?,?,?)").bind(unitId, o.user_id, o.share_pct, o.right_type)),
   ]);
+  const v = (await votingUnits(c.env, b.id)).find((x) => x.unit_id === unitId);
+  return c.json({ ok: true, split: !!v?.split, suspended: !!v?.suspended });
+});
+
+/**
+ * Lasthebber van een kavel met gesplitste eigendom (art. 3.87 §1, lid 2 BW): de belanghebbenden delen hem schriftelijk mee aan de syndicus,
+ * die hem hier registreert (met de mededeling als bewijsstuk). Hij wordt opgeroepen, neemt deel en stemt voor de hele kavel.
+ * De syndicus kan geen lasthebber zijn (art. 3.87 §7).
+ */
+buildings.put("/:buildingId/units/:unitId/representative", requireBuilding("syndicus"), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  const { user_id, document_id } = z.object({ user_id: z.string().nullable(), document_id: z.string().nullable().optional() }).parse(await c.req.json());
+  const unit = await c.env.DB.prepare("SELECT id, label FROM units WHERE id = ? AND building_id = ?").bind(c.req.param("unitId"), b.id).first<any>();
+  if (!unit) throw new HttpError(404, "Kavel niet gevonden");
+  if (user_id) {
+    const m = await c.env.DB.prepare("SELECT bm.role, u.name FROM building_members bm JOIN users u ON u.id = bm.user_id WHERE bm.building_id = ? AND bm.user_id = ?").bind(b.id, user_id).first<any>();
+    if (!m) throw new HttpError(400, "De lasthebber moet lid zijn van het platform voor dit gebouw (nodig uit indien nodig)");
+    if (m.role === "syndicus") throw new HttpError(400, "De syndicus kan geen lasthebber van een mede-eigenaar zijn (art. 3.87 §7 BW)");
+    if (m.role === "huurder") throw new HttpError(400, "Een huurder kan geen lasthebber zijn; geef hem eerst de rol mede-eigenaar of kies een titularis");
+  }
+  await c.env.DB.prepare("UPDATE units SET representative_user_id = ?, representative_set_at = ?, representative_document_id = ? WHERE id = ?").bind(user_id, user_id ? now() : null, document_id ?? null, unit.id).run();
+  await audit(c.env, b.id, user.id, user_id ? "unit.representative" : "unit.representative_removed", "unit", unit.id, { user_id });
+  if (user_id) await notifyBuilding(c.env, { buildingId: b.id, type: "member", title: `Je bent lasthebber voor kavel ${unit.label}`, body: "Je wordt opgeroepen voor de algemene vergaderingen, ontvangt de stukken en stemt voor deze kavel (art. 3.87 §1, lid 2 BW).", link: `/b/${b.id}/meetings`, userIds: [user_id], email: false });
   return c.json({ ok: true });
 });
 

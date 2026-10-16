@@ -5,14 +5,14 @@ import { isBoard, isCoOwner, requireAuth, requireBuilding } from "../lib/auth";
 import { HttpError, now, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 import { documentVisibility } from "./documents";
+import { suspendedFor, voterIds, votingUnits, weightOf } from "../lib/voting";
 
 const polls = new Hono<AppEnv>();
 polls.use("*", requireAuth);
 
 /** Stemgewicht van een gebruiker = som(quotiteit kavel × eigendomsaandeel). */
-async function voteWeight(db: D1Database, buildingId: string, userId: string): Promise<number> {
-  const r = await db.prepare("SELECT COALESCE(SUM(un.shares * uo.share_pct / 100.0), 0) AS w FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = ? AND uo.user_id = ?").bind(buildingId, userId).first<{ w: number }>();
-  return r?.w ?? 0;
+async function voteWeight(env: AppEnv["Bindings"], buildingId: string, userId: string): Promise<number> {
+  return weightOf(await votingUnits(env, buildingId), userId); // volle aandelen van de kavels waarvoor deze persoon stemt (eigenaar of lasthebber)
 }
 
 /** Gekoppelde documenten (referenties) van een stemming, gefilterd op wat deze gebruiker mag zien. */
@@ -50,23 +50,25 @@ async function pollWithResults(c: Context<AppEnv>, pollId: string) {
     o.weight = showResults ? ov.reduce((s, v) => s + v.weight, 0) : undefined;
     o.voters = showResults && !poll.anonymous ? ov.map((v) => v.name) : undefined;
   }
-  const voterIds = new Set(votes.map((v) => v.user_id));
-  const totalWeight = [...voterIds].reduce((s, id) => s + (votes.find((v) => v.user_id === id)?.weight ?? 0), 0);
+  const voterSet = new Set(votes.map((v) => v.user_id));
+  const totalWeight = [...voterSet].reduce((s, id) => s + (votes.find((v) => v.user_id === id)?.weight ?? 0), 0);
+  const vunits = await votingUnits(c.env, b.id);
   const eligible = poll.owners_only
-    ? await c.env.DB.prepare("SELECT (SELECT COUNT(DISTINCT uo.user_id) FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = ?1) AS n, COALESCE((SELECT SUM(shares) FROM units WHERE building_id = ?1 AND id IN (SELECT unit_id FROM unit_owners)),0) AS w").bind(b.id).first<any>()
+    ? { n: voterIds(vunits).length + vunits.filter((u) => u.suspended).length, w: vunits.filter((u) => u.owners.length).reduce((s, u) => s + u.shares, 0) }
     : await c.env.DB.prepare("SELECT COUNT(*) AS n, COUNT(*) AS w FROM building_members WHERE building_id = ?").bind(b.id).first<any>();
   return {
     ...poll,
     status: closed ? "closed" : poll.status,
     options,
     my_votes: votes.filter((v) => v.user_id === user.id).map((v) => v.option_id),
-    total_voters: voterIds.size,
+    total_voters: voterSet.size,
     total_weight: totalWeight,
     eligible_voters: eligible?.n ?? 0,
     eligible_weight: poll.weighted ? (eligible?.w ?? b.total_shares) : (eligible?.n ?? 0),
-    can_vote: !closed && poll.status === "open" && (!poll.owners_only || isCoOwner(b)) && (!poll.weighted || b.units > 0),
+    can_vote: !closed && poll.status === "open" && (!poll.owners_only || isCoOwner(b)) && (!poll.weighted || weightOf(vunits, user.id) > 0),
+    suspended_for_me: suspendedFor(vunits, user.id).map((u) => ({ label: u.label, voter_name: u.voter_name })),
     documents: await pollDocuments(c, pollId),
-    written_progress: poll.written ? await (async () => { const owners = (await c.env.DB.prepare("SELECT DISTINCT uo.user_id FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = ?").bind(b.id).all()).results.map((r: any) => r.user_id); return { total: owners.length, agreed: owners.filter((o: string) => votes.some((v) => v.user_id === o && options[0] && v.option_id === options[0].id)).length, disagreed: owners.filter((o: string) => votes.some((v) => v.user_id === o && options[1] && v.option_id === options[1].id)).length }; })() : null,
+    written_progress: poll.written ? await (async () => { const owners = voterIds(vunits); return { suspended: vunits.filter((u) => u.suspended).map((u) => u.label), total: owners.length, agreed: owners.filter((o: string) => votes.some((v) => v.user_id === o && options[0] && v.option_id === options[0].id)).length, disagreed: owners.filter((o: string) => votes.some((v) => v.user_id === o && options[1] && v.option_id === options[1].id)).length }; })() : null,
   };
 }
 
@@ -156,8 +158,11 @@ polls.post("/:buildingId/polls/:pollId/vote", requireBuilding(), async (c) => {
   if (option_ids.some((o) => !valid.includes(o))) throw new HttpError(400, "Ongeldige optie");
   let weight = 1;
   if (poll.weighted) {
-    weight = await voteWeight(c.env.DB, b.id, user.id);
-    if (weight <= 0) throw new HttpError(403, "Je hebt geen kavels (quotiteiten) in dit gebouw en kan niet gewogen stemmen");
+    weight = await voteWeight(c.env, b.id, user.id);
+    if (weight <= 0) {
+      const sus = suspendedFor(await votingUnits(c.env, b.id), user.id);
+      throw new HttpError(403, sus.length ? `Voor kavel ${sus.map((u) => u.label).join(", ")} stemt enkel de lasthebber${sus.some((u) => u.suspended) ? "; er is nog geen lasthebber aangewezen, dus het stemrecht is geschorst" : ""} (art. 3.87 §1, lid 2 BW)` : "Je hebt geen kavels (quotiteiten) in dit gebouw en kan niet gewogen stemmen");
+    }
   }
   await c.env.DB.batch([
     c.env.DB.prepare("DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?").bind(poll.id, user.id),
@@ -174,10 +179,12 @@ polls.post("/:buildingId/polls/:pollId/vote", requireBuilding(), async (c) => {
 async function settleWritten(env: AppEnv["Bindings"], buildingId: string, pollId: string) {
   const poll = await env.DB.prepare("SELECT * FROM polls WHERE id = ?").bind(pollId).first<any>();
   if (!poll || poll.status !== "open") return;
-  const owners = (await env.DB.prepare("SELECT DISTINCT uo.user_id FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = ?").bind(buildingId).all()).results.map((r: any) => r.user_id as string);
+  // eenparigheid van alle stemgerechtigden: één per kavel (eigenaar of lasthebber); een geschorste kavel maakt eenparigheid onmogelijk
+  const vunits = await votingUnits(env, buildingId);
+  const owners = voterIds(vunits);
   const votes = (await env.DB.prepare("SELECT v.user_id, o.position FROM poll_votes v JOIN poll_options o ON o.id = v.option_id WHERE v.poll_id = ?").bind(pollId).all()).results as any[];
   const rejected = votes.some((v) => v.position === 1);
-  const allAgreed = owners.length > 0 && owners.every((o) => votes.some((v) => v.user_id === o && v.position === 0));
+  const allAgreed = owners.length > 0 && !vunits.some((u) => u.suspended) && owners.every((o) => votes.some((v) => v.user_id === o && v.position === 0));
   if (!rejected && !allAgreed) return;
   const outcome = rejected ? "rejected" : "adopted";
   await env.DB.prepare("UPDATE polls SET status = 'closed', outcome = ? WHERE id = ?").bind(outcome, pollId).run();

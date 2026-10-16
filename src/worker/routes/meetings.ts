@@ -231,8 +231,8 @@ meetings.post("/:buildingId/meetings/:meetingId/agenda/:itemId/vote", requireBui
   const fmt = (x: number) => String(Math.round(x * 100) / 100);
   const text = decision ?? [`${t.reached ? "Goedgekeurd" : "Verworpen"} met ${fmt(t.votes_for)} aandelen vóór, ${fmt(t.votes_against)} tegen en ${fmt(t.votes_abstain)} onthoudingen (${MAJ[item.required_majority]?.label ?? item.required_majority}${item.required_majority !== "none" && item.required_majority !== "unanimous" ? `, ${(t.pct * 100).toFixed(1)} % van de uitgebrachte stemmen` : ""}).`, ...notes].join(" ");
   if (dry_run) return c.json({ ...t, decision: text });
-  await c.env.DB.prepare("UPDATE agenda_items SET votes_for = ?, votes_against = ?, votes_abstain = ?, voters_for = ?, voters_against = ?, voters_abstain = ?, dissenters = ?, vote_detail = ?, vote_adjustments = ?, voted_at = ?, status = 'decided', decision = ?, updated_at = ? WHERE id = ?")
-    .bind(t.votes_for, t.votes_against, t.votes_abstain, t.voters_for, t.voters_against, t.voters_abstain, JSON.stringify(t.dissenters), JSON.stringify(votes), JSON.stringify({ capped: t.capped, excluded: t.excluded }), new Date().toISOString(), text, new Date().toISOString(), item.id).run();
+  await c.env.DB.prepare("UPDATE agenda_items SET votes_for = ?, votes_against = ?, votes_abstain = ?, voters_for = ?, voters_against = ?, voters_abstain = ?, dissenters = ?, vote_detail = ?, vote_adjustments = ?, voted_at = ?, status = 'decided', decision = ?, adopted = ?, updated_at = ? WHERE id = ?")
+    .bind(t.votes_for, t.votes_against, t.votes_abstain, t.voters_for, t.voters_against, t.voters_abstain, JSON.stringify(t.dissenters), JSON.stringify(votes), JSON.stringify({ capped: t.capped, excluded: t.excluded }), new Date().toISOString(), text, t.reached ? 1 : 0, new Date().toISOString(), item.id).run();
   await audit(c.env, b.id, user.id, "agenda.vote", "agenda_item", item.id, { for: t.votes_for, against: t.votes_against, abstain: t.votes_abstain, reached: t.reached, capped: t.capped.length, excluded: t.excluded.length });
   return c.json({ ok: true, ...t, decision: text });
 });

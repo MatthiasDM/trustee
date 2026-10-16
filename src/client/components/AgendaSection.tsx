@@ -86,12 +86,13 @@ export function MeetingAgenda({ meetingId, meetingStartsAt, canManage }: { meeti
 
 function ProposeForm({ onDone }: { onDone: () => void }) {
   const b = useBuilding();
-  const [f, setF] = useState({ title: "", description: "", required_majority: "simple" });
+  const [f, setF] = useState({ title: "", description: "", required_majority: "simple", kind: "general" });
   const [error, setError] = useState<unknown>(null);
   return <form className="grid gap-4" onSubmit={async (e: FormEvent) => { e.preventDefault(); setError(null); try { await api.post(`/api/buildings/${b.id}/agenda`, f); onDone(); } catch (err) { setError(err); } }}>
     <Field label="Agendapunt"><Input required minLength={3} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="bv. Plaatsen van laadpalen in de garage" /></Field>
     <Field label="Toelichting"><Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
     <Field label="Vereiste meerderheid (art. 3.88 BW)" hint="Volstrekte meerderheid tenzij de wet anders bepaalt: 2/3 voor werken aan gemene delen, 4/5 voor statutenwijzigingen en bestemmingswijzigingen, eenparigheid voor wijziging van de aandelen."><Select value={f.required_majority} onValueChange={(v) => setF({ ...f, required_majority: v })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(MAJORITY_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select></Field>
+    <Field label="Soort" hint="Volledige afbraak en heropbouw zonder eenparigheid vraagt een procedure bij de vrederechter (art. 3.92 §1 BW); het register volgt de termijn op."><Select value={f.kind} onValueChange={(v) => setF({ ...f, kind: v })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="general">Algemeen</SelectItem><SelectItem value="works">Werken aan de gemeenschappelijke delen</SelectItem><SelectItem value="statutes">Statuten of reglement</SelectItem><SelectItem value="demolition">Volledige afbraak en heropbouw</SelectItem><SelectItem value="other">Andere</SelectItem></SelectContent></Select></Field>
     <ErrorBox error={error} /><DialogFooter><Button>Indienen</Button></DialogFooter>
   </form>;
 }

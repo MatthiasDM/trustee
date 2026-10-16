@@ -190,7 +190,7 @@ async function settleWritten(env: AppEnv["Bindings"], buildingId: string, pollId
   if (!rejected && !allAgreed) return;
   const outcome = rejected ? "rejected" : "adopted";
   await env.DB.prepare("UPDATE polls SET status = 'closed', outcome = ? WHERE id = ?").bind(outcome, pollId).run();
-  if (outcome === "adopted") await env.DB.prepare("INSERT INTO agenda_items (id, building_id, submitted_by, title, description, required_majority, status, decision, poll_id, voted_at) VALUES (?,?,?,?,?,'unanimous','decided',?,?,?)").bind(uid(), buildingId, poll.created_by, poll.title, poll.description ?? null, `Schriftelijk en eenparig aangenomen door alle ${owners.length} mede-eigenaars (art. 3.87 §11 BW), zonder algemene vergadering.`, pollId, new Date().toISOString()).run();
+  if (outcome === "adopted") await env.DB.prepare("INSERT INTO agenda_items (id, building_id, submitted_by, title, description, required_majority, status, decision, poll_id, voted_at, adopted) VALUES (?,?,?,?,?,'unanimous','decided',?,?,?,1)").bind(uid(), buildingId, poll.created_by, poll.title, poll.description ?? null, `Schriftelijk en eenparig aangenomen door alle ${owners.length} mede-eigenaars (art. 3.87 §11 BW), zonder algemene vergadering.`, pollId, new Date().toISOString()).run();
   await notifyBuilding(env, { buildingId, type: "written_decision", title: `Schriftelijk besluit ${outcome === "adopted" ? "aangenomen" : "verworpen"}: ${poll.title}`, body: outcome === "adopted" ? "Alle mede-eigenaars stemden akkoord; het besluit is genomen zonder vergadering." : "Minstens één mede-eigenaar ging niet akkoord; het punt kan op een algemene vergadering geagendeerd worden.", link: `/b/${buildingId}/polls/${pollId}` });
 }
 

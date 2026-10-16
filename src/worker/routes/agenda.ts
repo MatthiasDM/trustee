@@ -46,6 +46,7 @@ const itemSchema = z.object({
   description: z.string().max(10000).optional().nullable(),
   required_majority: z.enum(["simple", "two_thirds", "four_fifths", "unanimous", "none"]).default("simple"),
   meeting_id: z.string().nullable().optional(),
+  kind: z.enum(["general", "works", "statutes", "demolition", "other"]).default("general"),
 });
 
 /** Elke mede-eigenaar kan een agendapunt indienen (art. 3.87 §3). */
@@ -56,8 +57,8 @@ agenda.post("/:buildingId/agenda", requireBuilding(), async (c) => {
   const id = uid();
   const targetMeeting = body.meeting_id ? await c.env.DB.prepare("SELECT convened_by_owners, created_by FROM meetings WHERE id = ? AND building_id = ?").bind(body.meeting_id, b.id).first<any>() : null;
   const scheduled = !!body.meeting_id && (isBoard(b.role) || (!!targetMeeting && canManageMeeting(b, user.id, targetMeeting)));
-  await c.env.DB.prepare("INSERT INTO agenda_items (id, building_id, meeting_id, submitted_by, title, description, required_majority, status) VALUES (?,?,?,?,?,?,?,?)")
-    .bind(id, b.id, scheduled ? body.meeting_id : null, user.id, body.title, body.description ?? null, body.required_majority, scheduled ? "scheduled" : "proposed").run();
+  await c.env.DB.prepare("INSERT INTO agenda_items (id, building_id, meeting_id, submitted_by, title, description, required_majority, status, kind) VALUES (?,?,?,?,?,?,?,?,?)")
+    .bind(id, b.id, scheduled ? body.meeting_id : null, user.id, body.title, body.description ?? null, body.required_majority, scheduled ? "scheduled" : "proposed", body.kind).run();
   await audit(c.env, b.id, user.id, "agenda.propose", "agenda_item", id, { title: body.title });
   if (!scheduled) await notifyBuilding(c.env, { buildingId: b.id, type: "agenda", title: `Nieuw agendapunt voorgesteld: ${body.title}`, body: `${user.name} stelt een punt voor de volgende algemene vergadering voor.`, link: `/b/${b.id}/meetings`, roles: ["syndicus", "raad"], excludeUserId: user.id, email: false });
   return c.json({ id }, 201);

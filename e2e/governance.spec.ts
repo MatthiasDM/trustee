@@ -59,3 +59,17 @@ test("raad registreert een voorlopig syndicus met rechtsgrond; de houder ziet de
   const list = await (await page.request.get("/api/buildings/b-zeezicht/mandates")).json();
   for (const m of list.mandates.filter((x: any) => x.organ === "voorlopig_syndicus")) await page.request.delete(`/api/buildings/b-zeezicht/mandates/${m.id}`);
 });
+
+test("beslissingenregister is voor elk lid zichtbaar met termijnen; syndicus registreert opvolging", async ({ page }) => {
+  await login(page, "lotte@demo.be");
+  await page.goto("/b/b-zeezicht/meetings");
+  await page.getByRole("link", { name: "Beslissingenregister" }).click();
+  await expect(page.getByRole("heading", { name: "Beslissingenregister" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Opvolging" })).toHaveCount(0);
+  await logout(page);
+  await login(page, "syndicus@demo.be");
+  await page.goto("/b/b-zeezicht/decisions");
+  const first = page.getByRole("button", { name: "Opvolging" }).first();
+  if (await first.count()) { await first.click(); await expect(page.getByRole("dialog")).toContainText("Aanvechting (art. 3.92 §3)"); await page.getByRole("button", { name: "Annuleren" }).click(); }
+  await expect(page.getByRole("link", { name: "CSV" })).toHaveAttribute("href", /decisions\.csv/);
+});

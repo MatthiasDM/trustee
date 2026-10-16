@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
-import { Calendar, CalendarPlus, Check, FileText, MapPin, Pencil, ScrollText, Send, Users, X } from "lucide-react";
+import { Calendar, CalendarPlus, Check, FileText, MapPin, Pencil, ScrollText, Send, Users, X, Gavel } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
 import { useBuilding, useFetch } from "../components/Layout";
 import { AgendaSection, MeetingAgenda } from "../components/AgendaSection";
 import { AttendancePanel, MinutesDialog, ProxyDialog } from "../components/MeetingTools";
@@ -53,7 +54,7 @@ export function MeetingsPage() {
     </div>
   </div>; };
   return <div>
-    <PageHeader title={t("Algemene vergadering")} subtitle={t("Het hoogste orgaan van de VME: mede-eigenaars beslissen, stemmen naar aandelen. Agenda, aanwezigheden en verslagen.")} actions={b.isBoard && <Button onClick={() => setOpen(true)}><CalendarPlus />{t("Vergadering plannen")}</Button>} />
+    <PageHeader title={t("Algemene vergadering")} subtitle={t("Het hoogste orgaan van de VME: mede-eigenaars beslissen, stemmen naar aandelen. Agenda, aanwezigheden en verslagen.")} actions={<><Button variant="outline" asChild><Link to={`/b/${b.id}/decisions`}><Gavel />Beslissingenregister</Link></Button>{b.isBoard && <Button onClick={() => setOpen(true)}><CalendarPlus />{t("Vergadering plannen")}</Button>}</>} />
     {!meetings.loading && <AgendaSection meetings={list} />}
     <MeetingRequests meetings={list} onConvene={(r) => setOpen({ title: r.subject, type: "av", basis: r.convene_basis })} />
     {meetings.loading ? <Spinner /> : !list.length ? <Empty icon={<Calendar />} title="Nog geen vergaderingen gepland" /> : <>

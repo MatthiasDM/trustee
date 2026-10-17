@@ -83,7 +83,7 @@ transfers.post("/:buildingId/units/:unitId/transfer", requireBuilding("syndicus"
     if (!other) { const r = await c.env.DB.prepare("DELETE FROM building_members WHERE building_id = ? AND user_id = ? AND role = 'eigenaar'").bind(b.id, s.user_id).run(); if (r.meta.changes) removed.push(s.name); }
   }
   // 4. Afrekening als PDF bij de kavel (koper en organen; de syndicus bezorgt ze aan de notaris)
-  const pdf = await Pdf.create(`${b.name} - Afrekening overdracht kavel ${p.unit.label}`);
+  const pdf = await Pdf.create(`${b.name} - Afrekening overdracht kavel ${p.unit.label}`, { kbo: (await c.env.DB.prepare("SELECT enterprise_number FROM buildings WHERE id = ?").bind(b.id).first<{ enterprise_number: string | null }>())?.enterprise_number });
   pdf.title(`Afrekening bij overdracht - kavel ${p.unit.label}`);
   pdf.text(`Vereniging van mede-eigenaars ${b.name}. Opgesteld door de syndicus op ${dateNl(now())} (art. 3.94 §5 BW).`);
   pdf.h2("Partijen");

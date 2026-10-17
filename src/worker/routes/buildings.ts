@@ -33,6 +33,8 @@ const buildingSchema = z.object({
   ledger_mode: z.enum(["auto", "simple", "double"]).optional(),
   legal_proceedings: z.string().max(5000).nullable().optional(),
   insurance_info: z.string().max(2000).nullable().optional(),
+  seat_address: z.string().max(300).nullable().optional(),
+  syndicus_info: z.object({ name: z.string().max(160).optional(), legal_form: z.string().max(60).optional(), profession: z.string().max(80).optional(), address: z.string().max(300).optional(), enterprise_number: z.string().max(40).optional(), phone: z.string().max(40).optional(), email: z.string().max(160).optional(), consult_place: z.string().max(300).optional() }).nullable().optional(),
 });
 
 /** Nieuw gebouw (VME) aanmaken binnen een org waar de gebruiker admin is. */
@@ -77,13 +79,14 @@ buildings.get("/:buildingId", requireBuilding(), async (c) => {
             (SELECT COUNT(*) FROM polls WHERE building_id = ?1 AND status = 'open') AS open_polls,
             (SELECT COUNT(*) FROM meetings WHERE building_id = ?1 AND starts_at > strftime('%Y-%m-%dT%H:%M:%fZ','now')) AS upcoming_meetings`
   ).bind(b.id).first();
-  return c.json({ ...row, role: b.role, units_owned: b.units, stats });
+  const r: any = row; if (r?.syndicus_info) { try { r.syndicus_info = JSON.parse(r.syndicus_info); } catch { r.syndicus_info = null; } }
+  return c.json({ ...r, role: b.role, units_owned: b.units, stats });
 });
 
 buildings.patch("/:buildingId", requireBuilding("syndicus"), async (c) => {
   const b = c.get("building");
   const body = patchOf(buildingSchema.partial(), await c.req.json());
-  const fields = Object.entries(body).filter(([, v]) => v !== undefined).map(([k, v]) => [k, typeof v === "boolean" ? +v : v] as [string, unknown]);
+  const fields = Object.entries(body).filter(([, v]) => v !== undefined).map(([k, v]) => [k, typeof v === "boolean" ? +v : v && typeof v === "object" ? JSON.stringify(v) : v] as [string, unknown]);
   if (!fields.length) return c.json({ ok: true });
   await c.env.DB.prepare(`UPDATE buildings SET ${fields.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ?`).bind(...fields.map(([, v]) => v), b.id).run();
   await audit(c.env, b.id, c.get("user").id, "building.update", "building", b.id, body);

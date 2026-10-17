@@ -3,8 +3,10 @@ import { z } from "zod";
 import type { AppEnv } from "../env";
 import { isBoard, requireAuth, requireBuilding } from "../lib/auth";
 import { canRegisterSyndicus, hasSyndicus, organConflict } from "../lib/governance";
+import { Pdf, dateNl } from "../lib/pdf";
+import { storeDocument } from "../lib/reports";
 import { HttpError, patchOf, uid } from "../lib/util";
-import { audit } from "../lib/notify";
+import { audit, notifyBuilding } from "../lib/notify";
 
 const mandates = new Hono<AppEnv>();
 mandates.use("*", requireAuth);
@@ -33,6 +35,7 @@ const schema = z.object({
   basis: z.enum(["av", "rechter", "delegatie"]).nullable().optional(),
   scope: z.string().max(2000).nullable().optional(),
   document_id: z.string().nullable().optional(),
+  extract_posted_at: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   user_id: z.string().nullable().optional(),
   holder_name: z.string().max(160).nullable().optional(),
   function_title: z.string().max(80).nullable().optional(),
@@ -77,6 +80,7 @@ mandates.post("/:buildingId/mandates", requireBuilding(), async (c) => {
   if (body.user_id && body.organ !== "syndicus" && body.organ !== "voorlopig_syndicus") await c.env.DB.prepare("UPDATE building_members SET role = ? WHERE building_id = ? AND user_id = ? AND role IN ('eigenaar','raad','commissaris')").bind(body.organ, b.id, body.user_id).run();
   if (body.user_id && body.organ === "syndicus") await c.env.DB.prepare("INSERT INTO building_members (building_id, user_id, role) VALUES (?, ?, 'syndicus') ON CONFLICT(building_id, user_id) DO UPDATE SET role = 'syndicus'").bind(b.id, body.user_id).run();
   await audit(c.env, b.id, c.get("user").id, "mandate.create", "mandate", id, { organ: body.organ, end: body.end_date });
+  if (body.organ === "syndicus" || body.organ === "voorlopig_syndicus") await notifyBuilding(c.env, { buildingId: b.id, type: "mandate", title: "Uittreksel aanstelling syndicus aanplakken", body: `Binnen 8 dagen na de aanvang van de opdracht (${body.start_date}) moet een uittreksel van de aanstelling zichtbaar aan de ingang van het gebouw hangen (art. 3.89 §2 BW). Maak het aan onder Mede-eigenaars & organen › Mandaten.`, link: `/b/${b.id}/members?tab=mandates`, roles: ["syndicus"], email: false });
   return c.json({ id }, 201);
 });
 
@@ -119,10 +123,44 @@ mandates.get("/:buildingId/organs", requireBuilding(), async (c) => {
     warnings: [
       ...(byOrgan("syndicus").length === 0 ? ["Geen actief syndicusmandaat geregistreerd (art. 3.89 BW)."] : []),
       ...(byOrgan("commissaris").length === 0 ? ["Geen commissaris van de rekeningen aangewezen voor dit jaar (art. 3.91 BW: jaarlijks verplicht)."] : []),
+      ...active.filter((m) => (m.organ === "syndicus" || m.organ === "voorlopig_syndicus") && !m.extract_posted_at && new Date(m.start_date).getTime() + 8 * 86400_000 < Date.now()).map((m) => `Het uittreksel van de aanstelling van ${m.user_name ?? m.holder_name} als syndicus is nog niet als aangeplakt geregistreerd; het moet binnen 8 dagen aan de ingang hangen (art. 3.89 §2 BW).`),
       ...((units?.n ?? 0) >= 20 && byOrgan("raad").length === 0 ? ["Raad van mede-eigendom verplicht vanaf 20 kavels, maar nog niet samengesteld (art. 3.90 BW)."] : []),
       ...active.filter((m) => m.end_date <= soon).map((m) => `Mandaat ${ORGAN_RULES[m.organ as keyof typeof ORGAN_RULES].label.toLowerCase()} van ${m.user_name ?? m.holder_name} loopt af op ${new Date(m.end_date).toLocaleDateString("nl-BE", { timeZone: "Europe/Brussels", dateStyle: "medium" })}; agendeer de herbenoeming op de AV.`),
     ],
   });
+});
+
+/**
+ * Uittreksel van de aanstelling van de syndicus (art. 3.89 §2 BW) om aan de ingang van het gebouw van de zetel aan te plakken:
+ * datum van aanstelling, naam, voornamen, beroep en woonplaats (of rechtsvorm, naam, zetel en KBO), contactgegevens, en waar het reglement
+ * van interne orde en het register van de beslissingen geraadpleegd kunnen worden.
+ */
+mandates.post("/:buildingId/mandates/:mandateId/extract", requireBuilding("syndicus", "raad"), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  const m = await c.env.DB.prepare("SELECT m.*, u.name AS user_name, u.email AS user_email, u.phone AS user_phone, mt.title AS meeting_title, mt.starts_at AS meeting_at FROM mandates m LEFT JOIN users u ON u.id = m.user_id LEFT JOIN meetings mt ON mt.id = m.appointed_by_meeting_id WHERE m.id = ? AND m.building_id = ?").bind(c.req.param("mandateId"), b.id).first<any>();
+  if (!m || !["syndicus", "voorlopig_syndicus"].includes(m.organ)) throw new HttpError(404, "Syndicusmandaat niet gevonden");
+  const bld = await c.env.DB.prepare("SELECT * FROM buildings WHERE id = ?").bind(b.id).first<any>();
+  const info = bld.syndicus_info ? JSON.parse(bld.syndicus_info) : {};
+  const name = info.name || m.user_name || m.holder_name;
+  const pdf = await Pdf.create(`${bld.name} - Uittreksel aanstelling syndicus`, { kbo: bld.enterprise_number });
+  pdf.title("Uittreksel aanstelling syndicus");
+  pdf.text(`Vereniging van mede-eigenaars ${bld.name}${bld.enterprise_number ? `, ondernemingsnummer ${bld.enterprise_number}` : ""}, zetel ${bld.seat_address ?? `${bld.address}${bld.city ? `, ${bld.postal_code ?? ""} ${bld.city}` : ""}`}.`, 10.5);
+  pdf.space(6);
+  const rows: string[][] = [
+    ["Functie", m.organ === "voorlopig_syndicus" ? `Voorlopig syndicus${m.basis === "rechter" ? " (aangewezen door de rechter, art. 3.89 §8 BW)" : m.basis === "av" ? " (toegevoegd door de algemene vergadering, art. 3.89 §7 BW)" : ""}` : "Syndicus"],
+    ["Datum van aanstelling", `${dateNl(m.start_date)}${m.meeting_title ? ` (${m.meeting_title})` : ""}`], ["Mandaat tot", dateNl(m.end_date)],
+    ["Naam", name ?? "-"], ...(info.legal_form ? [["Rechtsvorm", info.legal_form]] : []), ...(info.profession ? [["Beroep", info.profession]] : []),
+    [info.legal_form ? "Maatschappelijke zetel" : "Woonplaats", info.address || "-"], ...(info.enterprise_number ? [["Ondernemingsnummer", info.enterprise_number]] : []),
+    ["Telefoon", info.phone || m.user_phone || "-"], ["E-mail", info.email || m.user_email || "-"],
+    ["Reglement van interne orde en register van de beslissingen", info.consult_place || `Te raadplegen bij de syndicus en online: ${c.env.APP_URL}/b/${b.id}/decisions`],
+  ];
+  pdf.table([{ label: "", w: 0.38 }, { label: "", w: 0.62 }], rows);
+  pdf.space(10);
+  pdf.text("Aan te plakken door de syndicus, binnen acht dagen na de aanvang van de opdracht, op onveranderlijke en altijd zichtbare wijze aan de ingang van het gebouw waar de zetel van de vereniging gevestigd is (art. 3.89 §2 BW).", 8.5);
+  const docId = await storeDocument(c.env, b.id, user.id, { name: `Uittreksel aanstelling syndicus ${name ?? ""} ${m.start_date}.pdf`, bytes: await pdf.bytes(), mime: "application/pdf", category: "overig", description: "Aan te plakken aan de ingang (art. 3.89 §2 BW)", folderMatch: /statuten/i });
+  await c.env.DB.prepare("UPDATE mandates SET extract_document_id = ? WHERE id = ?").bind(docId, m.id).run();
+  await audit(c.env, b.id, user.id, "mandate.extract", "mandate", m.id);
+  return c.json({ document_id: docId }, 201);
 });
 
 export default mandates;

@@ -129,6 +129,10 @@ Op omgevingen waar de demo-modus aanstaat (zoals de preview) kan iedereen via *P
 - **Inhoud melden.** Onder elk bericht van iemand anders staat *Melden*; de syndicus beoordeelt en verwijdert indien nodig.
 - **Voorwaarden en privacy.** Bij registratie en bij elke nieuwe versie aanvaard je de algemene voorwaarden en de privacyverklaring; die aanvaarding wordt gelogd. De teksten staan onderaan de zijbalk.
 
+## Zetel en uittreksel aan de ingang
+
+Onder *Instellingen › Gebouw* vul je de zetel van de VME en de gegevens van de syndicus in. Elk document dat Trustee maakt (jaarrekening, afrekening, brieven, notulen) vermeldt het ondernemingsnummer van de VME. Bij elk syndicusmandaat maak je onder *Mandaten* het uittreksel van de aanstelling als PDF; hang het binnen 8 dagen aan de ingang en registreer met *Aangeplakt vandaag* dat het hangt (art. 3.89 §2 BW). Tot dan toont het overzicht een waarschuwing.
+
 ## Rollen en rechten
 
 **Wie is mede-eigenaar?** Trustee leidt dat af uit de kavels: wie onder *Mede-eigenaars & organen › Kavels* als eigenaar van een kavel staat, is mede-eigenaar en stemgerechtigd, ongeacht zijn rol. Een professionele syndicus of een externe commissaris zonder kavel is dus géén mede-eigenaar: hij kan niet stemmen, geen aanwezigheid melden of volmacht geven, geen agendapunt "indienen" (de syndicus agendeert zelf) en geen AV eisen. Bezit de syndicus of commissaris wél een kavel, dan heeft hij daarvoor dezelfde rechten als elke andere mede-eigenaar; alleen volmachten dragen blijft voor de syndicus uitgesloten. Leden met rol *eigenaar* of *raad* gelden ook als mede-eigenaar zolang hun kavel nog niet gekoppeld is, maar wegen pas mee in gewogen stemmingen zodra dat gebeurd is.

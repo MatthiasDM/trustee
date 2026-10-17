@@ -27,7 +27,7 @@ export async function generateAnnualReport(env: Env, buildingId: string, userId:
   const st = await ownerStatement(env, buildingId, fyId, null);
   const budget = await env.DB.prepare("SELECT * FROM budgets WHERE building_id = ? AND fiscal_year_id = ?").bind(buildingId, fyId).first<any>();
   const blines = budget ? (await env.DB.prepare("SELECT bl.*, a.code, a.name FROM budget_lines bl JOIN accounts a ON a.id = bl.account_id WHERE bl.budget_id = ? ORDER BY a.code").bind(budget.id).all()).results as any[] : [];
-  const pdf = await Pdf.create(`${b.name} - Jaarrekening ${fy.label}${provisional ? " (voorlopig)" : ""}`);
+  const pdf = await Pdf.create(`${b.name} - Jaarrekening ${fy.label}${provisional ? " (voorlopig)" : ""}`, { kbo: b.enterprise_number });
   pdf.title(`Jaarrekening boekjaar ${fy.label}${provisional ? " (voorlopige versie)" : ""}`);
   pdf.text(`Vereniging van mede-eigenaars ${b.name}, ${b.address}${b.city ? `, ${b.postal_code ?? ""} ${b.city}` : ""}${b.enterprise_number ? ` - KBO ${b.enterprise_number}` : ""}`);
   pdf.text(`Boekjaar van ${dateNl(fy.start_date)} tot ${dateNl(fy.end_date)}. Opgemaakt op ${dateNl(new Date().toISOString())} volgens het minimum genormaliseerd rekeningenstelsel (KB 12 juli 2012).`);
@@ -76,7 +76,7 @@ export async function generateOwnerStatements(env: Env, buildingId: string, user
     const owners = (await env.DB.prepare("SELECT user_id FROM unit_owners WHERE unit_id = ?").bind(u.unit_id).all()).results.map((r: any) => r.user_id as string);
     if (!owners.length) continue;
     const openLine = await env.DB.prepare("SELECT ccl.ogm FROM contribution_call_lines ccl JOIN contribution_calls cc ON cc.id = ccl.call_id WHERE ccl.unit_id = ? AND cc.building_id = ? ORDER BY cc.date DESC LIMIT 1").bind(u.unit_id, buildingId).first<any>();
-    const pdf = await Pdf.create(`${b.name} - Afrekening ${fy.label} kavel ${u.label}`);
+    const pdf = await Pdf.create(`${b.name} - Afrekening ${fy.label} kavel ${u.label}`, { kbo: b.enterprise_number });
     pdf.title(`Afrekening boekjaar ${fy.label} - kavel ${u.label}`);
     pdf.text(`Vereniging van mede-eigenaars ${b.name}, ${b.address}${b.city ? `, ${b.postal_code ?? ""} ${b.city}` : ""}`);
     pdf.text(`Eigenaar(s): ${u.owners}. Kavel ${u.label}, ${u.shares} aandelen op ${b.total_shares}. Periode ${dateNl(fy.start_date)} - ${dateNl(fy.end_date)}.`);
@@ -101,7 +101,7 @@ export async function generateOwnerStatements(env: Env, buildingId: string, user
 export async function renderCommissionerReport(env: Env, buildingId: string, report: any, authorName: string, fyLabel: string) {
   const b = await buildingRow(env, buildingId);
   const concl: Record<string, string> = { approve: "De commissaris adviseert de algemene vergadering de rekeningen goed te keuren en de syndicus kwijting te verlenen.", approve_with_remarks: "De commissaris adviseert de rekeningen goed te keuren en kwijting te verlenen, mits rekening wordt gehouden met de opmerkingen hieronder.", reject: "De commissaris kan de rekeningen in hun huidige vorm niet goedkeuren en adviseert de algemene vergadering de kwijting uit te stellen." };
-  const pdf = await Pdf.create(`${b.name} - Verslag commissaris ${fyLabel}`);
+  const pdf = await Pdf.create(`${b.name} - Verslag commissaris ${fyLabel}`, { kbo: b.enterprise_number });
   pdf.title(`Verslag van de commissaris van de rekeningen - boekjaar ${fyLabel}`);
   pdf.text(`Vereniging van mede-eigenaars ${b.name}. Commissaris: ${authorName}. Gecontroleerde periode: ${dateNl(report.period_from)} tot ${dateNl(report.period_to)}. Opgemaakt op ${dateNl(new Date().toISOString())}.`);
   pdf.h2("1. Opdracht en omvang van de controle"); pdf.text(report.scope || "Controle van de boekhouding, de verantwoordingsstukken, de bankuittreksels, de oproepen van voorschotten en de afrekening per kavel, overeenkomstig art. 3.91 BW en het reglement van interne orde.");

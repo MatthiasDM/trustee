@@ -6,7 +6,8 @@ export class Pdf {
   private doc!: PDFDocument; private font!: PDFFont; private bold!: PDFFont; private page!: PDFPage; private y = 0;
   private readonly W = 595.28; private readonly H = 841.89; private readonly M = 48; private pageNo = 0;
   private footer = "";
-  static async create(footer: string) { const p = new Pdf(); p.doc = await PDFDocument.create(); p.font = await p.doc.embedFont(StandardFonts.Helvetica); p.bold = await p.doc.embedFont(StandardFonts.HelveticaBold); p.footer = footer; p.newPage(); return p; }
+  /** footer: naam en titel; opts.kbo: ondernemingsnummer van de VME, verplicht op alle documenten (art. 3.86 §1 BW). */
+  static async create(footer: string, opts: { kbo?: string | null } = {}) { const p = new Pdf(); p.doc = await PDFDocument.create(); p.font = await p.doc.embedFont(StandardFonts.Helvetica); p.bold = await p.doc.embedFont(StandardFonts.HelveticaBold); p.footer = opts.kbo ? `${footer} - KBO ${opts.kbo}` : footer; p.newPage(); return p; }
   private clean(s: string) { return (s ?? "").replace(/[^\x20-\x7E\xA0-\xFF€]/g, (ch) => ({ "≥": ">=", "≤": "<=", "—": "-", "–": "-", "…": "...", "’": "'", "“": '"', "”": '"', "€": "EUR" }[ch] ?? "?")).replace(/€/g, "EUR"); }
   private newPage() { this.page = this.doc.addPage([this.W, this.H]); this.pageNo++; this.y = this.H - this.M; this.page.drawText(this.clean(`${this.footer} - pagina ${this.pageNo}`), { x: this.M, y: 34, size: 8, font: this.font, color: rgb(0.45, 0.45, 0.45) }); this.page.drawText(this.clean(PDF_DISCLAIMER), { x: this.M, y: 22, size: 6.5, font: this.font, color: rgb(0.55, 0.55, 0.55) }); }
   private need(h: number) { if (this.y - h < this.M + 10) this.newPage(); }

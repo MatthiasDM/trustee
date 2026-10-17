@@ -29,7 +29,7 @@ export async function generateTransferDossier(env: Env, buildingId: string, user
   const budget = await env.DB.prepare("SELECT bu.status, fy.label, (SELECT COALESCE(SUM(amount),0) FROM budget_lines bl WHERE bl.budget_id = bu.id AND bl.kind='extraordinary') AS extraordinary FROM budgets bu JOIN fiscal_years fy ON fy.id = bu.fiscal_year_id WHERE bu.building_id = ? ORDER BY fy.end_date DESC LIMIT 1").bind(buildingId).first<any>();
   const decided = (await env.DB.prepare("SELECT a.title, a.decision, m.starts_at FROM agenda_items a JOIN meetings m ON m.id = a.meeting_id WHERE a.building_id = ? AND a.status = 'decided' AND (a.required_majority IN ('two_thirds','four_fifths') OR a.title LIKE '%werk%' OR a.title LIKE '%renovatie%') ORDER BY m.starts_at DESC LIMIT 8").bind(buildingId).all()).results as any[];
 
-  const pdf = await Pdf.create(`${b.name} - Overdrachtsdossier kavel ${u.label}`);
+  const pdf = await Pdf.create(`${b.name} - Overdrachtsdossier kavel ${u.label}`, { kbo: b.enterprise_number });
   pdf.title(`Inlichtingen bij overdracht van kavel ${u.label} (art. 3.94 §1 BW)`);
   pdf.text(`Vereniging van mede-eigenaars ${b.name}, ${b.address}${b.city ? `, ${b.postal_code ?? ""} ${b.city}` : ""}${b.enterprise_number ? ` - KBO ${b.enterprise_number}` : ""}. Opgemaakt op ${dateNl(new Date().toISOString())} door de syndicus, op verzoek met het oog op de overdracht.`);
   pdf.text(`Kavel ${u.label} (${u.type}${u.floor ? `, verdieping ${u.floor}` : ""}), ${u.shares} aandelen op ${b.total_shares} (${(shareFrac * 100).toFixed(2)} %). Huidige eigenaar(s): ${u.owners ?? "-"}.`);

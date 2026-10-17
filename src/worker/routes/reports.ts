@@ -103,9 +103,9 @@ export async function sendReminder(env: AppEnv["Bindings"], buildingId: string, 
   if (fee > 0) entryId = await postEntry(env, buildingId, userId, { date: new Date().toISOString().slice(0, 10), description: `Aanmaningskosten kavel ${u.label}`, source: "manual", lines: [{ account_code: "4101", debit: fee, unit_id: unitId }, { account_code: "740", credit: fee, memo: "aanmaningskosten" }] });
   const total = Math.round((u.outstanding + fee) * 100) / 100;
   const titles = ["", "Betalingsherinnering", "Aanmaning", "Ingebrekestelling"];
-  const pdf = await Pdf.create(`${b.name} - ${titles[level]} kavel ${u.label}`);
+  const pdf = await Pdf.create(`${b.name} - ${titles[level]} kavel ${u.label}`, { kbo: b.enterprise_number });
   pdf.title(`${titles[level]} - kavel ${u.label}`);
-  pdf.text(`Vereniging van mede-eigenaars ${b.name}, ${b.address}. ${dateNl(new Date().toISOString())}.`);
+  pdf.text(`Vereniging van mede-eigenaars ${b.name}, zetel ${b.seat_address ?? b.address}${b.enterprise_number ? `, KBO ${b.enterprise_number}` : ""}. ${dateNl(new Date().toISOString())}.`);
   pdf.text(`Geachte ${u.owners ?? "mede-eigenaar"},`);
   pdf.text(level === 1 ? `Volgens onze boekhouding staat voor kavel ${u.label} nog ${money(u.outstanding)} aan opgeroepen voorschotten open; de vervaldag is ${u.days_overdue} dagen verstreken. Mogelijk kruist deze herinnering uw betaling; in dat geval kunt u ze als onbestaande beschouwen.` : level === 2 ? `Ondanks onze herinnering staat voor kavel ${u.label} nog ${money(u.outstanding)} open${fee > 0 ? `, vermeerderd met ${money(fee)} aanmaningskosten volgens het reglement van interne orde` : ""}. Wij verzoeken u dit bedrag binnen 15 dagen te betalen.` : `Dit is een ingebrekestelling. Voor kavel ${u.label} staat ${money(u.outstanding)} open${fee > 0 ? ` plus ${money(fee)} kosten` : ""}. Zonder betaling binnen 15 dagen zal de syndicus, in uitvoering van zijn wettelijke opdracht (art. 3.89 BW), de invordering in rechte laten starten; de kosten daarvan vallen ten laste van de in gebreke blijvende mede-eigenaar.`);
   pdf.text(`Te betalen: ${money(total)} op ${bank?.iban ?? "de rekening van de VME"}${line ? `, met gestructureerde mededeling ${line.ogm}` : ""}.`, 10.5, { bold: true });

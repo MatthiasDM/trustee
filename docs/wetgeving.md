@@ -46,6 +46,9 @@ Onthoudingen, blanco en ongeldige stemmen tellen niet mee bij het berekenen van 
 
 ## Syndicus (art. 3.89)
 
+- **Zetel en documenten** (art. 3.86 §1): de VME heeft haar zetel in het gebouw (bij een groep: het gebouw uit de basisakte); alle documenten van de VME vermelden haar ondernemingsnummer. Aangetekende post aan de VME gaat naar de woonplaats of zetel van de syndicus én naar de zetel van de VME (art. 3.89 §5, 4°).
+- **Uittreksel aan de ingang** (art. 3.89 §2): binnen 8 dagen na de aanvang van de opdracht plakt de syndicus een uittreksel van zijn aanstelling onveranderlijk en zichtbaar aan de ingang van het gebouw van de zetel: datum van aanstelling, naam, voornamen, beroep en woonplaats (of rechtsvorm, naam, zetel en KBO), contactgegevens en waar het reglement van interne orde en het register van de beslissingen te raadplegen zijn. In Trustee: PDF per syndicusmandaat, registratie van de aanplakking, waarschuwing na 8 dagen.
+
 - Verplicht in elke VME. Benoemd door de AV (of in de statuten, of door de rechter). Mag een mede-eigenaar zijn (zelfbeheer) of een professionele syndicus.
 - **Mandaat maximaal 3 jaar**, hernieuwbaar enkel door een uitdrukkelijke beslissing van de AV. De AV kan de syndicus altijd ontslaan.
 - Taken (niet-limitatief): de AV bijeenroepen; de beslissingen van de AV **uitvoeren en laten uitvoeren**; bewarende maatregelen en dagelijks beheer; het vermogen van de VME beheren; de VME in rechte vertegenwoordigen; **de boekhouding voeren** (vereenvoudigde boekhouding toegestaan onder 20 kavels); de begroting opstellen; de documenten van de VME bewaren en ter inzage geven; het postinterventiedossier bijhouden; jaarlijks een evaluatieverslag over leveringscontracten voorleggen.

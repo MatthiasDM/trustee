@@ -5,6 +5,7 @@ import { isBoard, requireAuth, requireBuilding } from "../lib/auth";
 import { canRegisterSyndicus, hasSyndicus, organConflict } from "../lib/governance";
 import { Pdf, dateNl, pdfOpts } from "../lib/pdf";
 import { reserveCheck } from "../lib/reserve";
+import { votingUnits } from "../lib/voting";
 import { storeDocument } from "../lib/reports";
 import { HttpError, patchOf, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
@@ -16,6 +17,7 @@ export const ORGAN_RULES = {
   syndicus: { label: "Syndicus", maxYears: 3, basis: "art. 3.89 §1 BW: mandaat max. 3 jaar, hernieuwbaar bij uitdrukkelijke AV-beslissing" },
   raad: { label: "Raad van mede-eigendom", maxYears: null, basis: "art. 3.90 BW: verplicht vanaf 20 kavels; enkel stemgerechtigde mede-eigenaars; jaarlijks verslag aan de AV" },
   commissaris: { label: "Commissaris van de rekeningen", maxYears: 1, basis: "art. 3.91 BW: jaarlijks door de AV aangewezen; controleert de rekeningen" },
+  voorlopig_bewindvoerder: { label: "Voorlopig bewindvoerder", maxYears: 3, basis: "art. 3.92 §2 BW: door de rechter aangewezen als het financieel evenwicht ernstig in het gedrang is of het behoud of de wettelijke overeenstemming van het gebouw niet gewaarborgd kan worden; vervangt de organen voor de toegekende taken" },
   voorlopig_syndicus: { label: "Voorlopig syndicus", maxYears: 3, basis: "art. 3.89 §7 BW (toegevoegd door de AV, voor welbepaalde duur of doeleinden), §8 (aangewezen door de rechter bij verhindering of in gebreke blijven) of §6 (bevoegdheidsoverdracht met toestemming van de AV)" },
 } as const;
 export const BASIS_LABELS: Record<string, string> = { av: "Toegevoegd door de AV (art. 3.89 §7)", rechter: "Aangewezen door de rechter (art. 3.89 §8)", delegatie: "Bevoegdheidsoverdracht met toestemming van de AV (art. 3.89 §6)" };
@@ -32,7 +34,7 @@ mandates.get("/:buildingId/mandates", requireBuilding(), async (c) => {
 });
 
 const schema = z.object({
-  organ: z.enum(["syndicus", "raad", "commissaris", "voorlopig_syndicus"]),
+  organ: z.enum(["syndicus", "raad", "commissaris", "voorlopig_syndicus", "voorlopig_bewindvoerder"]),
   basis: z.enum(["av", "rechter", "delegatie"]).nullable().optional(),
   scope: z.string().max(2000).nullable().optional(),
   document_id: z.string().nullable().optional(),
@@ -49,6 +51,8 @@ const schema = z.object({
 function validate(body: z.infer<typeof schema>) {
   if (!body.user_id && !body.holder_name) throw new HttpError(400, "Kies een lid of vul een naam in");
   if (body.end_date <= body.start_date) throw new HttpError(400, "Einddatum moet na startdatum liggen");
+  if (body.organ === "voorlopig_bewindvoerder" && (body.basis !== "rechter" || !body.document_id || !body.scope)) throw new HttpError(400, "Een voorlopig bewindvoerder wordt aangewezen door de rechter: kies die grond, koppel het vonnis en vermeld de toegekende taken (art. 3.92 §2 BW)");
+  if (body.organ === "voorlopig_bewindvoerder" && !body.user_id) throw new HttpError(400, "De bewindvoerder moet een lid van het platform zijn om zijn taken uit te voeren");
   if (body.organ === "voorlopig_syndicus" && !body.basis) throw new HttpError(400, "Kies de rechtsgrond: AV-beslissing (art. 3.89 §7), vonnis van de rechter (§8) of bevoegdheidsoverdracht (§6)");
   if (body.organ === "voorlopig_syndicus" && !body.user_id) throw new HttpError(400, "Een voorlopig syndicus moet een lid van het platform zijn, anders kan hij niets uitvoeren");
   const max = ORGAN_RULES[body.organ].maxYears;
@@ -63,7 +67,7 @@ mandates.post("/:buildingId/mandates", requireBuilding(), async (c) => {
   // verzoek "syndicus aanwijzen" de (voorlopig) syndicus registreren, zodat de VME nooit vastzit (art. 3.87 §2, lid 4 BW).
   {
     const b0 = c.get("building"); const u0 = c.get("user"); const peek = (await c.req.raw.clone().json().catch(() => ({}))) as { organ?: string };
-    const syndicusType = peek?.organ === "syndicus" || peek?.organ === "voorlopig_syndicus";
+    const syndicusType = peek?.organ === "syndicus" || peek?.organ === "voorlopig_syndicus" || peek?.organ === "voorlopig_bewindvoerder";
     if (!isBoard(b0.role) && !(syndicusType && (await canRegisterSyndicus(c.env, b0, u0.id)))) throw new HttpError(403, "Onvoldoende rechten");
   }
   const b = c.get("building");
@@ -78,7 +82,7 @@ mandates.post("/:buildingId/mandates", requireBuilding(), async (c) => {
   await c.env.DB.prepare("INSERT INTO mandates (id, building_id, organ, user_id, holder_name, function_title, start_date, end_date, appointed_by_meeting_id, notes, basis, scope, document_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
     .bind(id, b.id, body.organ, body.user_id ?? null, body.holder_name ?? null, body.function_title ?? null, body.start_date, body.end_date, body.appointed_by_meeting_id ?? null, body.notes ?? null, body.basis ?? null, body.scope ?? null, body.document_id ?? null).run();
   // rol van het lid automatisch afstemmen op het mandaat
-  if (body.user_id && body.organ !== "syndicus" && body.organ !== "voorlopig_syndicus") await c.env.DB.prepare("UPDATE building_members SET role = ? WHERE building_id = ? AND user_id = ? AND role IN ('eigenaar','raad','commissaris')").bind(body.organ, b.id, body.user_id).run();
+  if (body.user_id && !["syndicus", "voorlopig_syndicus", "voorlopig_bewindvoerder"].includes(body.organ)) await c.env.DB.prepare("UPDATE building_members SET role = ? WHERE building_id = ? AND user_id = ? AND role IN ('eigenaar','raad','commissaris')").bind(body.organ, b.id, body.user_id).run();
   if (body.user_id && body.organ === "syndicus") await c.env.DB.prepare("INSERT INTO building_members (building_id, user_id, role) VALUES (?, ?, 'syndicus') ON CONFLICT(building_id, user_id) DO UPDATE SET role = 'syndicus'").bind(b.id, body.user_id).run();
   await audit(c.env, b.id, c.get("user").id, "mandate.create", "mandate", id, { organ: body.organ, end: body.end_date });
   if (body.organ === "syndicus" || body.organ === "voorlopig_syndicus") await notifyBuilding(c.env, { buildingId: b.id, type: "mandate", title: "Uittreksel aanstelling syndicus aanplakken", body: `Binnen 8 dagen na de aanvang van de opdracht (${body.start_date}) moet een uittreksel van de aanstelling zichtbaar aan de ingang van het gebouw hangen (art. 3.89 §2 BW). Maak het aan onder Mede-eigenaars & organen › Mandaten.`, link: `/b/${b.id}/members?tab=mandates`, roles: ["syndicus"], email: false });
@@ -117,11 +121,12 @@ mandates.get("/:buildingId/organs", requireBuilding(), async (c) => {
   const byOrgan = (o: string) => active.filter((m) => m.organ === o).map((m) => ({ ...m, name: m.user_name ?? m.holder_name, expiring: m.end_date <= soon }));
   return c.json({
     av: { next: nextAv, last: lastAv, proposed_items: proposed?.n ?? 0, period_start: info?.av_period_start ?? null },
-    syndicus: [...byOrgan("syndicus"), ...byOrgan("voorlopig_syndicus").map((m) => ({ ...m, name: `${m.name} (voorlopig syndicus${m.basis ? `, ${m.basis === "rechter" ? "door de rechter" : m.basis === "av" ? "door de AV" : "bevoegdheidsoverdracht"}` : ""})` }))],
+    syndicus: [...byOrgan("voorlopig_bewindvoerder").map((m) => ({ ...m, name: `${m.name} (voorlopig bewindvoerder, door de rechter)` })), ...byOrgan("syndicus"), ...byOrgan("voorlopig_syndicus").map((m) => ({ ...m, name: `${m.name} (voorlopig syndicus${m.basis ? `, ${m.basis === "rechter" ? "door de rechter" : m.basis === "av" ? "door de AV" : "bevoegdheidsoverdracht"}` : ""})` }))],
     raad: byOrgan("raad"), commissaris: byOrgan("commissaris"),
     syndicus_present: await hasSyndicus(c.env, b.id),
     raad_required: (units?.n ?? 0) >= 20,
     warnings: [
+      ...await structuralWarnings(c.env, b.id),
       ...await (async () => { const r = await reserveCheck(c.env, b.id); return [...(r.status === "short" ? [r.message] : []), ...(!r.has_working_account || !r.has_reserve_account ? ["Een afzonderlijke rekening voor werkkapitaal en voor reservekapitaal is verplicht, op naam van de VME (art. 3.86 §3 BW); registreer ze onder Boekhouding › Instellingen."] : [])]; })(),
       ...(byOrgan("syndicus").length === 0 ? ["Geen actief syndicusmandaat geregistreerd (art. 3.89 BW)."] : []),
       ...(byOrgan("commissaris").length === 0 ? ["Geen commissaris van de rekeningen aangewezen voor dit jaar (art. 3.91 BW: jaarlijks verplicht)."] : []),
@@ -164,5 +169,20 @@ mandates.post("/:buildingId/mandates/:mandateId/extract", requireBuilding("syndi
   await audit(c.env, b.id, user.id, "mandate.extract", "mandate", m.id);
   return c.json({ document_id: docId }, 201);
 });
+
+/** Structurele situaties die de werking van de VME raken (zonder of met eigen wetsartikel). */
+async function structuralWarnings(env: AppEnv["Bindings"], buildingId: string): Promise<string[]> {
+  const out: string[] = [];
+  const vunits = await votingUnits(env, buildingId);
+  const owned = vunits.filter((u) => u.owners.length);
+  const persons = new Set(owned.flatMap((u) => u.owners.map((o) => o.user_id)));
+  const allUnits = vunits.length;
+  if (allUnits > 0 && owned.length === allUnits && persons.size === 1 && owned.every((u) => !u.split)) out.push("Alle kavels zijn in handen van één eigenaar: de onverdeeldheid houdt op en de VME is van rechtswege ontbonden (art. 3.97 BW). Registreer de ontbinding onder Instellingen › Ontbinding en vereffening.");
+  const zero = vunits.filter((u) => !u.shares);
+  if (zero.length) out.push(`Kavel ${zero.map((u) => u.label).join(", ")} heeft geen aandelen in de gemeenschappelijke delen: ze stemt niet en draagt geen lasten volgens aandelen. Controleer de basisakte.`);
+  const voters = new Set(owned.map((u) => u.voter_id).filter(Boolean));
+  if (voters.size === 2) out.push("Er zijn maar twee stemgerechtigden: door het stemplafond beslist geen van beiden alleen (art. 3.87 §8 BW). Raken ze het niet eens, dan kan elk de rechter vragen een AV te laten bijeenroepen (art. 3.92 §4) of toestemming te geven voor dringende werken (art. 3.92 §5).");
+  return out;
+}
 
 export default mandates;

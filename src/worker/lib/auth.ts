@@ -55,7 +55,7 @@ export const requireBuilding = (...roles: string[]): MiddlewareHandler<AppEnv> =
     `SELECT b.id, b.org_id, b.name, b.total_shares, b.demo_group, b.demo_last_activity, b.dissolution_status, b.liquidator_user_id,
             COALESCE(bm.role, CASE WHEN om.user_id IS NOT NULL THEN 'syndicus' END) AS role,
             (SELECT COUNT(*) FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = b.id AND uo.user_id = ?1) AS units,
-            (EXISTS(SELECT 1 FROM mandates md WHERE md.building_id = b.id AND md.user_id = ?1 AND md.organ IN ('syndicus','voorlopig_syndicus') AND md.start_date <= date('now') AND md.end_date >= date('now'))) AS acting
+            (EXISTS(SELECT 1 FROM mandates md WHERE md.building_id = b.id AND md.user_id = ?1 AND md.organ IN ('syndicus','voorlopig_syndicus','voorlopig_bewindvoerder') AND md.start_date <= date('now') AND md.end_date >= date('now'))) AS acting
      FROM buildings b
      LEFT JOIN building_members bm ON bm.building_id = b.id AND bm.user_id = ?1
      LEFT JOIN org_members om ON om.org_id = b.org_id AND om.user_id = ?1

@@ -153,6 +153,11 @@ auth.get("/me", async (c) => {
      SELECT b.id, b.name, b.address, b.city, b.org_id, o.name AS org_name, b.dissolution_status, b.parent_building_id, b.sub_scope, (SELECT name FROM buildings pb WHERE pb.id = b.parent_building_id) AS parent_name, 'syndicus' AS role, 0 AS units, 1 AS acting
      FROM buildings b JOIN orgs o ON o.id = b.org_id
      WHERE b.liquidator_user_id = ?1 AND b.dissolution_status = 'in_liquidation' AND b.id NOT IN (SELECT building_id FROM building_members WHERE user_id = ?1) AND b.org_id NOT IN (SELECT org_id FROM org_members WHERE user_id = ?1)
+     UNION
+     SELECT b.id, b.name, b.address, b.city, b.org_id, o.name AS org_name, b.dissolution_status, b.parent_building_id, b.sub_scope, (SELECT name FROM buildings pb WHERE pb.id = b.parent_building_id) AS parent_name, 'syndicus' AS role, 0 AS units, 1 AS acting
+     FROM mandates md JOIN buildings b ON b.id = md.building_id JOIN orgs o ON o.id = b.org_id
+     WHERE md.user_id = ?1 AND md.organ IN ('syndicus','voorlopig_syndicus','voorlopig_bewindvoerder') AND md.start_date <= date('now') AND md.end_date >= date('now')
+       AND b.id NOT IN (SELECT building_id FROM building_members WHERE user_id = ?1) AND b.org_id NOT IN (SELECT org_id FROM org_members WHERE user_id = ?1)
      ORDER BY 2`
   ).bind(user.id).all();
   const unread = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL").bind(user.id).first<{ n: number }>();

@@ -11,14 +11,14 @@ import { isBoard, isManager } from "./auth";
  */
 
 /** SQL: heeft gebruiker ?1 vandaag een actief mandaat als (voorlopig) syndicus in gebouw b? */
-export const ACTING_SYNDICUS_SQL = "EXISTS(SELECT 1 FROM mandates md WHERE md.building_id = b.id AND md.user_id = ?1 AND md.organ IN ('syndicus','voorlopig_syndicus') AND md.start_date <= date('now') AND md.end_date >= date('now'))";
+export const ACTING_SYNDICUS_SQL = "EXISTS(SELECT 1 FROM mandates md WHERE md.building_id = b.id AND md.user_id = ?1 AND md.organ IN ('syndicus','voorlopig_syndicus','voorlopig_bewindvoerder') AND md.start_date <= date('now') AND md.end_date >= date('now'))";
 
 /** Is er een syndicus (lid met rol syndicus, kantoor, of actief mandaat)? Zo niet geldt art. 3.87 §2 lid 4. */
 export async function hasSyndicus(env: Env, buildingId: string): Promise<boolean> {
   const r = await env.DB.prepare(`SELECT (
       EXISTS(SELECT 1 FROM building_members bm WHERE bm.building_id = ?1 AND bm.role = 'syndicus')
       OR EXISTS(SELECT 1 FROM org_members om JOIN buildings b ON b.org_id = om.org_id WHERE b.id = ?1)
-      OR EXISTS(SELECT 1 FROM mandates md WHERE md.building_id = ?1 AND md.organ IN ('syndicus','voorlopig_syndicus') AND md.start_date <= date('now') AND md.end_date >= date('now'))
+      OR EXISTS(SELECT 1 FROM mandates md WHERE md.building_id = ?1 AND md.organ IN ('syndicus','voorlopig_syndicus','voorlopig_bewindvoerder') AND md.start_date <= date('now') AND md.end_date >= date('now'))
     ) AS present`).bind(buildingId).first<{ present: number }>();
   return !!r?.present;
 }

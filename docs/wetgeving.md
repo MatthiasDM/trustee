@@ -64,6 +64,9 @@ Onthoudingen, blanco en ongeldige stemmen tellen niet mee bij het berekenen van 
 
 **In Trustee**: de rol *Syndicus (uitvoerend)*. Beheert gebouw, leden, kavels, documenten, vergaderingen en stemmingen. Heeft als enige het recht om documenten te wijzigen en te verwijderen die anderen hebben geplaatst.
 
+- **Voorlopige bewindvoerder** (art. 3.92 §2, tekst geverifieerd 2026-10-17): is het financieel evenwicht ernstig in het gedrang of kan de VME het behoud of de wettelijke overeenstemming van het gebouw niet waarborgen, dan kunnen de syndicus of mede-eigenaars met minstens 1/5 van de aandelen de rechter vragen voorlopige bewindvoerders aan te wijzen, op kosten van de VME, die de organen vervangen voor de toegekende taken. In Trustee: mandaat *Voorlopig bewindvoerder* (enkel met vonnis en taakomschrijving) met de rechten van de syndicus zolang het loopt.
+- **Structurele signalen**: alle kavels in één hand (de VME is van rechtswege ontbonden, art. 3.97), kavels zonder aandelen, en een VME met slechts twee stemgerechtigden (door het stemplafond beslist niemand alleen; bij blokkering art. 3.92 §4 en §5) worden op het overzicht gemeld.
+
 ## Raad van mede-eigendom (art. 3.90)
 
 - **Verplicht** in elk gebouw of groep van gebouwen met **minstens 20 kavels**, kelders, garages en parkeerplaatsen niet meegerekend. Kleinere VME's mogen er vrijwillig een oprichten.

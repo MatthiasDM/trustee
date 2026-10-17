@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { api, fmtDateTime, fmtSize } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { SecurityCard } from "../components/SecurityCard";
+import { DissolutionCard } from "../components/DissolutionCard";
 import { getPushSubscription, pushSupported, subscribePush, unsubscribePush } from "../lib/push";
 import { LOCALES, useT } from "../lib/i18n";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
@@ -70,6 +71,7 @@ export function SettingsPage() {
     </CardContent></Card>
 
     <SecurityCard />
+    <DissolutionCard />
 
     {b.isManager && bf && <Card><CardHeader><CardTitle>Gebouw (VME)</CardTitle></CardHeader><CardContent>
       <form className="grid gap-4" onSubmit={async (e: FormEvent) => { e.preventDefault(); await api.patch(`/api/buildings/${b.id}`, { ...bf, total_shares: Number(bf.total_shares), av_period_start: bf.av_period_start || null, av_period_days: Number(bf.av_period_days), legal_proceedings: bf.legal_proceedings || null, insurance_info: bf.insurance_info || null, seat_address: bf.seat_address || null, syndicus_info: bf.syndicus_info, provisional_acceptance_date: bf.provisional_acceptance_date || null, reserve_waiver_item_id: bf.reserve_waiver_item_id || null }); await refresh(); toast.success("Gebouw opgeslagen"); }}>

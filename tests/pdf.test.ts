@@ -14,3 +14,12 @@ describe("PDF-generator", () => {
   });
   it("formatteert bedragen in het Nederlands", () => { expect(money(1234.5)).toMatch(/1\.234,50 EUR/); });
 });
+
+describe("Vermeldingen op documenten van de VME", () => {
+  it("ondernemingsnummer altijd, 'in vereffening' na ontbinding", async () => {
+    const { pdfOpts } = await import("../src/worker/lib/pdf");
+    expect(pdfOpts({ enterprise_number: "0712.345.678", dissolution_status: null })).toEqual({ kbo: "0712.345.678", liquidation: false });
+    expect(pdfOpts({ enterprise_number: null, dissolution_status: "in_liquidation" }).liquidation).toBe(true);
+    expect(pdfOpts({ dissolution_status: "closed" }).liquidation).toBe(true);
+  });
+});

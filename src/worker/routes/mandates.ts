@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { AppEnv } from "../env";
 import { isBoard, requireAuth, requireBuilding } from "../lib/auth";
 import { canRegisterSyndicus, hasSyndicus, organConflict } from "../lib/governance";
-import { Pdf, dateNl } from "../lib/pdf";
+import { Pdf, dateNl, pdfOpts } from "../lib/pdf";
 import { reserveCheck } from "../lib/reserve";
 import { storeDocument } from "../lib/reports";
 import { HttpError, patchOf, uid } from "../lib/util";
@@ -144,7 +144,7 @@ mandates.post("/:buildingId/mandates/:mandateId/extract", requireBuilding("syndi
   const bld = await c.env.DB.prepare("SELECT * FROM buildings WHERE id = ?").bind(b.id).first<any>();
   const info = bld.syndicus_info ? JSON.parse(bld.syndicus_info) : {};
   const name = info.name || m.user_name || m.holder_name;
-  const pdf = await Pdf.create(`${bld.name} - Uittreksel aanstelling syndicus`, { kbo: bld.enterprise_number });
+  const pdf = await Pdf.create(`${bld.name} - Uittreksel aanstelling syndicus`, pdfOpts(bld));
   pdf.title("Uittreksel aanstelling syndicus");
   pdf.text(`Vereniging van mede-eigenaars ${bld.name}${bld.enterprise_number ? `, ondernemingsnummer ${bld.enterprise_number}` : ""}, zetel ${bld.seat_address ?? `${bld.address}${bld.city ? `, ${bld.postal_code ?? ""} ${bld.city}` : ""}`}.`, 10.5);
   pdf.space(6);

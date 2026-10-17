@@ -8,7 +8,7 @@ import { isBoard, isCoOwner } from "../lib/auth";
 import { attendance, MAJ, renderMinutesHtml, tally, validateProxy } from "../lib/meeting";
 import { canManageMeeting, hasSyndicus, ownerConveneRight } from "../lib/governance";
 import { suspendedFor, voterIds, votingUnits, weightOf } from "../lib/voting";
-import { Pdf } from "../lib/pdf";
+import { Pdf, pdfOpts } from "../lib/pdf";
 import { storeDocument } from "../lib/reports";
 
 const meetings = new Hono<AppEnv>();
@@ -438,7 +438,7 @@ meetings.post("/:buildingId/meetings/:meetingId/resident-notice", requireBuildin
   const m = await managedMeeting(c);
   const bld = await c.env.DB.prepare("SELECT * FROM buildings WHERE id = ?").bind(b.id).first<any>();
   const when = new Date(m.starts_at).toLocaleString("nl-BE", { timeZone: "Europe/Brussels", dateStyle: "full", timeStyle: "short" });
-  const pdf = await Pdf.create(`${bld.name} - Mededeling aan de bewoners`, { kbo: bld.enterprise_number });
+  const pdf = await Pdf.create(`${bld.name} - Mededeling aan de bewoners`, pdfOpts(bld));
   pdf.title("Mededeling aan de bewoners");
   pdf.text(`De algemene vergadering van de vereniging van mede-eigenaars ${bld.name} vindt plaats op ${when}${m.location ? `, ${m.location}` : ""}.`, 12, { bold: true });
   pdf.space(8);

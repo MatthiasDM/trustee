@@ -138,16 +138,20 @@ auth.get("/me", async (c) => {
   const demoInfo = user.demo_group ? { group: user.demo_group, users: await demoUsers(c.env, user.demo_group), ttl_hours: DEMO_TTL_MS / 3600_000 } : null;
   const orgs = await c.env.DB.prepare("SELECT o.id, o.name, o.plan, om.role FROM org_members om JOIN orgs o ON o.id = om.org_id WHERE om.user_id = ?").bind(user.id).all();
   const buildings = await c.env.DB.prepare(
-    `SELECT b.id, b.name, b.address, b.city, b.org_id, o.name AS org_name,
+    `SELECT b.id, b.name, b.address, b.city, b.org_id, o.name AS org_name, b.dissolution_status,
             CASE WHEN ${ACTING_SYNDICUS_SQL} THEN 'syndicus' ELSE bm.role END AS role,
             (SELECT COUNT(*) FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = b.id AND uo.user_id = ?1) AS units,
             (CASE WHEN bm.role != 'syndicus' AND ${ACTING_SYNDICUS_SQL} THEN 1 ELSE 0 END) AS acting
      FROM building_members bm JOIN buildings b ON b.id = bm.building_id JOIN orgs o ON o.id = b.org_id
      WHERE bm.user_id = ?1
      UNION
-     SELECT b.id, b.name, b.address, b.city, b.org_id, o.name AS org_name, 'syndicus' AS role, 0 AS units, 0 AS acting
+     SELECT b.id, b.name, b.address, b.city, b.org_id, o.name AS org_name, b.dissolution_status, 'syndicus' AS role, 0 AS units, 0 AS acting
      FROM org_members om JOIN buildings b ON b.org_id = om.org_id JOIN orgs o ON o.id = b.org_id
      WHERE om.user_id = ?1 AND b.id NOT IN (SELECT building_id FROM building_members WHERE user_id = ?1)
+     UNION
+     SELECT b.id, b.name, b.address, b.city, b.org_id, o.name AS org_name, b.dissolution_status, 'syndicus' AS role, 0 AS units, 1 AS acting
+     FROM buildings b JOIN orgs o ON o.id = b.org_id
+     WHERE b.liquidator_user_id = ?1 AND b.dissolution_status = 'in_liquidation' AND b.id NOT IN (SELECT building_id FROM building_members WHERE user_id = ?1) AND b.org_id NOT IN (SELECT org_id FROM org_members WHERE user_id = ?1)
      ORDER BY 2`
   ).bind(user.id).all();
   const unread = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL").bind(user.id).first<{ n: number }>();

@@ -7,7 +7,7 @@ export class Pdf {
   private readonly W = 595.28; private readonly H = 841.89; private readonly M = 48; private pageNo = 0;
   private footer = "";
   /** footer: naam en titel; opts.kbo: ondernemingsnummer van de VME, verplicht op alle documenten (art. 3.86 §1 BW). */
-  static async create(footer: string, opts: { kbo?: string | null } = {}) { const p = new Pdf(); p.doc = await PDFDocument.create(); p.font = await p.doc.embedFont(StandardFonts.Helvetica); p.bold = await p.doc.embedFont(StandardFonts.HelveticaBold); p.footer = opts.kbo ? `${footer} - KBO ${opts.kbo}` : footer; p.newPage(); return p; }
+  static async create(footer: string, opts: { kbo?: string | null; liquidation?: boolean } = {}) { const p = new Pdf(); p.doc = await PDFDocument.create(); p.font = await p.doc.embedFont(StandardFonts.Helvetica); p.bold = await p.doc.embedFont(StandardFonts.HelveticaBold); p.footer = `${footer}${opts.liquidation ? " - VME in vereffening" : ""}${opts.kbo ? ` - KBO ${opts.kbo}` : ""}`; p.newPage(); return p; }
   private clean(s: string) { return (s ?? "").replace(/[^\x20-\x7E\xA0-\xFF€]/g, (ch) => ({ "≥": ">=", "≤": "<=", "—": "-", "–": "-", "…": "...", "’": "'", "“": '"', "”": '"', "€": "EUR" }[ch] ?? "?")).replace(/€/g, "EUR"); }
   private newPage() { this.page = this.doc.addPage([this.W, this.H]); this.pageNo++; this.y = this.H - this.M; this.page.drawText(this.clean(`${this.footer} - pagina ${this.pageNo}`), { x: this.M, y: 34, size: 8, font: this.font, color: rgb(0.45, 0.45, 0.45) }); this.page.drawText(this.clean(PDF_DISCLAIMER), { x: this.M, y: 22, size: 6.5, font: this.font, color: rgb(0.55, 0.55, 0.55) }); }
   private need(h: number) { if (this.y - h < this.M + 10) this.newPage(); }
@@ -40,3 +40,6 @@ export class Pdf {
 
 export const money = (n: number) => `${(n ?? 0).toLocaleString("nl-BE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`;
 export const dateNl = (s: string) => new Date(s).toLocaleDateString("nl-BE", { timeZone: "Europe/Brussels" });
+
+/** Opties voor elk document van de VME: ondernemingsnummer (art. 3.86 §1) en, na ontbinding, de vermelding "in vereffening" (art. 3.98 §1). */
+export const pdfOpts = (b: { enterprise_number?: string | null; dissolution_status?: string | null }) => ({ kbo: b.enterprise_number ?? null, liquidation: b.dissolution_status === "in_liquidation" || b.dissolution_status === "closed" });

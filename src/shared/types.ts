@@ -35,7 +35,7 @@ export const MAJORITY_LABELS: Record<Majority, string> = {
 };
 
 export interface User { id: string; email: string; name: string; phone?: string | null; locale: string; is_superadmin: number; created_at: string }
-export interface Building { id: string; org_id: string; name: string; address: string; city?: string | null; postal_code?: string | null; enterprise_number?: string | null; total_shares: number; role?: Role; org_name?: string; units?: number; acting?: number }
+export interface Building { id: string; org_id: string; name: string; address: string; city?: string | null; postal_code?: string | null; enterprise_number?: string | null; total_shares: number; role?: Role; org_name?: string; units?: number; acting?: number; dissolution_status?: string | null }
 export interface Unit { id: string; building_id: string; label: string; type: string; floor?: string | null; shares: number; owners?: { user_id: string; name: string; email: string; share_pct: number; right_type?: string }[]; split?: boolean; suspended?: boolean; voter_id?: string | null; voter_name?: string | null; representative_user_id?: string | null; representative_set_at?: string | null; representative_document_id?: string | null }
 export const RIGHT_LABELS: Record<string, string> = { vol: "volle eigendom", blote_eigendom: "blote eigendom", vruchtgebruik: "vruchtgebruik", erfpacht: "erfpacht", opstal: "opstal", gebruik_bewoning: "gebruik of bewoning" };
 export interface Member { user_id: string; name: string; email: string; phone?: string | null; role: Role; joined_at: string; units?: string; ecomm_consent_at?: string | null; ecomm_consent_via?: string | null }

@@ -131,6 +131,10 @@ Op omgevingen waar de demo-modus aanstaat (zoals de preview) kan iedereen via *P
 - **Inhoud melden.** Onder elk bericht van iemand anders staat *Melden*; de syndicus beoordeelt en verwijdert indien nodig.
 - **Voorwaarden en privacy.** Bij registratie en bij elke nieuwe versie aanvaard je de algemene voorwaarden en de privacyverklaring; die aanvaarding wordt gelogd. De teksten staan onderaan de zijbalk.
 
+## Ontbinding en vereffening
+
+Wordt de VME ontbonden (alle kavels in één hand, eenparige beslissing bij akte, of vonnis), dan registreert de syndicus dat onder *Instellingen › Ontbinding en vereffening*. De VME is dan in vereffening: elk document vermeldt dat, en de vereffenaar (of bij gebrek daaraan de syndicus) beheert het gebouw. Na de notariële slotakte wordt de vereffening afgesloten; het platform blijft daarna beschikbaar voor inzage en export, want de boeken moeten vijf jaar bewaard worden.
+
 ## Kabels en leidingen
 
 Wil je glasvezel, een laadkabel of een waterleiding naar je kavel trekken door de gemene delen, dan mag dat op jouw kosten (art. 3.82 §2 BW). Kondig het aan onder *Vragen & meldingen › Kabels en leidingen* en stuur dezelfde aankondiging aangetekend naar de syndicus. Vanaf de ontvangst hebben de andere mede-eigenaars en de VME twee maanden om op een wettelijke grond verzet aan te tekenen; daarna mag je beginnen. Nutsoperatoren worden door de syndicus geregistreerd.

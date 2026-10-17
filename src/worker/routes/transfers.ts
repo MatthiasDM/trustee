@@ -6,7 +6,7 @@ import { HttpError, now, plusMs, randomToken, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 import { ogm, postEntry, round2 } from "../lib/ledger";
 import { settlementPreview } from "../lib/settlement";
-import { Pdf, dateNl, money } from "../lib/pdf";
+import { Pdf, dateNl, money, pdfOpts } from "../lib/pdf";
 import { storeDocument } from "../lib/reports";
 
 /** Overdracht van een kavel: afrekening werkkapitaal (art. 3.94 §5), achterstallen voor de notaris (art. 3.95), eigenaarswissel. */
@@ -83,7 +83,7 @@ transfers.post("/:buildingId/units/:unitId/transfer", requireBuilding("syndicus"
     if (!other) { const r = await c.env.DB.prepare("DELETE FROM building_members WHERE building_id = ? AND user_id = ? AND role = 'eigenaar'").bind(b.id, s.user_id).run(); if (r.meta.changes) removed.push(s.name); }
   }
   // 4. Afrekening als PDF bij de kavel (koper en organen; de syndicus bezorgt ze aan de notaris)
-  const pdf = await Pdf.create(`${b.name} - Afrekening overdracht kavel ${p.unit.label}`, { kbo: (await c.env.DB.prepare("SELECT enterprise_number FROM buildings WHERE id = ?").bind(b.id).first<{ enterprise_number: string | null }>())?.enterprise_number });
+  const pdf = await Pdf.create(`${b.name} - Afrekening overdracht kavel ${p.unit.label}`, pdfOpts((await c.env.DB.prepare("SELECT enterprise_number, dissolution_status FROM buildings WHERE id = ?").bind(b.id).first<any>()) ?? {}));
   pdf.title(`Afrekening bij overdracht - kavel ${p.unit.label}`);
   pdf.text(`Vereniging van mede-eigenaars ${b.name}. Opgesteld door de syndicus op ${dateNl(now())} (art. 3.94 §5 BW).`);
   pdf.h2("Partijen");

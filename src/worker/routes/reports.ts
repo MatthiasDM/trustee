@@ -5,7 +5,7 @@ import { isBoard, requireAuth, requireBuilding } from "../lib/auth";
 import { HttpError, patchOf, uid, now } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 import { generateAnnualReport, generateOwnerStatements, overdueUnits, renderCommissionerReport, storeDocument } from "../lib/reports";
-import { Pdf, dateNl, money } from "../lib/pdf";
+import { Pdf, pdfOpts, dateNl, money } from "../lib/pdf";
 import { postEntry } from "../lib/ledger";
 import { cashbook, countedUnits, ledgerMode } from "../lib/cashbook";
 import { generateTransferDossier } from "../lib/transfer";
@@ -103,7 +103,7 @@ export async function sendReminder(env: AppEnv["Bindings"], buildingId: string, 
   if (fee > 0) entryId = await postEntry(env, buildingId, userId, { date: new Date().toISOString().slice(0, 10), description: `Aanmaningskosten kavel ${u.label}`, source: "manual", lines: [{ account_code: "4101", debit: fee, unit_id: unitId }, { account_code: "740", credit: fee, memo: "aanmaningskosten" }] });
   const total = Math.round((u.outstanding + fee) * 100) / 100;
   const titles = ["", "Betalingsherinnering", "Aanmaning", "Ingebrekestelling"];
-  const pdf = await Pdf.create(`${b.name} - ${titles[level]} kavel ${u.label}`, { kbo: b.enterprise_number });
+  const pdf = await Pdf.create(`${b.name} - ${titles[level]} kavel ${u.label}`, pdfOpts(b));
   pdf.title(`${titles[level]} - kavel ${u.label}`);
   pdf.text(`Vereniging van mede-eigenaars ${b.name}, zetel ${b.seat_address ?? b.address}${b.enterprise_number ? `, KBO ${b.enterprise_number}` : ""}. ${dateNl(new Date().toISOString())}.`);
   pdf.text(`Geachte ${u.owners ?? "mede-eigenaar"},`);

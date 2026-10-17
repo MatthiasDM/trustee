@@ -4,6 +4,7 @@ import type { AppEnv } from "../env";
 import { isBoard, requireAuth, requireBuilding } from "../lib/auth";
 import { canRegisterSyndicus, hasSyndicus, organConflict } from "../lib/governance";
 import { Pdf, dateNl } from "../lib/pdf";
+import { reserveCheck } from "../lib/reserve";
 import { storeDocument } from "../lib/reports";
 import { HttpError, patchOf, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
@@ -121,6 +122,7 @@ mandates.get("/:buildingId/organs", requireBuilding(), async (c) => {
     syndicus_present: await hasSyndicus(c.env, b.id),
     raad_required: (units?.n ?? 0) >= 20,
     warnings: [
+      ...await (async () => { const r = await reserveCheck(c.env, b.id); return [...(r.status === "short" ? [r.message] : []), ...(!r.has_working_account || !r.has_reserve_account ? ["Een afzonderlijke rekening voor werkkapitaal en voor reservekapitaal is verplicht, op naam van de VME (art. 3.86 §3 BW); registreer ze onder Boekhouding › Instellingen."] : [])]; })(),
       ...(byOrgan("syndicus").length === 0 ? ["Geen actief syndicusmandaat geregistreerd (art. 3.89 BW)."] : []),
       ...(byOrgan("commissaris").length === 0 ? ["Geen commissaris van de rekeningen aangewezen voor dit jaar (art. 3.91 BW: jaarlijks verplicht)."] : []),
       ...active.filter((m) => (m.organ === "syndicus" || m.organ === "voorlopig_syndicus") && !m.extract_posted_at && new Date(m.start_date).getTime() + 8 * 86400_000 < Date.now()).map((m) => `Het uittreksel van de aanstelling van ${m.user_name ?? m.holder_name} als syndicus is nog niet als aangeplakt geregistreerd; het moet binnen 8 dagen aan de ingang hangen (art. 3.89 §2 BW).`),

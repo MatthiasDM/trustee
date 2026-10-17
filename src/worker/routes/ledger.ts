@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { isBoard, isManager, requireAuth, requireBuilding } from "../lib/auth";
+import { reserveCheck } from "../lib/reserve";
 import { HttpError, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 import { TEMPLATES, allocate, ensureChart, fiscalYearFor, keyWeights, ogm, ogmDigits, parseBankCsv, parseCoda, postEntry, reverseEntry, round2, templateByCode, type LineInput } from "../lib/ledger";
@@ -15,6 +16,8 @@ const mgr = requireBuilding("syndicus");
 const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 // ---------- Boekjaren ----------
+/** Controle verplicht reservekapitaal en aparte rekeningen (art. 3.86 §3 BW). */
+ledger.get("/:buildingId/ledger/reserve-check", async (c) => c.json(await reserveCheck(c.env, c.get("building").id, c.req.query("fy"))));
 ledger.get("/:buildingId/ledger/fiscal-years", async (c) => c.json((await c.env.DB.prepare("SELECT * FROM fiscal_years WHERE building_id = ? ORDER BY start_date DESC").bind(c.get("building").id).all()).results));
 ledger.post("/:buildingId/ledger/fiscal-years", mgr, async (c) => {
   const b = c.get("building");

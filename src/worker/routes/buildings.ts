@@ -34,6 +34,8 @@ const buildingSchema = z.object({
   legal_proceedings: z.string().max(5000).nullable().optional(),
   insurance_info: z.string().max(2000).nullable().optional(),
   seat_address: z.string().max(300).nullable().optional(),
+  provisional_acceptance_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  reserve_waiver_item_id: z.string().nullable().optional(),
   syndicus_info: z.object({ name: z.string().max(160).optional(), legal_form: z.string().max(60).optional(), profession: z.string().max(80).optional(), address: z.string().max(300).optional(), enterprise_number: z.string().max(40).optional(), phone: z.string().max(40).optional(), email: z.string().max(160).optional(), consult_place: z.string().max(300).optional() }).nullable().optional(),
 });
 
@@ -86,6 +88,11 @@ buildings.get("/:buildingId", requireBuilding(), async (c) => {
 buildings.patch("/:buildingId", requireBuilding("syndicus"), async (c) => {
   const b = c.get("building");
   const body = patchOf(buildingSchema.partial(), await c.req.json());
+  if (body.reserve_waiver_item_id) {
+    // enkel een aangenomen beslissing met (minstens) 4/5 meerderheid ontslaat van het verplicht reservekapitaal (art. 3.86 §3 BW)
+    const it = await c.env.DB.prepare("SELECT required_majority, adopted, status FROM agenda_items WHERE id = ? AND building_id = ?").bind(body.reserve_waiver_item_id, b.id).first<any>();
+    if (!it || it.status !== "decided" || it.adopted !== 1 || !["four_fifths", "unanimous"].includes(it.required_majority)) throw new HttpError(400, "Kies een aangenomen beslissing van de AV met minstens 4/5 meerderheid (art. 3.86 §3 BW)");
+  }
   const fields = Object.entries(body).filter(([, v]) => v !== undefined).map(([k, v]) => [k, typeof v === "boolean" ? +v : v && typeof v === "object" ? JSON.stringify(v) : v] as [string, unknown]);
   if (!fields.length) return c.json({ ok: true });
   await c.env.DB.prepare(`UPDATE buildings SET ${fields.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ?`).bind(...fields.map(([, v]) => v), b.id).run();

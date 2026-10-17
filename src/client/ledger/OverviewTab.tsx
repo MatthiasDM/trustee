@@ -11,10 +11,18 @@ import { eur, Money, type FiscalYear } from "./shared";
 export function OverviewTab({ buildingId, fy, isBoard }: { buildingId: string; fy: FiscalYear | null; isBoard: boolean }) {
   const { data, loading } = useFetch<any>(fy ? `/api/buildings/${buildingId}/ledger/reports/summary?fy=${fy.id}&until=${fy.end_date}` : null, [fy?.id]);
   const b = useBuilding();
+  const reserve = useFetch<any>(fy ? `/api/buildings/${buildingId}/ledger/reserve-check?fy=${fy.id}` : null, [fy?.id]);
   if (!fy) return <p className="text-sm text-muted-foreground">Nog geen boekjaar. {isBoard ? "Maak er een aan onder Instellingen." : ""}</p>;
   if (loading || !data) return <Spinner />;
   const { cash, result, balance } = data;
+  const r = reserve.data;
   return <div className="space-y-6">
+    {r && r.status !== "not_yet" && <div className={`rounded-xl border p-4 text-sm shadow-xs ${r.status === "short" || !r.has_working_account || !r.has_reserve_account ? "border-amber-300 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/30" : "bg-card"}`}>
+      <div className="font-medium">Reservekapitaal (art. 3.86 §3 BW)</div>
+      <p className="mt-1 text-muted-foreground">{r.message}</p>
+      {r.status !== "no_date" && r.status !== "waived" && r.previous_year && <div className="mt-2 grid max-w-md grid-cols-2 gap-x-4 gap-y-0.5 tabular-nums"><span>Gewone lasten {r.previous_year}</span><span className="text-right">€ {r.ordinary_charges_prev.toFixed(2)}</span><span>Minimum (5 %)</span><span className="text-right">€ {r.minimum.toFixed(2)}</span><span>Opgevraagd {r.fiscal_year}</span><span className="text-right">€ {r.called_reserve.toFixed(2)}</span></div>}
+      {(!r.has_working_account || !r.has_reserve_account) && <p className="mt-1 text-amber-800 dark:text-amber-300">Afzonderlijke rekening ontbreekt voor {[!r.has_working_account && "werkkapitaal", !r.has_reserve_account && "reservekapitaal"].filter(Boolean).join(" en ")}.</p>}
+    </div>}
     <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
       <Stat label="Werkkapitaal op bank" value={eur(cash.working_bank)} icon={<Banknote />} />
       <Stat label="Reservekapitaal op bank" value={eur(cash.reserve_bank + cash.deposits)} icon={<PiggyBank />} />

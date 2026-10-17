@@ -7,6 +7,7 @@ import { AgendaSection, MeetingAgenda } from "../components/AgendaSection";
 import { AttendancePanel, MinutesDialog, ProxyDialog } from "../components/MeetingTools";
 import { MeetingRequests } from "../components/MeetingRequests";
 import { CancelMeetingDialog, ConveneDialog } from "../components/ConveneDialog";
+import { ResidentQuestions } from "../components/ResidentQuestions";
 import { Badge } from "../components/ui/badge";
 import { Empty, ErrorBox, Field, PageHeader, Spinner } from "../components/ui";
 import { Button } from "../components/ui/button";
@@ -44,6 +45,7 @@ export function MeetingsPage() {
         : d >= now && <p className="mt-2 text-xs text-muted-foreground">{m.convened_at ? <><Badge variant="success">Opgeroepen</Badge> op {fmtDateTime(m.convened_at)}{m.convened_by_name ? ` door ${m.convened_by_name}` : ""}</> : (b.isBoard || m.can_manage) ? <><Badge variant="warning">Nog niet opgeroepen</Badge> De leden zijn nog niet verwittigd; verstuur de oproeping minstens 15 dagen vooraf.</> : <Badge variant="outline">Oproeping volgt</Badge>}</p>}
       {!!m.convened_by_owners && <p className="mt-2 text-xs text-muted-foreground"><Badge variant="info">Bijeengeroepen door mede-eigenaars</Badge> {m.created_by_name ? `door ${m.created_by_name}. ` : ""}{m.legal_basis}</p>}
       <MeetingAgenda meetingId={m.id} meetingStartsAt={m.starts_at} canManage={!!m.can_manage} />
+      <ResidentQuestions meeting={m} canManage={b.isBoard || !!m.can_manage} />
       {m.agenda && <details className="mt-3 text-sm"><summary className="cursor-pointer text-primary">Toelichting / vrije agenda</summary><div className="mt-2 whitespace-pre-wrap text-muted-foreground">{m.agenda}</div></details>}
       {m.minutes_document_id && <a className="mt-3 inline-flex items-center gap-1.5 text-sm text-primary hover:underline" href={`/api/buildings/${b.id}/documents/${m.minutes_document_id}/download?inline=1`} target="_blank" rel="noreferrer"><FileText className="size-4" />Verslag: {m.minutes_name}</a>}
       {new Date(m.starts_at) >= now && b.isOwner && <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4 text-sm"><span className="text-muted-foreground">{t("Aanwezig?")}</span>

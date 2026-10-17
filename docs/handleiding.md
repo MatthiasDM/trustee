@@ -108,7 +108,7 @@ Jij bent, samen met de andere eigenaars, de VME. De syndicus werkt in jullie opd
 
 Wat je **niet** alleen kan: de syndicus opdrachten geven buiten de AV om, AV-beslissingen negeren, of contracten sluiten namens de VME. Beslissingen zijn collectief.
 
-Huurders en andere bewoners zijn geen lid van de VME en stemmen niet, maar mogen vóór de AV schriftelijk vragen of opmerkingen over de gemene delen indienen; in Trustee doe je dat via *Vragen & meldingen*.
+Huurders en andere bewoners zijn geen lid van de VME en stemmen niet, maar mogen vóór de AV schriftelijk vragen of opmerkingen over de gemene delen indienen (art. 3.89 §5, 6° BW). In Trustee doe je dat bij de vergadering zelf (*Vraag of opmerking indienen*); je vraag komt in de notulen. De syndicus hangt een mededeling met de datum op in de gemene delen.
 
 ## Als de syndicus wegvalt
 

@@ -8,6 +8,8 @@ import { isBoard, isCoOwner } from "../lib/auth";
 import { attendance, MAJ, renderMinutesHtml, tally, validateProxy } from "../lib/meeting";
 import { canManageMeeting, hasSyndicus, ownerConveneRight } from "../lib/governance";
 import { suspendedFor, votingUnits, weightOf } from "../lib/voting";
+import { Pdf } from "../lib/pdf";
+import { storeDocument } from "../lib/reports";
 
 const meetings = new Hono<AppEnv>();
 meetings.use("*", requireAuth);
@@ -146,6 +148,7 @@ async function convenePreview(c: Context<AppEnv>, m: any) {
   const voters = recipients.filter((r) => r.role !== "huurder" && !r.represented_by && (r.units || r.role === "eigenaar" || r.role === "raad"));
   const registered = voters.filter((r) => !r.ecomm_consent_at);
   if (registered.length) warnings.push(`${registered.length} stemgerechtigde(n) zonder akkoord voor elektronische oproeping: aan hen moet de oproeping per aangetekende brief worden verstuurd. Registreer hun schriftelijk akkoord onder Leden, of verstuur aangetekend.`);
+  if (m.type !== "raad" && recipients.some((r: any) => r.role === "huurder") && !m.resident_notice_document_id) warnings.push("Er zijn bewoners zonder stemrecht: deel hen de datum mee en hang de mededeling op in de gemeenschappelijke delen, zodat ze schriftelijk vragen kunnen indienen (art. 3.89 §5, 6° BW). Maak ze aan met 'Mededeling bewoners'.");
   if (m.convened_at) warnings.push(`Al opgeroepen op ${m.convened_at.slice(0, 10)}. Opnieuw versturen stuurt een herinnering aan iedereen.`);
   return { meeting: { id: m.id, title: m.title, starts_at: m.starts_at, type: m.type, convened_at: m.convened_at, is_second_call: !!m.is_second_call }, days_until: days, min_days: minDays, agenda_items: agenda, recipients, registered_needed: registered.map((r) => r.user_id), warnings };
 }
@@ -254,6 +257,8 @@ meetings.post("/:buildingId/meetings/:meetingId/minutes/generate", requireBuildi
   L.push("## Aanwezigheid en quorum");
   for (const r of a.rows) L.push(`- Kavel ${r.label} (${r.shares} aandelen) — ${r.owner_names || "geen eigenaar geregistreerd"}: ${r.status === "attending" ? "aanwezig" : r.status === "proxy" ? `vertegenwoordigd bij volmacht door ${r.holder_name}` : r.status === "absent" ? "afwezig" : r.status === "suspended" ? "deelnamerecht geschorst (gesplitste eigendom zonder lasthebber, art. 3.87 §1, lid 2 BW)" : "niet gemeld"}`);
   L.push(`Aanwezig of vertegenwoordigd: ${a.quorum.present_owners} van ${a.quorum.total_owners} mede-eigenaars, ${a.quorum.present_shares} van ${a.quorum.total_shares} aandelen. ${a.quorum.explanation}`, "");
+  const questions = (await c.env.DB.prepare("SELECT q.body, u.name FROM meeting_questions q JOIN users u ON u.id = q.author_id WHERE q.meeting_id = ? ORDER BY q.created_at").bind(m.id).all()).results as any[];
+  if (questions.length) { L.push("## Vragen en opmerkingen van bewoners zonder stemrecht (art. 3.89 §5, 6° BW)"); for (const q of questions) L.push(`- ${q.name}: ${q.body.replace(/\n+/g, " ")}`); L.push(""); }
   L.push("## Agendapunten en beslissingen");
   items.forEach((it, i) => {
     L.push(`### ${i + 1}. ${it.title}`);
@@ -375,6 +380,52 @@ meetings.patch("/:buildingId/meeting-requests/:id", requireBuilding(), async (c)
 });
 
 /** iCal-export van een vergadering. */
+/** Bewoners zonder stemrecht dienen tot de aanvang schriftelijk vragen of opmerkingen over de gemeenschappelijke delen in (art. 3.89 §5, 6° BW). */
+meetings.get("/:buildingId/meetings/:meetingId/questions", requireBuilding(), async (c) => {
+  const rows = await c.env.DB.prepare("SELECT q.id, q.body, q.created_at, q.author_id, u.name AS author_name FROM meeting_questions q JOIN users u ON u.id = q.author_id WHERE q.meeting_id = ? AND q.building_id = ? ORDER BY q.created_at").bind(c.req.param("meetingId"), c.get("building").id).all();
+  return c.json(rows.results);
+});
+meetings.post("/:buildingId/meetings/:meetingId/questions", requireBuilding(), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  if (b.role !== "huurder") throw new HttpError(403, "Deze vragen zijn bedoeld voor bewoners zonder stemrecht; mede-eigenaars dienen een agendapunt in of stellen hun vraag op de vergadering");
+  const { body } = z.object({ body: z.string().min(5).max(3000) }).parse(await c.req.json());
+  const m = await c.env.DB.prepare("SELECT id, title, starts_at, type, cancelled_at FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
+  if (!m || m.type === "raad") throw new HttpError(404, "Algemene vergadering niet gevonden");
+  if (m.cancelled_at || new Date(m.starts_at) <= new Date()) throw new HttpError(400, "Vragen kunnen tot de aanvang van de vergadering ingediend worden");
+  const id = uid();
+  await c.env.DB.prepare("INSERT INTO meeting_questions (id, building_id, meeting_id, author_id, body) VALUES (?,?,?,?,?)").bind(id, b.id, m.id, user.id, body).run();
+  await notifyBuilding(c.env, { buildingId: b.id, type: "meeting", title: `Vraag van een bewoner voor ${m.title}`, body: `${user.name}: ${body.slice(0, 200)}`, link: `/b/${b.id}/meetings`, roles: ["syndicus"], email: false });
+  return c.json({ id }, 201);
+});
+meetings.delete("/:buildingId/meetings/:meetingId/questions/:qid", requireBuilding(), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  const q = await c.env.DB.prepare("SELECT q.author_id, m.starts_at FROM meeting_questions q JOIN meetings m ON m.id = q.meeting_id WHERE q.id = ? AND q.building_id = ?").bind(c.req.param("qid"), b.id).first<any>();
+  if (!q) throw new HttpError(404, "Vraag niet gevonden");
+  if (q.author_id !== user.id || new Date(q.starts_at) <= new Date()) throw new HttpError(403, "Enkel de indiener kan zijn vraag vóór de vergadering intrekken");
+  await c.env.DB.prepare("DELETE FROM meeting_questions WHERE id = ?").bind(c.req.param("qid")).run();
+  return c.json({ ok: true });
+});
+/** Mededeling voor de bewoners, aan te plakken in de gemeenschappelijke delen (art. 3.89 §5, 6°). */
+meetings.post("/:buildingId/meetings/:meetingId/resident-notice", requireBuilding(), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  const m = await managedMeeting(c);
+  const bld = await c.env.DB.prepare("SELECT * FROM buildings WHERE id = ?").bind(b.id).first<any>();
+  const when = new Date(m.starts_at).toLocaleString("nl-BE", { timeZone: "Europe/Brussels", dateStyle: "full", timeStyle: "short" });
+  const pdf = await Pdf.create(`${bld.name} - Mededeling aan de bewoners`, { kbo: bld.enterprise_number });
+  pdf.title("Mededeling aan de bewoners");
+  pdf.text(`De algemene vergadering van de vereniging van mede-eigenaars ${bld.name} vindt plaats op ${when}${m.location ? `, ${m.location}` : ""}.`, 12, { bold: true });
+  pdf.space(8);
+  pdf.text("Bewoont u het gebouw als huurder of op grond van een ander recht, zonder stemrecht in de algemene vergadering? Dan kunt u vóór de vergadering schriftelijk vragen of opmerkingen over de gemeenschappelijke delen indienen. Ze worden aan de vergadering meegedeeld (art. 3.89 §5, 6° BW).", 11);
+  pdf.space(6);
+  pdf.text(`Indienen: via het platform (${c.env.APP_URL}/b/${b.id}/meetings) of schriftelijk bij de syndicus${bld.syndicus_info ? (() => { const i = JSON.parse(bld.syndicus_info); return `: ${[i.name, i.address, i.email, i.phone].filter(Boolean).join(", ")}`; })() : ""}.`, 11);
+  pdf.space(12);
+  pdf.text("Aan te plakken op een goed zichtbare plaats in de gemeenschappelijke delen.", 8.5);
+  const docId = await storeDocument(c.env, b.id, user.id, { name: `Mededeling bewoners ${m.title} ${m.starts_at.slice(0, 10)}.pdf`, bytes: await pdf.bytes(), mime: "application/pdf", category: "verslag_av", description: "Aan te plakken in de gemeenschappelijke delen (art. 3.89 §5, 6° BW)", folderMatch: /verslag/i });
+  await c.env.DB.prepare("UPDATE meetings SET resident_notice_document_id = ? WHERE id = ?").bind(docId, m.id).run();
+  await audit(c.env, b.id, user.id, "meeting.resident_notice", "meeting", m.id);
+  return c.json({ document_id: docId }, 201);
+});
+
 meetings.get("/:buildingId/meetings/:meetingId/ics", requireBuilding(), async (c) => {
   const m = await c.env.DB.prepare("SELECT * FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), c.get("building").id).first<any>();
   if (!m) throw new HttpError(404, "Vergadering niet gevonden");

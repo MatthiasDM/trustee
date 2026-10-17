@@ -7,7 +7,7 @@ import { audit, notifyBuilding } from "../lib/notify";
 import { isBoard, isCoOwner } from "../lib/auth";
 import { attendance, MAJ, renderMinutesHtml, tally, validateProxy } from "../lib/meeting";
 import { canManageMeeting, hasSyndicus, ownerConveneRight } from "../lib/governance";
-import { suspendedFor, votingUnits, weightOf } from "../lib/voting";
+import { suspendedFor, voterIds, votingUnits, weightOf } from "../lib/voting";
 import { Pdf } from "../lib/pdf";
 import { storeDocument } from "../lib/reports";
 
@@ -43,7 +43,8 @@ meetings.get("/:buildingId/meetings", requireBuilding(), async (c) => {
        (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.status='attending') AS attending,
        (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.status='proxy') AS proxy,
        (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.status='absent') AS absent,
-       (SELECT status FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.user_id = ?2) AS my_rsvp
+       (SELECT status FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.user_id = ?2) AS my_rsvp,
+       (SELECT reported_missing_at FROM minutes_receipts mr WHERE mr.meeting_id = m.id AND mr.user_id = ?2) AS my_minutes_missing
      FROM meetings m LEFT JOIN documents d ON d.id = m.minutes_document_id LEFT JOIN users ch ON ch.id = m.chair_user_id LEFT JOIN users se ON se.id = m.secretary_user_id LEFT JOIN users cv ON cv.id = m.convened_by LEFT JOIN users cb ON cb.id = m.cancelled_by LEFT JOIN users cr ON cr.id = m.created_by WHERE m.building_id = ?1 ORDER BY m.starts_at DESC`
   ).bind(b.id, c.get("user").id).all();
   return c.json((rows.results as any[]).map((m) => ({ ...m, can_manage: canManageMeeting(b, c.get("user").id, m) })));
@@ -300,6 +301,11 @@ meetings.post("/:buildingId/meetings/:meetingId/minutes/finalize", requireBuildi
   ]);
   await audit(c.env, b.id, user.id, "minutes.finalize", "meeting", m.id);
   await notifyBuilding(c.env, { buildingId: b.id, type: "minutes", title: `Notulen: ${m.title}`, body: "De notulen van de algemene vergadering zijn beschikbaar. Beslissingen kunnen binnen 4 maanden aangevochten worden (art. 3.92 §3 BW).", link: `/b/${b.id}/meetings`, roles: ["syndicus", "raad", "eigenaar", "commissaris"], excludeUserId: user.id, email: true });
+  // bezorging per stemgerechtigde vastleggen (art. 3.87 §12): één per kavel (eigenaar of lasthebber), plus de andere syndici
+  const recipients = new Set(voterIds(await votingUnits(c.env, b.id)));
+  for (const r of (await c.env.DB.prepare("SELECT user_id FROM building_members WHERE building_id = ? AND role = 'syndicus' AND user_id != ?").bind(b.id, user.id).all<{ user_id: string }>()).results) recipients.add(r.user_id);
+  const at = now();
+  if (recipients.size) await c.env.DB.batch([...recipients].map((uid2) => c.env.DB.prepare("INSERT INTO minutes_receipts (meeting_id, user_id, delivered_at) VALUES (?,?,?) ON CONFLICT(meeting_id, user_id) DO UPDATE SET delivered_at = excluded.delivered_at").bind(m.id, uid2, at)));
   return c.json({ ok: true, documentId: docId });
 });
 
@@ -380,6 +386,27 @@ meetings.patch("/:buildingId/meeting-requests/:id", requireBuilding(), async (c)
 });
 
 /** iCal-export van een vergadering. */
+/** Ontvangst van de notulen per stemgerechtigde (bezorgd, geopend, als niet ontvangen gemeld). */
+meetings.get("/:buildingId/meetings/:meetingId/minutes/receipts", requireBuilding(), async (c) => {
+  const m = await managedMeeting(c);
+  const rows = (await c.env.DB.prepare("SELECT r.user_id, u.name, r.delivered_at, r.opened_at, r.reported_missing_at FROM minutes_receipts r JOIN users u ON u.id = r.user_id WHERE r.meeting_id = ? ORDER BY u.name").bind(m.id).all()).results as any[];
+  const missing = (await c.env.DB.prepare("SELECT r.user_id, u.name, r.reported_missing_at FROM minutes_receipts r JOIN users u ON u.id = r.user_id WHERE r.meeting_id = ? AND r.reported_missing_at IS NOT NULL").bind(m.id).all()).results;
+  const due = new Date(new Date(m.starts_at).getTime() + 30 * 86400_000).toISOString().slice(0, 10);
+  return c.json({ due, sent_at: m.minutes_sent_at, late: m.minutes_sent_at ? m.minutes_sent_at.slice(0, 10) > due : new Date().toISOString().slice(0, 10) > due, rows, opened: rows.filter((r) => r.opened_at).length, total: rows.filter((r) => r.delivered_at).length, missing });
+});
+/** Een stemgerechtigde meldt dat hij de notulen niet (tijdig) ontving (art. 3.87 §12, lid 2): schriftelijk, gelogd, de syndicus wordt verwittigd. */
+meetings.post("/:buildingId/meetings/:meetingId/minutes/not-received", requireBuilding(), async (c) => {
+  const b = c.get("building"); const user = c.get("user");
+  if (!isCoOwner(b)) throw new HttpError(403, "Enkel stemgerechtigde mede-eigenaars ontvangen de notulen");
+  const m = await c.env.DB.prepare("SELECT id, title, starts_at, minutes_status FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
+  if (!m) throw new HttpError(404, "Vergadering niet gevonden");
+  if (new Date(m.starts_at) > new Date()) throw new HttpError(400, "De vergadering heeft nog niet plaatsgevonden");
+  await c.env.DB.prepare("INSERT INTO minutes_receipts (meeting_id, user_id, reported_missing_at) VALUES (?,?,?) ON CONFLICT(meeting_id, user_id) DO UPDATE SET reported_missing_at = excluded.reported_missing_at").bind(m.id, user.id, now()).run();
+  await audit(c.env, b.id, user.id, "minutes.not_received", "meeting", m.id);
+  await notifyBuilding(c.env, { buildingId: b.id, type: "minutes", title: `Notulen niet ontvangen: ${m.title}`, body: `${user.name} meldt de notulen ${m.minutes_status === "final" ? "niet ontvangen te hebben" : "nog niet ontvangen te hebben"} (art. 3.87 §12 BW). Bezorg ze en registreer de verzending.`, link: `/b/${b.id}/meetings`, roles: ["syndicus"] });
+  return c.json({ ok: true });
+});
+
 /** Bewoners zonder stemrecht dienen tot de aanvang schriftelijk vragen of opmerkingen over de gemeenschappelijke delen in (art. 3.89 §5, 6° BW). */
 meetings.get("/:buildingId/meetings/:meetingId/questions", requireBuilding(), async (c) => {
   const rows = await c.env.DB.prepare("SELECT q.id, q.body, q.created_at, q.author_id, u.name AS author_name FROM meeting_questions q JOIN users u ON u.id = q.author_id WHERE q.meeting_id = ? AND q.building_id = ? ORDER BY q.created_at").bind(c.req.param("meetingId"), c.get("building").id).all();

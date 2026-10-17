@@ -40,9 +40,9 @@ describe("Beslissingenregister", () => {
     expect(d.adopted).toBe(1); expect(d.needs_court).toBe(true); expect(d.status).toBe("awaiting_court"); expect(d.execution_suspended).toBe(true);
     expect(d.hints.join(" ")).toMatch(/3\.92 §1/);
     await fetch(`${BASE}/api/admin/run-cron`, { method: "POST" });
-    const n1 = (await synd.get("/api/notifications")).data.items.filter((n: any) => /Register: afbraak en heropbouw/.test(n.title)).length; expect(n1).toBe(1);
+    const n1 = (await synd.get("/api/notifications")).data.items.filter((n: any) => /^Nog \d+ dagen: Register: afbraak en heropbouw/.test(n.title)).length; expect(n1).toBe(1);
     await fetch(`${BASE}/api/admin/run-cron`, { method: "POST" });
-    expect((await synd.get("/api/notifications")).data.items.filter((n: any) => /Register: afbraak en heropbouw/.test(n.title)).length).toBe(1); // geen dubbele herinnering
+    expect((await synd.get("/api/notifications")).data.items.filter((n: any) => /^Nog \d+ dagen: Register: afbraak en heropbouw/.test(n.title)).length).toBe(1); // geen dubbele herinnering
     await synd.patch(`/api/buildings/${B}/decisions/${id}`, { court_status: "filed" });
     expect((await find(marie, id)).status_label).toMatch(/zaak bij de vrederechter/);
     await synd.patch(`/api/buildings/${B}/decisions/${id}`, { court_status: "approved" });

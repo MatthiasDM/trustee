@@ -127,6 +127,8 @@ async function notifyInspection(c: any, d: any) {
 docs.get("/:buildingId/documents/:docId/download", requireBuilding(), async (c) => {
   const d = await loadDoc(c);
   await notifyInspection(c, d);
+  // ontvangst van de notulen bijhouden (art. 3.87 §12): eerste keer openen
+  if (d.category === "verslag_av") await c.env.DB.prepare("UPDATE minutes_receipts SET opened_at = COALESCE(opened_at, ?) WHERE user_id = ? AND meeting_id IN (SELECT id FROM meetings WHERE minutes_document_id = ?)").bind(now(), c.get("user").id, d.id).run();
   const obj = await c.env.DOCS.get(d.r2_key);
   if (!obj) throw new HttpError(404, "Bestand niet gevonden in opslag");
   const ct = safeContentType(d.mime, d.name);

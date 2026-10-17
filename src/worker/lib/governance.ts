@@ -64,3 +64,19 @@ export async function canRegisterSyndicus(env: Env, b: BuildingCtx, userId: stri
   const r = await env.DB.prepare("SELECT 1 FROM meeting_requests r JOIN meeting_request_signatures s ON s.request_id = r.id AND s.user_id = ?2 WHERE r.building_id = ?1 AND r.purpose = 'appoint_syndicus' AND r.status IN ('threshold_reached','fulfilled')").bind(b.id, userId).first();
   return !!r;
 }
+
+const SYNDICUS_ORGANS = ["syndicus", "voorlopig_syndicus"]; const SUPERVISORY = ["raad", "commissaris"];
+/**
+ * Onverenigbaarheid (art. 3.89 §9 BW): binnen dezelfde VME mag een syndicus niet tegelijk lid van de raad van mede-eigendom
+ * of commissaris van de rekeningen zijn. Controleert overlappende mandaten en de rol van het lid. Geeft een foutboodschap of null.
+ */
+export async function organConflict(env: Env, buildingId: string, userId: string, organ: string, start: string, end: string, excludeMandateId?: string): Promise<string | null> {
+  const opposite = SYNDICUS_ORGANS.includes(organ) ? SUPERVISORY : SUPERVISORY.includes(organ) ? SYNDICUS_ORGANS : null;
+  if (!opposite) return null;
+  const hit = await env.DB.prepare(`SELECT organ FROM mandates WHERE building_id = ? AND user_id = ? AND organ IN (${opposite.map(() => "?").join(",")}) AND start_date <= ? AND end_date >= ? AND id != ? LIMIT 1`).bind(buildingId, userId, ...opposite, end, start, excludeMandateId ?? "").first<{ organ: string }>();
+  const member = await env.DB.prepare("SELECT role FROM building_members WHERE building_id = ? AND user_id = ?").bind(buildingId, userId).first<{ role: string }>();
+  const roleClash = SUPERVISORY.includes(organ) ? member?.role === "syndicus" : SUPERVISORY.includes(member?.role ?? "");
+  if (!hit && !roleClash) return null;
+  const what = (o: string) => ({ syndicus: "syndicus", voorlopig_syndicus: "voorlopig syndicus", raad: "lid van de raad van mede-eigendom", commissaris: "commissaris van de rekeningen" } as Record<string, string>)[o] ?? o;
+  return `Onverenigbaar: deze persoon is ${what(hit?.organ ?? member!.role)} en kan in dezelfde VME niet tegelijk ${what(organ)} zijn (art. 3.89 §9 BW)`;
+}

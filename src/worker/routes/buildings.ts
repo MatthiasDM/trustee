@@ -9,6 +9,7 @@ import { rateLimit } from "../lib/ratelimit";
 import { exportBuilding } from "../lib/backup";
 import { zipSync } from "fflate";
 import { votingUnits } from "../lib/voting";
+import { organConflict } from "../lib/governance";
 
 const buildings = new Hono<AppEnv>();
 buildings.use("*", requireAuth);
@@ -107,6 +108,11 @@ buildings.patch("/:buildingId/members/:userId", requireBuilding("syndicus"), asy
   const b = c.get("building");
   const body = z.object({ role: z.enum(ROLES).optional(), ecomm_consent_at: z.string().nullable().optional() }).parse(await c.req.json());
   if (body.role) {
+    if (["syndicus", "raad", "commissaris"].includes(body.role)) {
+      const today = new Date().toISOString().slice(0, 10);
+      const clash = await organConflict(c.env, b.id, c.req.param("userId"), body.role, today, today);
+      if (clash) throw new HttpError(400, clash);
+    }
     await c.env.DB.prepare("UPDATE building_members SET role = ? WHERE building_id = ? AND user_id = ?").bind(body.role, b.id, c.req.param("userId")).run();
     await audit(c.env, b.id, c.get("user").id, "member.role", "user", c.req.param("userId"), { role: body.role });
   }

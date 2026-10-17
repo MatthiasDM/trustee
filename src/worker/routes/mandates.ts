@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { isBoard, requireAuth, requireBuilding } from "../lib/auth";
-import { canRegisterSyndicus, hasSyndicus } from "../lib/governance";
+import { canRegisterSyndicus, hasSyndicus, organConflict } from "../lib/governance";
 import { HttpError, patchOf, uid } from "../lib/util";
 import { audit } from "../lib/notify";
 
@@ -65,6 +65,7 @@ mandates.post("/:buildingId/mandates", requireBuilding(), async (c) => {
   const b = c.get("building");
   const body = schema.parse(await c.req.json());
   validate(body);
+  if (body.user_id) { const clash = await organConflict(c.env, b.id, body.user_id, body.organ, body.start_date, body.end_date); if (clash) throw new HttpError(400, clash); }
   if (body.organ === "raad" && body.user_id) {
     const m = await c.env.DB.prepare("SELECT role FROM building_members WHERE building_id = ? AND user_id = ?").bind(b.id, body.user_id).first<{ role: string }>();
     if (m?.role === "huurder") throw new HttpError(400, "Enkel stemgerechtigde mede-eigenaars kunnen in de raad zetelen (art. 3.90 BW)");
@@ -84,7 +85,9 @@ mandates.patch("/:buildingId/mandates/:mandateId", requireBuilding("syndicus", "
   const existing = await c.env.DB.prepare("SELECT * FROM mandates WHERE id = ? AND building_id = ?").bind(c.req.param("mandateId"), b.id).first<any>();
   if (!existing) throw new HttpError(404, "Mandaat niet gevonden");
   const body = patchOf(schema.partial(), await c.req.json());
-  validate({ ...existing, ...body } as any);
+  const merged = { ...existing, ...body } as any;
+  validate(merged);
+  if (merged.user_id) { const clash = await organConflict(c.env, b.id, merged.user_id, merged.organ, merged.start_date, merged.end_date, existing.id); if (clash) throw new HttpError(400, clash); }
   const fields = Object.entries(body).filter(([, v]) => v !== undefined);
   if (fields.length) await c.env.DB.prepare(`UPDATE mandates SET ${fields.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ?`).bind(...fields.map(([, v]) => v), existing.id).run();
   return c.json({ ok: true });

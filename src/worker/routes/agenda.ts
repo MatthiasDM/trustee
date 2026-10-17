@@ -74,7 +74,9 @@ agenda.patch("/:buildingId/agenda/:itemId", requireBuilding(), async (c) => {
     decision: z.string().max(5000).nullable().optional(),
     conflict_user_ids: z.array(z.string()).max(50).nullable().optional(),
     conflict_reason: z.string().max(1000).nullable().optional(),
+    charge_key_id: z.string().nullable().optional(),
   }), await c.req.json());
+  if (body.charge_key_id) { const k = await c.env.DB.prepare("SELECT 1 FROM cost_keys WHERE id = ? AND building_id = ?").bind(body.charge_key_id, b.id).first(); if (!k) throw new HttpError(400, "Verdeelsleutel niet gevonden"); }
   if (body.conflict_user_ids !== undefined) (body as any).conflict_user_ids = body.conflict_user_ids?.length ? JSON.stringify([...new Set(body.conflict_user_ids)]) : null;
   const isAuthor = item.submitted_by === user.id;
   // wie een vergadering wettig zelf bijeenriep, beheert ook haar agenda
@@ -85,7 +87,7 @@ agenda.patch("/:buildingId/agenda/:itemId", requireBuilding(), async (c) => {
     // indiener mag enkel eigen, nog niet geagendeerd punt aanpassen of intrekken
     if (!isAuthor || item.status !== "proposed") throw new HttpError(403, "Geen rechten");
     if (body.status && body.status !== "withdrawn") throw new HttpError(403, "Je kan enkel intrekken");
-    delete body.meeting_id; delete body.position; delete body.decision; delete (body as any).conflict_user_ids; delete body.conflict_reason;
+    delete body.meeting_id; delete body.position; delete body.decision; delete (body as any).conflict_user_ids; delete body.conflict_reason; delete body.charge_key_id;
   }
   if (body.meeting_id !== undefined && body.status === undefined) body.status = body.meeting_id ? "scheduled" : "proposed";
   const fields = Object.entries(body).filter(([, v]) => v !== undefined);

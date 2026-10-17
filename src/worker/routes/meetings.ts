@@ -6,6 +6,7 @@ import { HttpError, now, patchOf, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 import { isBoard, isCoOwner } from "../lib/auth";
 import { attendance, MAJ, renderMinutesHtml, tally, validateProxy } from "../lib/meeting";
+import { keyWeights } from "../lib/ledger";
 import { canManageMeeting, hasSyndicus, ownerConveneRight } from "../lib/governance";
 import { suspendedFor, voterIds, votingUnits, weightOf } from "../lib/voting";
 import { Pdf, pdfOpts } from "../lib/pdf";
@@ -25,7 +26,16 @@ const schema = z.object({
   chair_user_id: z.string().nullable().optional(),
   secretary_user_id: z.string().nullable().optional(),
   notify: z.boolean().default(true),
+  unanimity_followup_of: z.string().nullable().optional(),
 });
+
+/** Nieuwe AV na een eenparigheid gemist door afwezigheid: minstens 30 dagen na de eerste vergadering (art. 3.88 §4 BW). */
+async function validateFollowup(c: Context<AppEnv>, originalId: string | null | undefined, startsAt: string) {
+  if (!originalId) return;
+  const o = await c.env.DB.prepare("SELECT starts_at FROM meetings WHERE id = ? AND building_id = ?").bind(originalId, c.get("building").id).first<{ starts_at: string }>();
+  if (!o) throw new HttpError(400, "Eerste vergadering niet gevonden");
+  if (new Date(startsAt).getTime() < new Date(o.starts_at).getTime() + 30 * 86400_000) throw new HttpError(400, "De nieuwe algemene vergadering komt minstens dertig dagen na de eerste bijeen (art. 3.88 §4 BW)");
+}
 
 /** Laadt de vergadering en controleert dat de gebruiker ze mag beheren (orgaan, of de mede-eigenaar die ze wettig zelf bijeenriep). */
 async function managedMeeting(c: Context<AppEnv>, opts: { finalize?: boolean } = {}) {
@@ -55,12 +65,13 @@ meetings.post("/:buildingId/meetings", requireBuilding(), async (c) => {
   const user = c.get("user");
   const body = schema.parse(await c.req.json());
   // Organen plannen vrij. Een mede-eigenaar enkel op een wettelijke grond (art. 3.87 §2, lid 3 of 4): dan is het een "eigen" vergadering die hij ook zelf beheert.
+  await validateFollowup(c, body.unanimity_followup_of, body.starts_at);
   const right = isBoard(b.role) ? null : await ownerConveneRight(c.env, b, user.id);
   if (!isBoard(b.role) && !right) throw new HttpError(403, "Enkel de syndicus of de raad plant vergaderingen. Mede-eigenaars mogen zelf bijeenroepen als de syndicus binnen 30 dagen geen gevolg gaf aan een 1/5-verzoek, of bij gebreke van een syndicus (art. 3.87 §2 BW).");
   if (right && body.type === "raad") throw new HttpError(400, "Mede-eigenaars roepen een algemene vergadering bijeen, geen raad");
   const id = uid();
-  await c.env.DB.prepare("INSERT INTO meetings (id, building_id, title, type, starts_at, location, agenda, minutes_document_id, created_by, convened_by_owners, legal_basis, request_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
-    .bind(id, b.id, body.title, body.type, body.starts_at, body.location ?? null, body.agenda ?? null, body.minutes_document_id ?? null, user.id, right ? 1 : 0, right?.text ?? null, right?.request_id ?? null).run();
+  await c.env.DB.prepare("INSERT INTO meetings (id, building_id, title, type, starts_at, location, agenda, minutes_document_id, created_by, convened_by_owners, legal_basis, request_id, unanimity_followup_of) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .bind(id, b.id, body.title, body.type, body.starts_at, body.location ?? null, body.agenda ?? null, body.minutes_document_id ?? null, user.id, right ? 1 : 0, right?.text ?? null, right?.request_id ?? null, body.unanimity_followup_of ?? null).run();
   await audit(c.env, b.id, user.id, right ? "meeting.create_by_owner" : "meeting.create", "meeting", id, { title: body.title, basis: right?.basis ?? null });
   if (right) {
     // het verzoek is hiermee ingewilligd door de ondertekenaar zelf; onderwerp op de agenda, en bij gebreke van een syndicus ook de aanwijzing
@@ -85,6 +96,7 @@ meetings.patch("/:buildingId/meetings/:meetingId", requireBuilding(), async (c) 
   const body = patchOf(schema.partial(), await c.req.json());
   const { notify: _n, ...rest } = body;
   const before = await managedMeeting(c);
+  if (rest.unanimity_followup_of !== undefined || rest.starts_at) await validateFollowup(c, rest.unanimity_followup_of !== undefined ? rest.unanimity_followup_of : before.unanimity_followup_of, rest.starts_at ?? before.starts_at);
   if (before.cancelled_at) throw new HttpError(400, "Deze vergadering is geannuleerd");
   const fields = Object.entries(rest).filter(([, v]) => v !== undefined).map(([k, v]) => [k, typeof v === "boolean" ? +v : v]);
   if (fields.length) await c.env.DB.prepare(`UPDATE meetings SET ${fields.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ? AND building_id = ?`).bind(...fields.map(([, v]) => v), c.req.param("meetingId"), b.id).run();
@@ -227,11 +239,16 @@ meetings.post("/:buildingId/meetings/:meetingId/agenda/:itemId/vote", requireBui
   const ids = [...new Set([...att.rows.flatMap((r) => [r.voter_id, r.holder_id]), ...conflictIds].filter(Boolean) as string[])];
   const names: Record<string, string> = {};
   if (ids.length) for (const r of (await c.env.DB.prepare(`SELECT id, name FROM users WHERE id IN (${ids.map(() => "?").join(",")})`).bind(...ids).all<{ id: string; name: string }>()).results) names[r.id] = r.name;
-  const t = tally(att.rows, votes, item.required_majority, conflictIds, names);
+  const meetingRow = await c.env.DB.prepare("SELECT unanimity_followup_of FROM meetings WHERE id = ?").bind(c.req.param("meetingId")).first<{ unanimity_followup_of: string | null }>();
+  const weights = item.charge_key_id ? await keyWeights(c.env, b.id, item.charge_key_id) : undefined;
+  const t = tally(att.rows, votes, item.required_majority, conflictIds, names, { weights, followup: !!meetingRow?.unanimity_followup_of && item.required_majority === "unanimous" });
   if (t.invalid.length && !dry_run) throw new HttpError(400, `Kavel ${t.invalid.map((x) => x.label).join(", ")}: deelnamerecht geschorst, er is geen lasthebber aangewezen (art. 3.87 §1, lid 2 BW). Registreer als afwezig.`);
   const notes: string[] = [];
   if (t.capped.length) notes.push(`Stemplafond toegepast (art. 3.87 §8 BW): ${t.capped.map((x) => `${x.name} telde voor ${x.counted} in plaats van ${x.had} aandelen`).join("; ")}.`);
   if (t.excluded.length) notes.push(`Niet deelgenomen wegens belangenconflict (art. 3.87 §9 BW)${item.conflict_reason ? ` — ${item.conflict_reason}` : ""}: kavel ${t.excluded.map((x) => `${x.label} (${x.name})`).join(", ")}.`);
+  if (weights) notes.push(`Enkel gestemd door de mede-eigenaars die de lasten van dit deel dragen, naar hun aandeel daarin (art. 3.87 §6, lid 2 BW).`);
+  if (meetingRow?.unanimity_followup_of && item.required_majority === "unanimous") notes.push("Nieuwe vergadering na een eenparigheid die door afwezigheid niet bereikt werd: eenparigheid van de aanwezige of vertegenwoordigde mede-eigenaars (art. 3.88 §4 BW).");
+  if (t.missed_by_absence) notes.push("Eenparigheid niet bereikt enkel door afwezigheid: een nieuwe algemene vergadering na minstens dertig dagen kan beslissen met eenparigheid van de aanwezige of vertegenwoordigde mede-eigenaars (art. 3.88 §4 BW).");
   const fmt = (x: number) => String(Math.round(x * 100) / 100);
   const text = decision ?? [`${t.reached ? "Goedgekeurd" : "Verworpen"} met ${fmt(t.votes_for)} aandelen vóór, ${fmt(t.votes_against)} tegen en ${fmt(t.votes_abstain)} onthoudingen (${MAJ[item.required_majority]?.label ?? item.required_majority}${item.required_majority !== "none" && item.required_majority !== "unanimous" ? `, ${(t.pct * 100).toFixed(1)} % van de uitgebrachte stemmen` : ""}).`, ...notes].join(" ");
   if (dry_run) return c.json({ ...t, decision: text });

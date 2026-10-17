@@ -204,4 +204,6 @@ Wat Boek 3 BW nog regelt en Trustee vandaag niet of maar half afdekt. Volgorde =
 | F14 (gebouwd 17/10) | art. 3.97: ontbinding en vereffening | Bij ontbinding wordt een vereffenaar aangesteld en vereffend. | Niets. | Status "in vereffening" op het gebouw: alleen lezen, export, vereffenaar met syndicusrechten. |
 | F15 (gebouwd 17/10) | art. 3.89 §5, 4°: aangetekende post aan de VME | Aangetekende brieven aan de VME gaan naar de woonplaats of zetel van de syndicus én de zetel van de VME. | Adres van het gebouw. | Zetel van de VME en correspondentieadres van de syndicus apart op de gebouwfiche, in de voettekst van brieven. |
 
+Bij het nalezen voor F13 gevonden en gebouwd (17/10): stemming over bijzondere lasten door enkel wie ze draagt (art. 3.87 §6, lid 2) en nieuwe AV bij eenparigheid gemist door afwezigheid (art. 3.88 §4).
+
 Productrandgevallen zonder wetsartikel: een VME met twee eigenaars (elk besluit is eenparig of blokkeert), een eigenaar die alle kavels bezit (geen VME meer), meerdere syndici tegelijk (de wet spreekt van "de andere syndici"), kavels zonder aandelen (quotiteiten nul), statuten die afwijken van de wettelijke AV-periode, en een gebouw dat van kantoor verandert midden in een boekjaar.

@@ -77,13 +77,15 @@ export function MeetingsPage() {
 
 function MeetingForm({ meeting, preset, onClose, onDone, onCancel }: { meeting: any; preset?: { title: string; type: string; basis?: string | null }; onClose: () => void; onDone: () => void; onCancel?: (m: any) => void }) {
   const b = useBuilding();
+  const all = useFetch<any[]>(`/api/buildings/${b.id}/meetings`);
+  const pastMeetings = (all.data ?? []).filter((m) => m.type !== "raad" && !m.cancelled_at && new Date(m.starts_at) < new Date() && m.id !== meeting?.id);
   const docs = useFetch<Doc[]>(`/api/buildings/${b.id}/documents?category=verslag_av`);
   const toLocal = (s?: string) => s ? new Date(new Date(s).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "";
-  const [f, setF] = useState({ title: meeting?.title ?? preset?.title ?? "", type: meeting?.type ?? preset?.type ?? "av", starts_at: toLocal(meeting?.starts_at), location: meeting?.location ?? "", agenda: meeting?.agenda ?? "", minutes_document_id: meeting?.minutes_document_id ?? "" });
+  const [f, setF] = useState({ title: meeting?.title ?? preset?.title ?? "", type: meeting?.type ?? preset?.type ?? "av", starts_at: toLocal(meeting?.starts_at), location: meeting?.location ?? "", agenda: meeting?.agenda ?? "", minutes_document_id: meeting?.minutes_document_id ?? "", unanimity_followup_of: meeting?.unanimity_followup_of ?? "" });
   const [error, setError] = useState<unknown>(null);
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setError(null);
-    const body = { ...f, starts_at: new Date(f.starts_at).toISOString(), minutes_document_id: f.minutes_document_id || null, location: f.location || null, agenda: f.agenda || null };
+    const body = { ...f, starts_at: new Date(f.starts_at).toISOString(), unanimity_followup_of: f.unanimity_followup_of || null, minutes_document_id: f.minutes_document_id || null, location: f.location || null, agenda: f.agenda || null };
     try { if (meeting) await api.patch(`/api/buildings/${b.id}/meetings/${meeting.id}`, body); else await api.post(`/api/buildings/${b.id}/meetings`, body); onDone(); } catch (err) { setError(err); }
   };
   return <Dialog open onOpenChange={(o) => !o && onClose()}><DialogContent className="sm:max-w-2xl">
@@ -91,6 +93,7 @@ function MeetingForm({ meeting, preset, onClose, onDone, onCancel }: { meeting: 
     <form onSubmit={submit} className="grid gap-4">
       <div className="grid gap-4 sm:grid-cols-2"><Field label="Type"><Select value={f.type} onValueChange={(v) => setF({ ...f, type: v })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(TYPE).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select></Field><Field label="Datum & uur"><Input type="datetime-local" required value={f.starts_at} onChange={(e) => setF({ ...f, starts_at: e.target.value })} /></Field></div>
       <Field label="Titel"><Input required value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="bv. Jaarlijkse algemene vergadering 2026" /></Field>
+      {f.type !== "raad" && <Field label="Nieuwe AV na eenparigheid gemist door afwezigheid (art. 3.88 §4)" hint="Minstens 30 dagen na de eerste vergadering; daar volstaat eenparigheid van de aanwezige of vertegenwoordigde mede-eigenaars."><Select value={f.unanimity_followup_of || NONE} onValueChange={(v) => setF({ ...f, unanimity_followup_of: v === NONE ? "" : v })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={NONE}>nee</SelectItem>{(pastMeetings ?? []).map((pm: any) => <SelectItem key={pm.id} value={pm.id}>{pm.title} · {new Date(pm.starts_at).toLocaleDateString("nl-BE")}</SelectItem>)}</SelectContent></Select></Field>}
       <Field label="Locatie"><Input value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} placeholder="bv. Inkomhal / online via Teams" /></Field>
       <Field label="Agenda"><Textarea className="min-h-36" value={f.agenda} onChange={(e) => setF({ ...f, agenda: e.target.value })} placeholder={"1. Goedkeuring verslag vorige AV\n2. Jaarrekening & kwijting syndicus\n3. Begroting\n4. Varia"} /></Field>
       <Field label="Verslag (document)" hint="Upload het verslag eerst bij Documenten (categorie “Verslagen algemene vergadering”). Leden worden verwittigd wanneer je het koppelt."><Select value={f.minutes_document_id || NONE} onValueChange={(v) => setF({ ...f, minutes_document_id: v === NONE ? "" : v })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={NONE}>— geen —</SelectItem>{(docs.data ?? []).map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select></Field>

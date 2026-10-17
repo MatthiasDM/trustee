@@ -73,6 +73,7 @@ export interface TallyResult {
   capped: { person_id: string; name: string; had: number; counted: number }[];
   excluded: { unit_id: string; label: string; name: string }[];
   invalid: { unit_id: string; label: string; reason: string }[];
+  missed_by_absence?: boolean;
 }
 
 /**
@@ -83,7 +84,13 @@ export interface TallyResult {
  *   waarvoor hij volmacht draagt tellen niet mee;
  * - geschorste kavels (gesplitste eigendom zonder lasthebber) kunnen niet stemmen.
  */
-export function tally(rows: AttendanceRow[], votes: { unit_id: string; choice: string }[], required: string, conflictIds: string[], names: Record<string, string>): TallyResult {
+/**
+ * opts.weights (art. 3.87 §6, lid 2): als de lasten van een gemeenschappelijk deel uitsluitend ten laste van bepaalde mede-eigenaars zijn, stemmen
+ * enkel zij, elk naar zijn aandeel in die lasten (gewicht uit de verdeelsleutel). opts.followup (art. 3.88 §4): nieuwe AV na een eenparigheid die
+ * door afwezigheid niet bereikt werd; eenparigheid van de aanwezige of vertegenwoordigde mede-eigenaars volstaat.
+ */
+export function tally(rows: AttendanceRow[], votes: { unit_id: string; choice: string }[], required: string, conflictIds: string[], names: Record<string, string>, opts: { weights?: Map<string, number>; followup?: boolean } = {}): TallyResult {
+  if (opts.weights) rows = rows.filter((r) => (opts.weights!.get(r.unit_id) ?? 0) > 0).map((r) => ({ ...r, shares: opts.weights!.get(r.unit_id)! }));
   const conflict = new Set(conflictIds);
   const invalid: TallyResult["invalid"] = []; const excluded: TallyResult["excluded"] = [];
   type E = { person: string; shares: number; choice: string; row: AttendanceRow };
@@ -107,12 +114,14 @@ export function tally(rows: AttendanceRow[], votes: { unit_id: string; choice: s
     if (e.choice === "for") { vf += w; nf++; } else if (e.choice === "against") { va += w; na++; dissenters.push(`${e.row.split ? `${e.row.voter_name} (lasthebber)` : e.row.owner_names} (kavel ${e.row.label})`); } else { vab += w; nab++; }
   }
   const r2 = (x: number) => Math.round(x * 100) / 100;
-  const eligibleRows = rows.filter((r) => r.owner_ids.length && !excluded.some((x) => x.unit_id === r.unit_id));
+  const eligibleRows = rows.filter((r) => r.owner_ids.length && !excluded.some((x) => x.unit_id === r.unit_id) && (!opts.followup || votes.some((v) => v.unit_id === r.unit_id && v.choice !== "absent")));
   const eligible = eligibleRows.reduce((s, r) => s + r.shares, 0);
   let res = majorityReached(required, vf, va, eligible);
   // eenparigheid: elke niet-uitgesloten kavel stemde vóór (een stemplafond verandert daar niets aan)
   if (required === "unanimous") res = { reached: eligibleRows.length > 0 && eligibleRows.every((r) => votes.find((v) => v.unit_id === r.unit_id)?.choice === "for"), pct: res.pct };
-  return { votes_for: r2(vf), votes_against: r2(va), votes_abstain: r2(vab), voters_for: nf, voters_against: na, voters_abstain: nab, eligible, reached: res.reached, pct: res.pct, dissenters, capped, excluded, invalid };
+  // eenparigheid enkel gemist door afwezigen: niemand van de aanwezigen stemde tegen of onthield zich (art. 3.88 §4)
+  const missedByAbsence = required === "unanimous" && !res.reached && !opts.followup && va === 0 && vab === 0 && vf > 0;
+  return { missed_by_absence: missedByAbsence, votes_for: r2(vf), votes_against: r2(va), votes_abstain: r2(vab), voters_for: nf, voters_against: na, voters_abstain: nab, eligible, reached: res.reached, pct: res.pct, dissenters, capped, excluded, invalid };
 }
 
 const esc = (s: string) => s.replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[ch]!));

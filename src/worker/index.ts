@@ -19,6 +19,7 @@ import { purgeTrash } from "./routes/documents";
 import { cleanupDemos, demo } from "./routes/demo";
 import { decisionReminders, decisions } from "./routes/decisions";
 import { transfers } from "./routes/transfers";
+import { infrastructure, infrastructureReminders } from "./routes/infrastructure";
 import { minutesLateReminders } from "./lib/minutes";
 import { loadUser } from "./lib/auth";
 import reports, { autoReminders } from "./routes/reports";
@@ -49,6 +50,7 @@ app.route("/api/orgs", orgs);
 app.route("/api/demo", demo);
 app.route("/api/buildings", decisions);
 app.route("/api/buildings", transfers);
+app.route("/api/buildings", infrastructure);
 
 app.post("/api/admin/run-cron", async (c) => { if (c.env.TEST_MODE !== "1") return c.json({ error: "Niet gevonden" }, 404); return c.json(await runCron(c.env, "test")); });
 /** Testomgeving: de termijn van 30 dagen van een 1/5-verzoek laten verstrijken. */
@@ -96,7 +98,7 @@ export async function runCron(env: AppEnv["Bindings"], cron = "manual") {
       log.posted_scheduled = await postDueScheduled(env); // geplande afschrijvingen boeken
       const force = cron === "test"; // testomgeving: tijdsvensters negeren
       if (env.DEMO_MODE === "1") log.demos_removed = await cleanupDemos(env);
-      if (force || (new Date().getUTCHours() === 5 && new Date().getUTCMinutes() < 15)) { log.recurring = await runDueRecurring(env); log.compliance = await complianceReminders(env); log.decisions = await decisionReminders(env); log.minutes_late = await minutesLateReminders(env); }
+      if (force || (new Date().getUTCHours() === 5 && new Date().getUTCMinutes() < 15)) { log.recurring = await runDueRecurring(env); log.compliance = await complianceReminders(env); log.decisions = await decisionReminders(env); log.minutes_late = await minutesLateReminders(env); log.infrastructure = await infrastructureReminders(env); }
       if (force || (new Date().getUTCHours() === 7 && new Date().getUTCMinutes() < 15)) log.reminders = await autoReminders(env); // dagelijks om 9u Belgische zomertijd
       await env.DB.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(nowIso).run();
       await env.DB.prepare("DELETE FROM password_resets WHERE expires_at < ?").bind(nowIso).run();

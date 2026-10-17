@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Flag, HelpCircle, Lock, Megaphone, MessageSquare, Pin, PinOff, Trash2, Wrench } from "lucide-react";
+import { ArrowLeft, Cable, CheckCircle2, Flag, HelpCircle, Lock, Megaphone, MessageSquare, Pin, PinOff, Trash2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { useBuilding, useFetch } from "../components/Layout";
 import { Empty, ErrorBox, Field, PageHeader, PriorityBadge, RoleBadge, Spinner, StatusBadge, STATUS_LABELS, UserAvatar } from "../components/ui";
@@ -32,7 +32,7 @@ export function PostsPage() {
   const newType = sp.get("new");
   const nav = useNavigate();
   return <div>
-    <PageHeader title={t("Vragen & meldingen")} subtitle={t("Stel een vraag, meld een probleem of lees mededelingen van de syndicus.")} actions={<><Button variant="outline" onClick={() => setSp({ new: "question" })}><HelpCircle />{t("Vraag")}</Button><Button variant="outline" onClick={() => setSp({ new: "incident" })}><Wrench />{t("Melding")}</Button>{b.isBoard && <Button onClick={() => setSp({ new: "announcement" })}><Megaphone />{t("Mededeling")}</Button>}</>} />
+    <PageHeader title={t("Vragen & meldingen")} subtitle={t("Stel een vraag, meld een probleem of lees mededelingen van de syndicus.")} actions={<><Button variant="ghost" asChild><Link to={`/b/${b.id}/infrastructure`}><Cable />Kabels en leidingen</Link></Button><Button variant="outline" onClick={() => setSp({ new: "question" })}><HelpCircle />{t("Vraag")}</Button><Button variant="outline" onClick={() => setSp({ new: "incident" })}><Wrench />{t("Melding")}</Button>{b.isBoard && <Button onClick={() => setSp({ new: "announcement" })}><Megaphone />{t("Mededeling")}</Button>}</>} />
     <div className="mb-4 flex flex-wrap items-center gap-3">
       <Tabs value={type} onValueChange={setType}><TabsList><TabsTrigger value="all">{t("Alles")}</TabsTrigger><TabsTrigger value="announcement"><Megaphone />Mededelingen</TabsTrigger><TabsTrigger value="question"><HelpCircle />Vragen</TabsTrigger><TabsTrigger value="incident"><Wrench />Meldingen</TabsTrigger></TabsList></Tabs>
       <Select value={status} onValueChange={setStatus}><SelectTrigger size="sm" className="ml-auto"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Alle statussen</SelectItem>{Object.entries(STATUS_LABELS).filter(([k]) => k !== "draft").map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select>

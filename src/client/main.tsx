@@ -22,6 +22,7 @@ import { OrgPage } from "./pages/OrgPage";
 import { LegalPage } from "./pages/LegalPage";
 import { DemoPage } from "./pages/DemoPage";
 import { DecisionsPage } from "./pages/DecisionsPage";
+import { InfrastructurePage } from "./pages/InfrastructurePage";
 
 function Localized({ children }: { children: React.ReactNode }) { const { user } = useAuth(); return <I18nProvider locale={user?.locale ?? (navigator.language.startsWith("fr") ? "fr" : navigator.language.startsWith("en") ? "en" : "nl")}>{children}</I18nProvider>; }
 
@@ -52,6 +53,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/b/:buildingId/polls/:pollId" element={<PollDetailPage />} />
             <Route path="/b/:buildingId/meetings" element={<MeetingsPage />} />
             <Route path="/b/:buildingId/decisions" element={<DecisionsPage />} />
+            <Route path="/b/:buildingId/infrastructure" element={<InfrastructurePage />} />
             <Route path="/b/:buildingId/members" element={<MembersPage />} />
             <Route path="/b/:buildingId/ledger" element={<LedgerPage />} />
             <Route path="/b/:buildingId/settings" element={<SettingsPage />} />

@@ -131,6 +131,10 @@ Op omgevingen waar de demo-modus aanstaat (zoals de preview) kan iedereen via *P
 - **Inhoud melden.** Onder elk bericht van iemand anders staat *Melden*; de syndicus beoordeelt en verwijdert indien nodig.
 - **Voorwaarden en privacy.** Bij registratie en bij elke nieuwe versie aanvaard je de algemene voorwaarden en de privacyverklaring; die aanvaarding wordt gelogd. De teksten staan onderaan de zijbalk.
 
+## Kabels en leidingen
+
+Wil je glasvezel, een laadkabel of een waterleiding naar je kavel trekken door de gemene delen, dan mag dat op jouw kosten (art. 3.82 §2 BW). Kondig het aan onder *Vragen & meldingen › Kabels en leidingen* en stuur dezelfde aankondiging aangetekend naar de syndicus. Vanaf de ontvangst hebben de andere mede-eigenaars en de VME twee maanden om op een wettelijke grond verzet aan te tekenen; daarna mag je beginnen. Nutsoperatoren worden door de syndicus geregistreerd.
+
 ## Zetel en uittreksel aan de ingang
 
 Onder *Instellingen › Gebouw* vul je de zetel van de VME en de gegevens van de syndicus in. Elk document dat Trustee maakt (jaarrekening, afrekening, brieven, notulen) vermeldt het ondernemingsnummer van de VME. Bij elk syndicusmandaat maak je onder *Mandaten* het uittreksel van de aanstelling als PDF; hang het binnen 8 dagen aan de ingang en registreer met *Aangeplakt vandaag* dat het hangt (art. 3.89 §2 BW). Tot dan toont het overzicht een waarschuwing.

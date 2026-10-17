@@ -145,6 +145,10 @@ De wet kent rechten toe aan de *mede-eigenaar* (titularis van een zakelijk recht
 
 Code: `isCoOwner()` in `src/worker/lib/auth.ts`; `isOwner()` blijft enkel de leesfilter voor stukken "enkel eigenaars".
 
+## Kabels en leidingen in de gemene delen (art. 3.82 §2)
+
+Tekst geverifieerd 2026-10-17. Elke mede-eigenaar en elke erkende nutsoperator heeft het kosteloze recht om kabels, leidingen en faciliteiten voor energie, water of telecommunicatie in de gemeenschappelijke delen aan te leggen, te onderhouden of te hernieuwen, als dat de infrastructuur van zijn kavel optimaliseert en de anderen of de VME er geen financiële lasten van dragen; hij blijft eigenaar ervan. Aankondiging minstens twee maanden vooraf per aangetekende zending aan de syndicus, met adres, beschrijving en rechtvaardiging. Verzet binnen twee maanden na ontvangst, per aangetekende zending, op straffe van verval, enkel bij een rechtmatig belang: zulke infrastructuur bestaat al; belangrijke schade aan uitzicht, gebruik, hygiëne of veiligheid; geen optimalisatie of verzwaring van de lasten van anderen. De VME of de mede-eigenaars kunnen beslissen zelf te optimaliseren; die werken beginnen binnen zes maanden. In Trustee: pagina *Kabels en leidingen* met de termijn vanaf de geregistreerde ontvangst, verzet op een van de drie gronden, eigen uitvoering door de VME, herinnering 14 dagen voor het einde van de verzettermijn, en starten pas na de termijn.
+
 ## Termijnen en limieten die Trustee afdwingt
 
 | Regel | Waar in Trustee |

@@ -133,6 +133,10 @@ Op omgevingen waar de demo-modus aanstaat (zoals de preview) kan iedereen via *P
 - **Inhoud melden.** Onder elk bericht van iemand anders staat *Melden*; de syndicus beoordeelt en verwijdert indien nodig.
 - **Voorwaarden en privacy.** Bij registratie en bij elke nieuwe versie aanvaard je de algemene voorwaarden en de privacyverklaring; die aanvaarding wordt gelogd. De teksten staan onderaan de zijbalk.
 
+## Ander syndicuskantoor
+
+Stelt de AV een syndicus van een ander kantoor aan, dan maakt de huidige syndicus onder *Instellingen* een overdrachtscode. Het nieuwe kantoor neemt het gebouw ermee over in zijn kantoorportaal (*Gebouw overnemen*). Alles gaat mee, ook het lopende boekjaar; het oude kantoor verliest de toegang. Registreer daarna het mandaat van de nieuwe syndicus.
+
 ## Deelverenigingen
 
 In een groep van gebouwen of een gebouw met duidelijk gescheiden blokken (vanaf twintig kavels) kunnen deelverenigingen bestaan voor de gemene delen van één blok, bijvoorbeeld de lift en het dak van blok B. De syndicus richt ze op onder *Instellingen › Deelverenigingen*, met de basisakte of de AV-beslissing. Een deelvereniging verschijnt als een eigen gebouw in Trustee, met haar eigen vergaderingen, stemmingen en boekhouding; bovenaan staat waarvoor ze bevoegd is. Wie eigenaar wordt of verkoopt in de hoofdvereniging, volgt automatisch in de deelvereniging.

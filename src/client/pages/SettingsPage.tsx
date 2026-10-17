@@ -15,6 +15,7 @@ import { useAuth } from "../lib/auth";
 import { SecurityCard } from "../components/SecurityCard";
 import { DissolutionCard } from "../components/DissolutionCard";
 import { SubAssociationsCard } from "../components/SubAssociationsCard";
+import { HandoverCard } from "../components/HandoverCard";
 import { getPushSubscription, pushSupported, subscribePush, unsubscribePush } from "../lib/push";
 import { LOCALES, useT } from "../lib/i18n";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
@@ -73,6 +74,7 @@ export function SettingsPage() {
 
     <SecurityCard />
     <SubAssociationsCard />
+    <HandoverCard />
     <DissolutionCard />
 
     {b.isManager && bf && <Card><CardHeader><CardTitle>Gebouw (VME)</CardTitle></CardHeader><CardContent>

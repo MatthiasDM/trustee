@@ -22,6 +22,7 @@ import { transfers } from "./routes/transfers";
 import { infrastructure, infrastructureReminders } from "./routes/infrastructure";
 import { dissolution } from "./routes/dissolution";
 import { subassociations } from "./routes/subassociations";
+import { handover } from "./routes/handover";
 import { minutesLateReminders } from "./lib/minutes";
 import { loadUser } from "./lib/auth";
 import reports, { autoReminders } from "./routes/reports";
@@ -36,6 +37,7 @@ app.use("*", secureHeaders({ crossOriginEmbedderPolicy: false }));
 
 app.get("/api/health", (c) => c.json({ ok: true, ts: new Date().toISOString() }));
 app.route("/api/auth", auth);
+app.route("/api/buildings", handover);
 app.route("/api/buildings", buildings);
 app.route("/api/buildings", documents);
 app.route("/api/buildings", posts);

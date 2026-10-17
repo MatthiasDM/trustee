@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { AlertTriangle, Banknote, Building2, ChevronRight, Home, Landmark, PiggyBank, Plus, Trash2, UserPlus, Users, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { useFetch } from "../components/Layout";
@@ -19,13 +19,13 @@ const ACTION_TEXT: Record<string, string> = { incident: "{n} dringende melding(e
 
 /** Kantoorportaal: alle gebouwen van het syndicuskantoor, actiepunten en medewerkers. */
 export function OrgPage() {
-  const { orgId } = useParams(); const { user } = useAuth(); const t = useT();
+  const { orgId } = useParams(); const { user, refresh } = useAuth(); const t = useT(); const nav = useNavigate();
   const { data, loading, reload } = useFetch<any>(`/api/orgs/${orgId}/overview`);
   const [invite, setInvite] = useState(false); const [email, setEmail] = useState(""); const [role, setRole] = useState("staff"); const [error, setError] = useState<unknown>(null);
   if (loading || !data) return <Spinner />;
   const isAdmin = ["owner", "admin"].includes(data.org.role);
   return <div>
-    <PageHeader title={data.org.name} subtitle={t("Kantoorportaal: alle gebouwen die je beheert, met wat vandaag aandacht vraagt.")} actions={<Button asChild><Link to="/"><Plus />{t("Nieuw gebouw")}</Link></Button>} />
+    <PageHeader title={data.org.name} subtitle={t("Kantoorportaal: alle gebouwen die je beheert, met wat vandaag aandacht vraagt.")} actions={<><Button variant="outline" onClick={async () => { const code = prompt("Overdrachtscode van het vorige kantoor"); if (!code) return; try { const r = await api.post<{ building_id: string }>("/api/buildings/handover/accept", { code: code.trim(), org_id: data.org.id }); await refresh(); toast.success("Gebouw overgenomen; registreer het mandaat van de nieuwe syndicus onder Mandaten"); nav(`/b/${r.building_id}`); } catch (e) { toast.error((e as Error).message); } }}>Gebouw overnemen</Button><Button asChild><Link to="/"><Plus />{t("Nieuw gebouw")}</Link></Button></>} />
     <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
       <Stat label={t("Gebouwen")} value={data.totals.buildings} icon={<Building2 />} /><Stat label={t("Kavels")} value={data.totals.units} icon={<Home />} /><Stat label={t("Leden")} value={data.totals.members} icon={<Users />} />
       <Stat label={t("Open meldingen")} value={data.totals.open_incidents} icon={<Wrench />} /><Stat label={t("Werkkapitaal totaal")} value={eur(data.totals.working_cash)} icon={<Banknote />} /><Stat label={t("Reservekapitaal totaal")} value={eur(data.totals.reserve_cash)} icon={<PiggyBank />} />

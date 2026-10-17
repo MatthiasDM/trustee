@@ -28,7 +28,7 @@ const days = (a: string, b: string) => Math.round((new Date(`${b}T12:00:00Z`).ge
 
 export async function settlementPreview(env: Env, buildingId: string, unitId: string, transferDate: string): Promise<SettlementPreview> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(transferDate)) throw new HttpError(400, "Ongeldige overdrachtsdatum");
-  const unit = await env.DB.prepare("SELECT id, label, shares FROM units WHERE id = ? AND building_id = ?").bind(unitId, buildingId).first<any>();
+  const unit = await env.DB.prepare("SELECT id, label, shares, parent_unit_id FROM units WHERE id = ? AND building_id = ?").bind(unitId, buildingId).first<any>();
   if (!unit) throw new HttpError(404, "Kavel niet gevonden");
   const sellers = (await env.DB.prepare("SELECT uo.user_id, u.name FROM unit_owners uo JOIN users u ON u.id = uo.user_id WHERE uo.unit_id = ? ORDER BY u.name").bind(unitId).all()).results as any[];
   if (!sellers.length) throw new HttpError(400, "Deze kavel heeft geen geregistreerde eigenaar");

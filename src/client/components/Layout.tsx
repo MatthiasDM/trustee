@@ -100,6 +100,7 @@ export function AppShell() {
         <span className="flex-1 truncate font-semibold">{current?.name ?? "Trustee"}</span>
         <Button variant="ghost" size="icon" asChild><Link to="/notifications" className="relative"><Bell />{unread > 0 && <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">{unread}</span>}</Link></Button>
       </header>
+      {current?.parent_building_id && <div className="border-b bg-muted/60 px-4 py-2 text-center text-sm">Deelvereniging van <Link className="font-medium underline" to={`/b/${current.parent_building_id}`}>{current.parent_name}</Link>, enkel bevoegd voor: {current.sub_scope}</div>}
       {current?.dissolution_status && <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">{current.dissolution_status === "closed" ? "De vereffening van deze VME is afgesloten. Enkel inzage en export zijn nog mogelijk." : "Deze VME is ontbonden en in vereffening (art. 3.98 BW). Alle stukken vermelden dat ze in vereffening is."}</div>}
       <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8" style={demo ? { paddingBottom: "calc(var(--demo-bar-h, 56px) + 1.5rem)" } : undefined}><Outlet /></main>
       <ConsentGate />

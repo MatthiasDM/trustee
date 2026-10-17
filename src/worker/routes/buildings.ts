@@ -9,6 +9,7 @@ import { rateLimit } from "../lib/ratelimit";
 import { exportBuilding } from "../lib/backup";
 import { zipSync } from "fflate";
 import { votingUnits } from "../lib/voting";
+import { syncChildUnits } from "../lib/subassoc";
 import { organConflict } from "../lib/governance";
 
 const buildings = new Hono<AppEnv>();
@@ -248,12 +249,14 @@ buildings.put("/:buildingId/units/:unitId/owners", requireBuilding("syndicus"), 
   const b = c.get("building");
   const { owners } = z.object({ owners: z.array(z.object({ user_id: z.string(), share_pct: z.number().min(0).max(100).default(100), right_type: z.enum(["vol", "blote_eigendom", "vruchtgebruik", "erfpacht", "opstal", "gebruik_bewoning"]).default("vol") })) }).parse(await c.req.json());
   const unitId = c.req.param("unitId");
-  const unit = await c.env.DB.prepare("SELECT id FROM units WHERE id = ? AND building_id = ?").bind(unitId, b.id).first();
+  const unit = await c.env.DB.prepare("SELECT id, parent_unit_id FROM units WHERE id = ? AND building_id = ?").bind(unitId, b.id).first<any>();
   if (!unit) throw new HttpError(404, "Kavel niet gevonden");
+  if (unit.parent_unit_id) throw new HttpError(400, "De eigenaars van deze kavel worden overgenomen uit de hoofdvereniging; wijzig ze daar");
   await c.env.DB.batch([
     c.env.DB.prepare("DELETE FROM unit_owners WHERE unit_id = ?").bind(unitId),
     ...owners.map((o) => c.env.DB.prepare("INSERT INTO unit_owners (unit_id, user_id, share_pct, right_type) VALUES (?,?,?,?)").bind(unitId, o.user_id, o.share_pct, o.right_type)),
   ]);
+  await syncChildUnits(c.env.DB, unitId); // spiegelkavels in deelverenigingen volgen
   const v = (await votingUnits(c.env, b.id)).find((x) => x.unit_id === unitId);
   return c.json({ ok: true, split: !!v?.split, suspended: !!v?.suspended });
 });
@@ -266,8 +269,9 @@ buildings.put("/:buildingId/units/:unitId/owners", requireBuilding("syndicus"), 
 buildings.put("/:buildingId/units/:unitId/representative", requireBuilding("syndicus"), async (c) => {
   const b = c.get("building"); const user = c.get("user");
   const { user_id, document_id } = z.object({ user_id: z.string().nullable(), document_id: z.string().nullable().optional() }).parse(await c.req.json());
-  const unit = await c.env.DB.prepare("SELECT id, label FROM units WHERE id = ? AND building_id = ?").bind(c.req.param("unitId"), b.id).first<any>();
+  const unit = await c.env.DB.prepare("SELECT id, label, parent_unit_id FROM units WHERE id = ? AND building_id = ?").bind(c.req.param("unitId"), b.id).first<any>();
   if (!unit) throw new HttpError(404, "Kavel niet gevonden");
+  if (unit.parent_unit_id) throw new HttpError(400, "De lasthebber van deze kavel wordt overgenomen uit de hoofdvereniging");
   if (user_id) {
     const m = await c.env.DB.prepare("SELECT bm.role, u.name FROM building_members bm JOIN users u ON u.id = bm.user_id WHERE bm.building_id = ? AND bm.user_id = ?").bind(b.id, user_id).first<any>();
     if (!m) throw new HttpError(400, "De lasthebber moet lid zijn van het platform voor dit gebouw (nodig uit indien nodig)");
@@ -275,6 +279,7 @@ buildings.put("/:buildingId/units/:unitId/representative", requireBuilding("synd
     if (m.role === "huurder") throw new HttpError(400, "Een huurder kan geen lasthebber zijn; geef hem eerst de rol mede-eigenaar of kies een titularis");
   }
   await c.env.DB.prepare("UPDATE units SET representative_user_id = ?, representative_set_at = ?, representative_document_id = ? WHERE id = ?").bind(user_id, user_id ? now() : null, document_id ?? null, unit.id).run();
+  await syncChildUnits(c.env.DB, unit.id);
   await audit(c.env, b.id, user.id, user_id ? "unit.representative" : "unit.representative_removed", "unit", unit.id, { user_id });
   if (user_id) await notifyBuilding(c.env, { buildingId: b.id, type: "member", title: `Je bent lasthebber voor kavel ${unit.label}`, body: "Je wordt opgeroepen voor de algemene vergaderingen, ontvangt de stukken en stemt voor deze kavel (art. 3.87 §1, lid 2 BW).", link: `/b/${b.id}/meetings`, userIds: [user_id], email: false });
   return c.json({ ok: true });

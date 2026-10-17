@@ -131,6 +131,10 @@ Op omgevingen waar de demo-modus aanstaat (zoals de preview) kan iedereen via *P
 - **Inhoud melden.** Onder elk bericht van iemand anders staat *Melden*; de syndicus beoordeelt en verwijdert indien nodig.
 - **Voorwaarden en privacy.** Bij registratie en bij elke nieuwe versie aanvaard je de algemene voorwaarden en de privacyverklaring; die aanvaarding wordt gelogd. De teksten staan onderaan de zijbalk.
 
+## Deelverenigingen
+
+In een groep van gebouwen of een gebouw met duidelijk gescheiden blokken (vanaf twintig kavels) kunnen deelverenigingen bestaan voor de gemene delen van één blok, bijvoorbeeld de lift en het dak van blok B. De syndicus richt ze op onder *Instellingen › Deelverenigingen*, met de basisakte of de AV-beslissing. Een deelvereniging verschijnt als een eigen gebouw in Trustee, met haar eigen vergaderingen, stemmingen en boekhouding; bovenaan staat waarvoor ze bevoegd is. Wie eigenaar wordt of verkoopt in de hoofdvereniging, volgt automatisch in de deelvereniging.
+
 ## Ontbinding en vereffening
 
 Wordt de VME ontbonden (alle kavels in één hand, eenparige beslissing bij akte, of vonnis), dan registreert de syndicus dat onder *Instellingen › Ontbinding en vereffening*. De VME is dan in vereffening: elk document vermeldt dat, en de vereffenaar (of bij gebrek daaraan de syndicus) beheert het gebouw. Na de notariële slotakte wordt de vereffening afgesloten; het platform blijft daarna beschikbaar voor inzage en export, want de boeken moeten vijf jaar bewaard worden.

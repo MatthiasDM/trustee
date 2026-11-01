@@ -102,15 +102,6 @@ Drie lagen, allemaal lokaal en zonder Cloudflare-account:
 
 `npm run test:all` draait alles. De testomgeving kan ook los gebruikt worden om handmatig te klikken zonder je dev-data te raken: `npm run test:env` (reset met `npm run test:env:reset`, stop met `npm run test:env:stop`).
 
-**Kortlevende preview op Cloudflare** (aparte worker `trustee-preview`, eigen D1 `trustee-preview`, R2 `trustee-preview-docs` (EU) en KV, `TEST_MODE=1`, geen cron):
-
-```bash
-npm run preview:db        # migraties + demo-seed in de preview-database
-npm run preview:deploy    # bouwt met CLOUDFLARE_ENV=preview en deployt naar https://trustee-preview.<account>.workers.dev
-npm run preview:test      # de 122 API-scenario's tegen de live preview
-npm run preview:destroy   # worker verwijderen (database en bucket blijven; verwijder die met wrangler d1 delete / r2 bucket delete)
-```
-
 Omdat de preview een aparte database en bucket heeft, kan testdata nooit in productie belanden. Let op: Cloudflare Workers staat maximaal 100.000 PBKDF2-iteraties toe; lokaal wordt dat niet afgedwongen, de preview wel (daarom staat die limiet in een unit-test).
 
 ## Structuur

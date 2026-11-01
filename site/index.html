@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trustee: open source VME-platform</title>
+<meta name="description" content="Open source platform voor Belgische verenigingen van mede-eigenaars en syndici, gebouwd op Boek 3 BW. Probeer de demo zonder account.">
+<link rel="icon" href="img/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root { --bg:#fff; --soft:#f6f7f9; --ink:#0f172a; --muted:#526076; --line:#e2e6ec; --accent:#2563eb; --accent-ink:#fff; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0d1320; --soft:#141c2c; --ink:#eef2f8; --muted:#a3aec0; --line:#263146; --accent:#6d9bff; --accent-ink:#0d1320; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.6 Inter,system-ui,sans-serif; }
+.wrap { max-width:1080px; margin:0 auto; padding:0 16px; }
+header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:18px 0; }
+.brand { display:flex; align-items:center; gap:10px; font-weight:600; font-size:18px; }
+.brand img { width:32px; height:32px; border-radius:8px; }
+a { color:var(--accent); }
+header a.plain { color:var(--muted); text-decoration:none; font-size:15px; }
+header a.plain:hover { color:var(--ink); }
+h1 { font-size:clamp(32px,6vw,52px); line-height:1.1; letter-spacing:-.025em; margin:48px 0 16px; max-width:18ch; font-weight:700; }
+.lead { font-size:clamp(17px,2.2vw,20px); color:var(--muted); max-width:58ch; margin:0 0 28px; }
+.cta { display:flex; flex-wrap:wrap; gap:12px; }
+.btn { display:inline-block; padding:12px 20px; border-radius:9px; font-weight:600; text-decoration:none; border:1px solid var(--line); color:var(--ink); }
+.btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+.note { color:var(--muted); font-size:14px; margin-top:12px; }
+.shot { display:block; width:100%; height:auto; border:1px solid var(--line); border-radius:12px; }
+.hero-shot { margin:44px 0 64px; }
+section.band { background:var(--soft); border-block:1px solid var(--line); padding:56px 0; }
+h2 { font-size:clamp(24px,3.5vw,32px); letter-spacing:-.015em; line-height:1.2; margin:0 0 12px; }
+.intro { color:var(--muted); max-width:62ch; margin:0 0 32px; }
+.rows { display:grid; gap:48px; }
+.row { display:grid; gap:24px; align-items:center; grid-template-columns:1fr; }
+@media (min-width:800px) { .row { grid-template-columns:5fr 7fr; } }
+h3 { font-size:20px; margin:0 0 8px; }
+.row p { color:var(--muted); margin:0; }
+.law { display:grid; gap:0; border-top:1px solid var(--line); }
+.law div { display:grid; grid-template-columns:1fr; gap:2px; padding:14px 0; border-bottom:1px solid var(--line); }
+@media (min-width:700px) { .law div { grid-template-columns:150px 1fr; gap:16px; } }
+.law b { font-weight:600; font-variant-numeric:tabular-nums; }
+.law span { color:var(--muted); }
+section.plain { padding:56px 0; }
+pre { background:var(--soft); border:1px solid var(--line); border-radius:9px; padding:14px 16px; overflow-x:auto; font-size:14px; line-height:1.5; }
+footer { border-top:1px solid var(--line); padding:24px 0 40px; color:var(--muted); font-size:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><img src="img/icon.svg" alt="">Trustee</div>
+    <a class="plain" href="https://github.com/MatthiasDM/trustee">GitHub</a>
+  </header>
+  <h1>De mede-eigenaars beslissen. Trustee houdt alles bij.</h1>
+  <p class="lead">Open source platform voor Belgische verenigingen van mede-eigenaars en syndici: algemene vergadering, stemmingen, documenten, meldingen en boekhouding, gebouwd op Boek 3 van het Burgerlijk Wetboek.</p>
+  <div class="cta">
+    <a class="btn primary" href="https://trustee.m-dm.org/demo">Probeer de demo</a>
+    <a class="btn" href="https://github.com/MatthiasDM/trustee">Broncode op GitHub</a>
+  </div>
+  <p class="note">Geen account nodig. Eén klik maakt een ingevuld gebouw met vijf rollen. Na 24 uur zonder activiteit verdwijnt alles.</p>
+  <img class="shot hero-shot" src="img/overzicht.png" width="1920" height="1200" alt="Overzichtsscherm van een demogebouw in Trustee">
+</div>
+
+<section class="band"><div class="wrap">
+  <div class="rows">
+    <div class="row">
+      <div><h3>Een algemene vergadering die standhoudt</h3><p>Agendapunten van mede-eigenaars, oproeping met termijncontrole, volmachten, quorum, stemming naar aandelen en notulen binnen 30 dagen. De berekening van elke stemming blijft zichtbaar.</p></div>
+      <img class="shot" src="img/vergaderingen.png" width="1920" height="1200" alt="Vergaderingen in Trustee" loading="lazy">
+    </div>
+    <div class="row">
+      <div><h3>Boekhouding volgens KB 12 juli 2012</h3><p>Dubbele boekhouding of kasboek, oproepen met gestructureerde mededeling, bankimport via CSV en CODA, jaarrekening, afrekening per kavel en verkoopafrekening.</p></div>
+      <img class="shot" src="img/boekhouding.png" width="1920" height="1200" alt="Boekhouding in Trustee" loading="lazy">
+    </div>
+    <div class="row">
+      <div><h3>Documenten met het juiste inzagerecht</h3><p>Statuten, verslagen, offertes en facturen op één plaats. Raad en commissaris krijgen hun wettelijke inzage, en de syndicus ziet wie wat inkeek.</p></div>
+      <img class="shot" src="img/documenten.png" width="1920" height="1200" alt="Documenten in Trustee" loading="lazy">
+    </div>
+  </div>
+</div></section>
+
+<section class="plain"><div class="wrap">
+  <h2>Ook de uitzonderingen zitten erin</h2>
+  <p class="intro">Een VME loopt zelden volgens het boekje. Deze situaties uit de wet zijn gebouwd en getest.</p>
+  <div class="law">
+    <div><b>Art. 3.87 §2</b><span>Een vijfde van de aandelen vraagt een AV aan, en roept die zelf bijeen als de syndicus niet reageert.</span></div>
+    <div><b>Art. 3.87 §6</b><span>Enkel wie een last draagt stemt erover, volgens de verdeelsleutel.</span></div>
+    <div><b>Art. 3.88 §4</b><span>Eenparigheid gemist door afwezigheid: nieuwe AV na minstens 30 dagen.</span></div>
+    <div><b>Art. 3.89 §9</b><span>Syndicus en raadslid of commissaris zijn onverenigbaar.</span></div>
+    <div><b>Art. 3.92 §2</b><span>Voorlopig bewindvoerder aangesteld door de rechter.</span></div>
+    <div><b>Art. 3.97 en 3.98</b><span>Ontbinding en vereffening, daarna enkel nog inzage en export.</span></div>
+  </div>
+</div></section>
+
+<section class="band"><div class="wrap">
+  <h2>Zelf draaien</h2>
+  <p class="intro">Trustee draait op Cloudflare Workers, of lokaal met dezelfde runtime. De lokale start heeft geen Cloudflare-account nodig.</p>
+<pre>git clone https://github.com/MatthiasDM/trustee
+cd trustee &amp;&amp; npm install
+npm run db:migrate:local &amp;&amp; npm run db:seed:local
+cp .dev.vars.example .dev.vars
+npm run dev</pre>
+  <p class="note">Vrijgegeven onder de <a href="https://github.com/MatthiasDM/trustee/blob/main/LICENSE">GNU GPL v3 of later</a>, zonder enige garantie. Trustee is een hulpmiddel en geen juridisch advies: de syndicus en de organen van de VME blijven verantwoordelijk.</p>
+</div></section>
+
+<div class="wrap"><footer>Trustee. De publieke demo bevat enkel fictieve gegevens; zet er niets echts in.</footer></div>
+</body>
+</html>

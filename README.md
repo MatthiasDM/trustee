@@ -1,12 +1,18 @@
-# Trustee — syndicus / VME platform
+# Trustee: syndicus- en VME-platform
 
-Cloud-based SaaS voor syndici en verenigingen van mede-eigenaars (VME), volledig op Cloudflare:
+Open source platform voor Belgische verenigingen van mede-eigenaars (VME) en syndici, gebouwd op Boek 3 BW.
+
+- **Demo zonder account:** https://trustee.m-dm.org/demo (fictieve gegevens, verwijderd na 24 uur zonder activiteit)
+- **Projectpagina:** https://matthiasdm.github.io/trustee/
+- **Licentie:** [GNU GPL v3 of later](LICENSE), zonder enige garantie. Trustee is een hulpmiddel en geen juridisch advies. De teksten onder `docs/juridisch/` zijn ontwerpen.
+
+Gebouwd op Cloudflare Workers:
 
 - **Workers** (Hono API) + **Workers Assets** (React PWA)
-- **D1** (SQLite) voor alle data, **R2** voor documenten, **KV** gereserveerd voor cache/rate-limits
+- **D1** (SQLite) voor alle data, **R2** voor documenten, **KV** voor cache en rate limits
 - **Web Push** (VAPID, geen externe dienst) + **e-mail** via Resend
-- **UI**: [shadcn/ui](https://ui.shadcn.com) (Radix-primitives + Tailwind v4), Lucide-iconen, Inter, licht/donker thema; componenten staan in `src/client/components/ui/`
-- **Cron trigger** (elke 15 min): sluit verlopen stemmingen, stuurt herinneringen 24u vóór vergaderingen, ruimt sessies op
+- **UI**: [shadcn/ui](https://ui.shadcn.com) (Radix-primitives + Tailwind v4), Lucide-iconen, Inter, licht en donker thema
+- **Cron trigger** (elke 15 min): stemmingen sluiten, herinneringen, back-ups, sessies opruimen
 
 ## Functies
 
@@ -63,11 +69,26 @@ npm run deploy
 
 - Rate limiting (KV) op aanmelden, registreren, wachtwoord-reset en uitnodigingen.
 - Uploads: enkel documenttypes (pdf, afbeeldingen, Office, csv, zip…), uitvoerbare bestanden en html geweigerd; voorvertoning in een gesandboxte iframe.
-- Elke eerste van de maand maakt de cron een JSON-export per gebouw in R2 (`backups/<gebouw>/<datum>.json`, 36 maanden bewaard); syndicus, raad en commissaris kunnen ze downloaden onder Instellingen. De laatste cron-status staat daar ook.
+- Dagelijks maakt de cron een JSON-export per gebouw in R2 (`backups/<gebouw>/<datum>.json`, 36 maanden bewaard); syndicus, raad en commissaris kunnen ze downloaden onder Instellingen. De laatste cron-status staat daar ook.
 - Workers Observability staat aan (`observability.enabled`); fouten verschijnen in het Cloudflare-dashboard onder Logs. Koppel daar een alert aan `cron failed` of 5xx-pieken.
 - AVG: gebruikers downloaden hun gegevens en verwijderen hun account (geanonimiseerd; stemmen en boekingen blijven bewaard).
 
 Koppel daarna een custom domain aan de Worker (Workers & Pages › trustee › Settings › Domains). `APP_URL` moet het publieke adres zijn; het wordt gebruikt in e-mails en push-links.
+
+## Publieke demo hosten
+
+`DEMO_ONLY=1` (omgeving `demo` in `wrangler.jsonc`) maakt een instantie die enkel wegwerp-demo's aanbiedt. De limieten staan in `src/worker/lib/publicdemo.ts`:
+
+| Wat | Limiet |
+|---|---|
+| Bestand | 5 MB; pdf, afbeeldingen, Word, Excel, csv, txt, CODA |
+| Opslag | 25 MB en 30 documenten per gebouw, 1 GB in totaal |
+| Andere aanvragen | 64 KB |
+| Verkeer per adres | 600 aanvragen, 300 API-lezingen en 60 schrijfacties per minuut |
+| Nieuwe demo's | 5 per adres en 25 in totaal per dag, 100 tegelijk actief |
+| Uitgeschakeld | registreren, aanmelden, wachtwoord-reset, 2FA, nieuwe gebouwen en organisaties, overdracht, push, e-mail |
+
+De instantie kan op eigen hardware draaien: `npm run demo:release` bouwt ze, `wrangler dev` luistert enkel op 127.0.0.1, en een Cloudflare Tunnel maakt ze bereikbaar. De Worker in `deploy/edge/` staat op het publieke domein, weigert te grote aanvragen en te veel verkeer vóór ze de server bereiken, en toont een melding als de server uit staat. Met `EDGE_SECRET` weigert de server alles wat niet via die Worker komt. De geplande opruiming start je lokaal met een aanroep van `/cdn-cgi/handler/scheduled` (met `--test-scheduled`); hou dat pad buiten de tunnel.
 
 ## Testen
 

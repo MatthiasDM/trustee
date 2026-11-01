@@ -5,6 +5,7 @@ import { isBoard, isManager, isOwner, requireAuth, requireBuilding } from "../li
 import { HttpError, safeFilename, uid, now } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 import { safeContentType, validateUpload } from "../lib/files";
+import { assertDemoUpload } from "../lib/publicdemo";
 
 const docs = new Hono<AppEnv>();
 docs.use("*", requireAuth);
@@ -78,6 +79,7 @@ docs.post("/:buildingId/documents", requireBuilding("syndicus", "raad", "eigenaa
   const file = form.get("file");
   if (!(file instanceof File)) throw new HttpError(400, "Geen bestand");
   validateUpload(file);
+  await assertDemoUpload(c.env, b.id, file);
   const meta = z.object({
     folder_id: z.string().nullable().optional(),
     category: z.string().max(40).default("overig"),
@@ -158,6 +160,7 @@ docs.post("/:buildingId/documents/:docId/version", requireBuilding("syndicus", "
   const file = form.get("file");
   if (!(file instanceof File)) throw new HttpError(400, "Geen bestand");
   validateUpload(file);
+  await assertDemoUpload(c.env, b.id, file, d.size || 1);
   const key = `${b.id}/${d.id}/v${d.version + 1}/${safeFilename(file.name)}`;
   await c.env.DOCS.put(key, file.stream(), { httpMetadata: { contentType: file.type || "application/octet-stream" } });
   await c.env.DB.prepare("UPDATE documents SET r2_key = ?, size = ?, mime = ?, version = version + 1, name = ? WHERE id = ?").bind(key, file.size, file.type || "application/octet-stream", file.name, d.id).run();

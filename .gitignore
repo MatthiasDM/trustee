@@ -9,3 +9,4 @@ dist
 .wrangler/test-env.pid
 test-results
 playwright-report
+docs/intern

@@ -7,6 +7,7 @@ import { HttpError, now, randomToken } from "../lib/util";
 import { audit } from "../lib/notify";
 import { LEGAL_VERSIONS } from "../../shared/legal";
 import { DEMO_TTL_MS } from "../lib/demo";
+import { assertDemoStart, clientIp, DEMO_LIMITS, isPublicDemo } from "../lib/publicdemo";
 export { DEMO_TTL_MS } from "../lib/demo";
 // @ts-expect-error JS-module zonder types (gedeeld met scripts/seed.mjs)
 import { seedSql } from "../../../seed/template.mjs";
@@ -25,11 +26,12 @@ async function replaceSession(c: Context<AppEnv>, userId: string) {
 }
 const guard = (env: AppEnv["Bindings"]) => { if (env.DEMO_MODE !== "1") throw new HttpError(404, "Demo-modus is niet actief"); };
 
-demo.get("/status", async (c) => c.json({ enabled: c.env.DEMO_MODE === "1", ttl_hours: DEMO_TTL_MS / 3600_000 }));
+demo.get("/status", async (c) => c.json({ enabled: c.env.DEMO_MODE === "1", ttl_hours: DEMO_TTL_MS / 3600_000, only: isPublicDemo(c.env), limits: isPublicDemo(c.env) ? { file_mb: DEMO_LIMITS.fileBytes / 1048576, building_mb: DEMO_LIMITS.buildingBytes / 1048576 } : null }));
 
 /** Nieuw demo-gebouw: seed met unieke suffix; de bezoeker wordt aangemeld als syndicus. */
 demo.post("/start", async (c) => {
   guard(c.env);
+  await assertDemoStart(c.env, clientIp(c.env, c.req.raw.headers));
   const body = z.object({ name: z.string().min(2).max(80).optional(), address: z.string().max(120).optional(), city: z.string().max(80).optional() }).parse(await c.req.json().catch(() => ({})));
   const sfx = `-d${randomToken(6).toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8)}`;
   const sql: string = seedSql({ sfx, hash: await hashPassword(randomToken(12)), legal: LEGAL_VERSIONS, emailDomain: "demo.invalid", building: { name: body.name, address: body.address, city: body.city } });
@@ -75,11 +77,11 @@ demo.post("/end", requireAuth, async (c) => {
 
 /** Verwijdert gebouw (cascade), organisatie, gebruikers en bestanden van één demo-groep. */
 export async function deleteDemoGroup(env: AppEnv["Bindings"], group: string) {
-  const buildings = (await env.DB.prepare("SELECT id, org_id FROM buildings WHERE demo_group = ?").bind(group).all<{ id: string; org_id: string }>()).results;
+  const buildings = (await env.DB.prepare("SELECT id, org_id FROM buildings WHERE demo_group = ? ORDER BY parent_building_id IS NULL").bind(group).all<{ id: string; org_id: string }>()).results;
   for (const b of buildings) {
     let cursor: string | undefined;
-    do { const l = await env.DOCS.list({ prefix: `${b.id}/`, cursor }); for (const o of l.objects) await env.DOCS.delete(o.key); cursor = l.truncated ? l.cursor : undefined; } while (cursor);
-    const bk = await env.DOCS.list({ prefix: `backups/${b.id}/` }); for (const o of bk.objects) await env.DOCS.delete(o.key);
+    do { const l = await env.DOCS.list({ prefix: `${b.id}/`, cursor }); if (l.objects.length) await env.DOCS.delete(l.objects.map((o) => o.key)); cursor = l.truncated ? l.cursor : undefined; } while (cursor);
+    const bk = await env.DOCS.list({ prefix: `backups/${b.id}/` }); if (bk.objects.length) await env.DOCS.delete(bk.objects.map((o) => o.key));
     await env.DB.prepare("DELETE FROM buildings WHERE id = ?").bind(b.id).run();
     await env.DB.prepare("DELETE FROM orgs WHERE id = ? AND NOT EXISTS (SELECT 1 FROM buildings WHERE org_id = ?)").bind(b.org_id, b.org_id).run();
   }
@@ -88,12 +90,19 @@ export async function deleteDemoGroup(env: AppEnv["Bindings"], group: string) {
 }
 
 /** Cron: demo's zonder activiteit sinds 24 u opruimen. */
-export async function cleanupDemos(env: AppEnv["Bindings"]) {
+export async function cleanupDemos(env: AppEnv["Bindings"], max = 1000) {
   const limit = new Date(Date.now() - DEMO_TTL_MS).toISOString();
-  const groups = (await env.DB.prepare("SELECT DISTINCT demo_group FROM buildings WHERE demo_group IS NOT NULL AND COALESCE(demo_last_activity, '') < ?").bind(limit).all<{ demo_group: string }>()).results;
+  const groups = (await env.DB.prepare("SELECT demo_group FROM buildings WHERE demo_group IS NOT NULL GROUP BY demo_group HAVING MAX(COALESCE(demo_last_activity, '')) < ? LIMIT ?").bind(limit, max).all<{ demo_group: string }>()).results;
   for (const g of groups) await deleteDemoGroup(env, g.demo_group);
   // verweesde demo-gebruikers (gebouw al weg)
   await env.DB.prepare("DELETE FROM users WHERE demo_group IS NOT NULL AND demo_group NOT IN (SELECT demo_group FROM buildings WHERE demo_group IS NOT NULL)").run();
+  return groups.length;
+}
+
+/** Database te groot: de langst inactieve demo's eerst weg. */
+export async function removeOldestDemos(env: AppEnv["Bindings"], n: number) {
+  const groups = (await env.DB.prepare("SELECT demo_group FROM buildings WHERE demo_group IS NOT NULL GROUP BY demo_group ORDER BY MAX(COALESCE(demo_last_activity, '')) LIMIT ?").bind(n).all<{ demo_group: string }>()).results;
+  for (const g of groups) await deleteDemoGroup(env, g.demo_group);
   return groups.length;
 }
 

@@ -135,7 +135,7 @@ auth.post("/consent", requireAuth, async (c) => { await recordConsents(c, c.get(
 
 auth.get("/me", async (c) => {
   const user = await loadUser(c);
-  if (!user) return c.json({ user: null, demo_enabled: c.env.DEMO_MODE === "1" });
+  if (!user) return c.json({ user: null, demo_enabled: c.env.DEMO_MODE === "1", demo_only: c.env.DEMO_ONLY === "1" });
   const demoInfo = user.demo_group ? { group: user.demo_group, users: await demoUsers(c.env, user.demo_group), ttl_hours: DEMO_TTL_MS / 3600_000 } : null;
   const orgs = await c.env.DB.prepare("SELECT o.id, o.name, o.plan, om.role FROM org_members om JOIN orgs o ON o.id = om.org_id WHERE om.user_id = ?").bind(user.id).all();
   const buildings = await c.env.DB.prepare(
@@ -162,7 +162,7 @@ auth.get("/me", async (c) => {
   ).bind(user.id).all();
   const unread = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL").bind(user.id).first<{ n: number }>();
   const sec = await c.env.DB.prepare("SELECT (SELECT totp_enabled_at FROM users WHERE id = ?1) AS totp_enabled_at, (SELECT COUNT(*) FROM sessions WHERE user_id = ?1) AS sessions").bind(user.id).first<any>();
-  return c.json({ user, demo: demoInfo, demo_enabled: c.env.DEMO_MODE === "1", security: { totp_enabled: !!sec?.totp_enabled_at, sessions: sec?.sessions ?? 0 }, orgs: orgs.results, buildings: buildings.results, unread: unread?.n ?? 0, vapidPublicKey: c.env.VAPID_PUBLIC_KEY || null, consents_required: await pendingConsents(c.env, user.id), legal_versions: LEGAL_VERSIONS });
+  return c.json({ user, demo: demoInfo, demo_enabled: c.env.DEMO_MODE === "1", demo_only: c.env.DEMO_ONLY === "1", security: { totp_enabled: !!sec?.totp_enabled_at, sessions: sec?.sessions ?? 0 }, orgs: orgs.results, buildings: buildings.results, unread: unread?.n ?? 0, vapidPublicKey: c.env.VAPID_PUBLIC_KEY || null, consents_required: await pendingConsents(c.env, user.id), legal_versions: LEGAL_VERSIONS });
 });
 
 auth.patch("/me", requireAuth, async (c) => {

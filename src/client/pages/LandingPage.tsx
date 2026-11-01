@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, BookOpen, Calculator, Calendar, FileText, MessageSquare, ShieldCheck, Sparkles, Users, Vote } from "lucide-react";
+import { ArrowRight, BookOpen, Calculator, Code2, Calendar, FileText, MessageSquare, ShieldCheck, Sparkles, Users, Vote } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { Button } from "../components/ui/button";
 import { LegalLinks } from "./LegalPage";
+
+const REPO_URL = "https://github.com/MatthiasDM/trustee";
 
 const FEATURES = [
   { icon: Calendar, title: "Algemene vergadering", text: "Agendapunten van mede-eigenaars, oproeping met termijncontrole, volmachten, quorum, stemming naar aandelen en notulen binnen 30 dagen." },
@@ -15,10 +17,10 @@ const FEATURES = [
 
 /** Openbare startpagina voor bezoekers zonder account: uitleg, demo en aanmelden. */
 export function LandingPage() {
-  const { demo_enabled } = useAuth();
+  const { demo_enabled, demo_only } = useAuth();
   return <div className="min-h-screen bg-background">
     <header className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6"><div className="flex items-center gap-2.5"><img src="/icon.svg" className="size-9 rounded-lg" alt="" /><span className="text-lg font-semibold tracking-tight">Trustee</span></div>
-      <nav className="flex items-center gap-2"><Button variant="ghost" asChild><Link to="/help">Handleiding</Link></Button><Button variant="outline" asChild><Link to="/login">Aanmelden</Link></Button></nav></header>
+      <nav className="flex items-center gap-2"><Button variant="ghost" asChild><Link to="/help">Handleiding</Link></Button>{demo_only ? <Button variant="outline" asChild><a href={REPO_URL}><Code2 />GitHub</a></Button> : <Button variant="outline" asChild><Link to="/login">Aanmelden</Link></Button>}</nav></header>
     <main>
       <section className="mx-auto max-w-6xl px-4 pt-10 pb-14 sm:px-6 sm:pt-16">
         <div className="max-w-2xl">
@@ -27,9 +29,9 @@ export function LandingPage() {
           <p className="mt-4 text-base text-muted-foreground sm:text-lg">Eén platform voor de vereniging van mede-eigenaars: algemene vergadering, stemmingen, documenten, meldingen en boekhouding, gebouwd op het Belgische appartementsrecht (Boek 3 BW) en het rekeningenstelsel van KB 12 juli 2012.</p>
           <div className="mt-7 flex flex-wrap gap-3">
             {demo_enabled !== false && <Button size="lg" asChild><Link to="/demo"><Sparkles />Probeer de demo zonder account</Link></Button>}
-            <Button size="lg" variant="outline" asChild><Link to="/register">Registreer als syndicus<ArrowRight /></Link></Button>
+            {demo_only ? <Button size="lg" variant="outline" asChild><a href={REPO_URL}><Code2 />Broncode (GPL)</a></Button> : <Button size="lg" variant="outline" asChild><Link to="/register">Registreer als syndicus<ArrowRight /></Link></Button>}
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">De demo maakt met één klik een volledig ingevuld gebouw met vijf rollen. Fictieve gegevens, automatisch verwijderd na 24 uur zonder activiteit.</p>
+          <p className="mt-3 text-xs text-muted-foreground">De demo maakt met één klik een volledig ingevuld gebouw met vijf rollen. Fictieve gegevens, automatisch verwijderd na 24 uur zonder activiteit.{demo_only && " Dit is een publieke demo zonder garanties: zet er geen echte gegevens in."}</p>
         </div>
       </section>
       <section className="border-t bg-muted/30"><div className="mx-auto grid max-w-6xl gap-5 px-4 py-12 sm:grid-cols-2 sm:px-6 lg:grid-cols-3">

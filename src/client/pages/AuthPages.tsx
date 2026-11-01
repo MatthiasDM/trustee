@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useState, type FormEvent , type ComponentType } from "react";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { ErrorBox, Field, Spinner, RoleBadge } from "../components/ui";
@@ -25,7 +25,18 @@ function AuthCard({ title, description, children, footer }: { title: string; des
     </div></div>;
 }
 
-export function LoginPage() {
+/** Op de publieke demo bestaan geen echte accounts. */
+function DemoOnlyRedirect({ page: Page }: { page: ComponentType }) {
+  const { demo_only, user } = useAuth();
+  if (demo_only) return <Navigate to={user ? "/" : "/demo"} replace />;
+  return <Page />;
+}
+export const LoginPage = () => <DemoOnlyRedirect page={LoginForm} />;
+export const RegisterPage = () => <DemoOnlyRedirect page={RegisterForm} />;
+export const ForgotPasswordPage = () => <DemoOnlyRedirect page={ForgotPasswordForm} />;
+export const ResetPasswordPage = () => <DemoOnlyRedirect page={ResetPasswordForm} />;
+
+function LoginForm() {
   const { refresh, user, demo_enabled } = useAuth();
   const nav = useNavigate();
   const [sp] = useSearchParams();
@@ -62,7 +73,7 @@ export function LoginPage() {
   </AuthCard>;
 }
 
-export function RegisterPage() {
+function RegisterForm() {
   const { refresh } = useAuth();
   const nav = useNavigate();
   const [f, setF] = useState({ name: "", email: "", password: "", orgName: "", accept_terms: false });
@@ -118,7 +129,7 @@ export function InvitePage() {
   </AuthCard>;
 }
 
-export function ForgotPasswordPage() {
+function ForgotPasswordForm() {
   const [email, setEmail] = useState(""); const [done, setDone] = useState(false);
   return <AuthCard title="Wachtwoord vergeten" footer={<Link to="/login" className="text-primary hover:underline">Terug naar aanmelden</Link>}>
     {done ? <p className="text-sm">Als er een account bestaat voor {email}, ontvang je zo een e-mail met een link.</p> :
@@ -129,7 +140,7 @@ export function ForgotPasswordPage() {
   </AuthCard>;
 }
 
-export function ResetPasswordPage() {
+function ResetPasswordForm() {
   const [sp] = useSearchParams(); const nav = useNavigate();
   const [password, setPassword] = useState(""); const [error, setError] = useState<unknown>(null);
   return <AuthCard title="Nieuw wachtwoord">

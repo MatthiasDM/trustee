@@ -1,3 +1,4 @@
+import { useAuth } from "../lib/auth";
 import { useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ChevronRight, ClipboardCheck, Download, Eye, File, FileImage, FileSpreadsheet, FileText, Folder, FolderPlus, Lock, MoreHorizontal, Pencil, Search, Trash2, Upload, UploadCloud } from "lucide-react";
@@ -85,6 +86,7 @@ function VisSelect({ value, onChange, options = VIS }: { value: string; onChange
 }
 
 export function UploadModal({ open, onClose, folders, folderId, onDone, canSetVisibility }: { open: boolean; onClose: () => void; folders: FolderT[]; folderId: string; onDone: () => void; canSetVisibility: boolean }) {
+  const { demo_only } = useAuth();
   const b = useBuilding();
   const [files, setFiles] = useState<File[]>([]);
   const [meta, setMeta] = useState({ folder_id: folderId === "root" ? "" : folderId, category: "overig", visibility: "all", description: "", notify: false });
@@ -102,7 +104,7 @@ export function UploadModal({ open, onClose, folders, folderId, onDone, canSetVi
       <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition hover:border-primary/60 hover:bg-accent/40" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); setFiles([...files, ...e.dataTransfer.files]); }}>
         <input type="file" multiple className="hidden" onChange={(e) => setFiles([...files, ...(e.target.files ?? [])])} />
         <UploadCloud className="mb-2 size-8 text-muted-foreground" />
-        <div className="text-sm">{files.length ? <span className="font-medium">{files.map((f) => f.name).join(", ")}</span> : <><span className="font-medium text-primary">Kies bestanden</span> of sleep ze hierheen</>}</div><div className="mt-1 text-xs text-muted-foreground">Max 50 MB per bestand</div>
+        <div className="text-sm">{files.length ? <span className="font-medium">{files.map((f) => f.name).join(", ")}</span> : <><span className="font-medium text-primary">Kies bestanden</span> of sleep ze hierheen</>}</div><div className="mt-1 text-xs text-muted-foreground">Max {demo_only ? 5 : 50} MB per bestand</div>
       </label>
       <div className="grid gap-4 sm:grid-cols-2"><Field label="Map"><FolderSelect value={meta.folder_id} onChange={(v) => setMeta({ ...meta, folder_id: v })} folders={folders} /></Field><Field label="Categorie"><CategorySelect value={meta.category} onChange={(v) => setMeta({ ...meta, category: v })} /></Field></div>
       {canSetVisibility && <Field label="Zichtbaar voor"><VisSelect value={meta.visibility} onChange={(v) => setMeta({ ...meta, visibility: v })} /></Field>}

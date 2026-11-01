@@ -12,7 +12,7 @@ describe("Verplicht reservekapitaal", () => {
     await synd.patch(`/api/buildings/${B}`, { provisional_acceptance_date: "2015-01-01" });
     const r = (await synd.get(`/api/buildings/${B}/ledger/reserve-check?fy=fy-2027`)).data;
     expect(r.previous_year).toBe("2026"); expect(r.ordinary_charges_prev).toBeGreaterThan(10000);
-    expect(r.minimum).toBeCloseTo(Math.round(r.ordinary_charges_prev * 5) / 100, 2);
+    expect(Math.abs(r.minimum - r.ordinary_charges_prev * 0.05)).toBeLessThanOrEqual(0.0051); // afronding op de cent
     expect(r.called_reserve).toBe(0); expect(r.status).toBe("short"); expect(r.message).toMatch(/3\.86 §3/);
     expect(r.has_working_account).toBe(true); expect(r.has_reserve_account).toBe(true);
     // een gewone meerderheid volstaat niet als ontheffing

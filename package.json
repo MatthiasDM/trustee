@@ -1,5 +1,6 @@
 {
   "name": "trustee",
+  "license": "GPL-3.0-or-later",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -24,7 +25,8 @@
     "test:all": "npm run test && npm run test:api && npm run test:ui",
     "preview:deploy": "CLOUDFLARE_ENV=preview vite build && wrangler deploy",
     "preview:db": "wrangler d1 migrations apply trustee-preview --remote --env preview && node scripts/seed.mjs && wrangler d1 execute trustee-preview --remote --env preview --file=./seed/seed.sql",
-    "preview:test": "TEST_BASE=https://trustee-preview.example.workers.dev vitest run --config vitest.scenarios.config.ts",
+    "preview:test": "vitest run --config vitest.scenarios.config.ts",
+    "demo:release": "scripts/host-demo.sh",
     "preview:destroy": "wrangler delete --name trustee-preview --force"
   },
   "dependencies": {

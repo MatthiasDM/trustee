@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { requireAuth, requireBuilding } from "../lib/auth";
-import { HttpError, uid } from "../lib/util";
+import { HttpError, now, uid } from "../lib/util";
 import { audit, notifyBuilding } from "../lib/notify";
 import { syncChildUnits } from "../lib/subassoc";
 
@@ -52,6 +52,7 @@ subassociations.post("/:buildingId/sub-associations", requireBuilding("syndicus"
     ...body.units.map((u) => { const p = parents.find((x) => x.id === u.unit_id)!; return c.env.DB.prepare("INSERT INTO units (id, building_id, label, type, floor, shares, parent_unit_id) VALUES (?,?,?,?,?,?,?)").bind(uid(), id, p.label, p.type, p.floor, u.shares, p.id); }),
   ]);
   for (const u of ids) await syncChildUnits(c.env.DB, u);
+  if (b.demo_group) await c.env.DB.prepare("UPDATE buildings SET demo_group = ?, demo_last_activity = ? WHERE id = ?").bind(b.demo_group, now(), id).run(); // mee opruimen met de demo
   await audit(c.env, b.id, user.id, "subassociation.create", "building", id, { name: body.name, units: ids.length });
   await notifyBuilding(c.env, { buildingId: id, type: "member", title: `Deelvereniging opgericht: ${body.name}`, body: `Je kavel maakt deel uit van deze deelvereniging, bevoegd voor: ${body.scope.slice(0, 200)}`, link: `/b/${id}`, excludeUserId: user.id, email: false });
   return c.json({ id }, 201);

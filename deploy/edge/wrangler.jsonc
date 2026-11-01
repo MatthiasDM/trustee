@@ -1,0 +1,9 @@
+{
+  "name": "trustee-demo-edge",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": false,
+  "routes": [{ "pattern": "trustee.m-dm.org", "custom_domain": true }],
+  "vars": { "ORIGIN": "https://trustee-origin.garde-robe.app" },
+  "ratelimits": [{ "name": "RL_ALL", "namespace_id": "2003", "simple": { "limit": 600, "period": 60 } }]
+}

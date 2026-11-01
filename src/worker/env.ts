@@ -13,6 +13,10 @@ export interface Env {
   SESSION_SECRET?: string;
   TEST_MODE?: string; // "1" in de testomgeving: uitnodigingstokens in API-antwoord, geen e-mail
   DEMO_MODE?: string; // "1": iedereen kan een wegwerp-demogebouw starten en van gebruiker wisselen
+  DEMO_ONLY?: string; // "1": publieke demo-instantie: enkel demo's, met limieten (zie lib/publicdemo.ts)
+  EDGE_SECRET?: string; // gedeeld met deploy/edge: enkel de doorstuur-Worker bereikt de thuisserver
+  RL_READ?: RateLimit;
+  RL_WRITE?: RateLimit;
 }
 
 export interface AuthUser { id: string; email: string; name: string; locale: string; is_superadmin: number; phone: string | null; demo_group?: string | null }

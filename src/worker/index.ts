@@ -16,7 +16,7 @@ import mandates, { ORGAN_RULES } from "./routes/mandates";
 import ledger, { postDueScheduled } from "./routes/ledger";
 import { runBackups } from "./lib/backup";
 import { purgeTrash } from "./routes/documents";
-import { cleanupDemos, demo } from "./routes/demo";
+import { cleanupDemos, demo, removeOldestDemos } from "./routes/demo";
 import { decisionReminders, decisions } from "./routes/decisions";
 import { transfers } from "./routes/transfers";
 import { infrastructure, infrastructureReminders } from "./routes/infrastructure";
@@ -25,6 +25,7 @@ import { subassociations } from "./routes/subassociations";
 import { handover } from "./routes/handover";
 import { minutesLateReminders } from "./lib/minutes";
 import { loadUser } from "./lib/auth";
+import { isPublicDemo, publicDemoCron, publicDemoGuard } from "./lib/publicdemo";
 import reports, { autoReminders } from "./routes/reports";
 import orgs from "./routes/orgs";
 import suppliers, { runDueRecurring } from "./routes/suppliers";
@@ -34,6 +35,8 @@ import { notifyBuilding } from "./lib/notify";
 const app = new Hono<AppEnv>();
 app.use("*", logger());
 app.use("*", secureHeaders({ crossOriginEmbedderPolicy: false }));
+
+app.use("/api/*", publicDemoGuard);
 
 app.get("/api/health", (c) => c.json({ ok: true, ts: new Date().toISOString() }));
 app.route("/api/auth", auth);
@@ -78,6 +81,7 @@ export async function runCron(env: AppEnv["Bindings"], cron = "manual") {
       const nowIso = new Date().toISOString();
       const log: Record<string, unknown> = { started_at: nowIso, cron };
       try {
+      if (isPublicDemo(env)) { Object.assign(log, await publicDemoCron(env, cleanupDemos, removeOldestDemos), { ok: true }); return log; }
       // maandelijkse back-up op de 1e, in het eerste kwartier van de dag
       const d = new Date();
       // dagelijkse back-up om 02:00 UTC (dagelijks 60 dagen bewaard, maandelijkse 36 maanden); prullenbak leegmaken

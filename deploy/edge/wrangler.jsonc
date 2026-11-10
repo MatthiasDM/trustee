@@ -4,6 +4,7 @@
   "compatibility_date": "2026-09-01",
   "workers_dev": false,
   "routes": [{ "pattern": "trustee.m-dm.org", "custom_domain": true }],
-  "vars": { "ORIGIN": "https://trustee-origin.garde-robe.app" },
+  // Thuisserver via tunnel trustee-demo (8fa199f5…) → 127.0.0.1:8799, zonder publieke origin-hostnaam.
+  "vpc_services": [{ "binding": "ORIGIN", "service_id": "01a1c415-7cee-7e02-80bb-fadd345690a9" }],
   "ratelimits": [{ "name": "RL_ALL", "namespace_id": "2003", "simple": { "limit": 600, "period": 60 } }]
 }

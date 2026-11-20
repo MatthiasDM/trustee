@@ -7,7 +7,7 @@ describe("Ontvangst van de notulen", () => {
     const synd = await as("syndicus"); const jan = await as("jan"); const marie = await as("marie"); const lotte = await as("lotte");
     const mid = (await synd.post(`/api/buildings/${B}/meetings`, { title: "AV ontvangsttest", type: "av", starts_at: new Date(Date.now() - 5 * 86400_000).toISOString() })).data.id;
     await synd.post(`/api/buildings/${B}/meetings/${mid}/minutes/generate`);
-    const f = await synd.post(`/api/buildings/${B}/meetings/${mid}/minutes/finalize`); expect(f.status).toBe(200);
+    const f = await synd.post(`/api/buildings/${B}/meetings/${mid}/minutes/finalize`, { unsigned_reason: "Testvergadering zonder zitting: niemand kon tekenen" }); expect(f.status).toBe(200);
     let r = (await synd.get(`/api/buildings/${B}/meetings/${mid}/minutes/receipts`)).data;
     expect(r.total).toBeGreaterThanOrEqual(3); expect(r.opened).toBe(0); expect(r.late).toBe(false);
     expect(r.rows.some((x: any) => x.name === "Lotte De Smet")).toBe(false); // huurder is niet stemgerechtigd

@@ -38,7 +38,8 @@ describe("Algemene vergadering: agenda, volmachten, quorum, stemming, notulen", 
     await synd.patch(`/api/buildings/${B}/meetings/${meetingId}`, { chair_user_id: "u-jan", notify: false });
     const g = await synd.post(`/api/buildings/${B}/meetings/${meetingId}/minutes/generate`); expect(g.status).toBe(200); expect(g.data.body).toContain("Laadpalen plaatsen"); expect(g.data.body).toContain("Voorzitter: Jan Peeters"); expect(g.data.body).toMatch(/quorum/i);
     expect((await jan.post(`/api/buildings/${B}/meetings/${meetingId}/minutes/finalize`)).status).toBe(403); // raad mag niet finaliseren
-    const f = await synd.post(`/api/buildings/${B}/meetings/${meetingId}/minutes/finalize`); expect(f.status).toBe(200);
+    const unsigned = await synd.post(`/api/buildings/${B}/meetings/${meetingId}/minutes/finalize`); expect(unsigned.status).toBe(400); expect(unsigned.data.code).toBe("minutes_unsigned"); // art. 3.87 §10: eerst tekenen, of een reden
+    const f = await synd.post(`/api/buildings/${B}/meetings/${meetingId}/minutes/finalize`, { unsigned_reason: "Testvergadering zonder zitting: niemand kon tekenen" }); expect(f.status).toBe(200);
     const doc = await marie.raw("GET", `/api/buildings/${B}/documents/${f.data.documentId}/download?inline=1`); expect(doc.status).toBe(200); expect(doc.headers.get("content-type")).toContain("text/html"); expect(doc.headers.get("content-security-policy")).toContain("sandbox");
     const n = await marie.get("/api/notifications"); expect(n.data.items.some((x: any) => x.type === "minutes" && x.title.includes("Test-AV"))).toBe(true);
     expect((await synd.post(`/api/buildings/${B}/meetings/${meetingId}/minutes/generate`)).status).toBe(400);

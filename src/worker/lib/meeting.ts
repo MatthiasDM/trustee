@@ -2,7 +2,7 @@ import type { Env } from "../env";
 import { HttpError } from "./util";
 import { suspendedFor, votingUnits, weightOf } from "./voting";
 
-export interface AttendanceRow { unit_id: string; label: string; shares: number; owner_ids: string[]; owner_names: string; status: "attending" | "proxy" | "absent" | "unknown" | "suspended"; holder_name?: string | null; holder_id?: string | null; present: boolean; split: boolean; suspended: boolean; voter_id: string | null; voter_name: string | null }
+export interface AttendanceRow { unit_id: string; label: string; shares: number; owner_ids: string[]; owner_names: string; status: "attending" | "proxy" | "absent" | "unknown" | "suspended"; holder_name?: string | null; holder_id?: string | null; present: boolean; /** neemt op afstand deel (art. 3.87 §1) */ remote: boolean; /** wie de stem ter plaatse of op afstand uitbrengt: de stemgerechtigde, of bij volmacht de drager */ acting_id: string | null; split: boolean; suspended: boolean; voter_id: string | null; voter_name: string | null }
 
 /**
  * Aanwezigheid per kavel en quorum (art. 3.87 §5). Een kavel is vertegenwoordigd door wie haar stemrecht uitoefent:
@@ -14,9 +14,9 @@ export async function attendance(env: Env, buildingId: string, meetingId: string
   const meeting = await env.DB.prepare("SELECT is_second_call FROM meetings WHERE id = ?").bind(meetingId).first<any>();
   const rows: AttendanceRow[] = vunits.map((u) => {
     const r = u.voter_id ? rsvps.find((x) => x.user_id === u.voter_id) : null;
-    const status = u.suspended ? "suspended" : !r ? "unknown" : r.status === "attending" ? "attending" : r.status === "proxy" && r.proxy_user_id ? "proxy" : r.status === "absent" ? "absent" : "unknown";
+    const status = u.suspended ? "suspended" : !r ? "unknown" : r.status === "attending" || r.status === "remote" ? "attending" : r.status === "proxy" && r.proxy_user_id ? "proxy" : r.status === "absent" ? "absent" : "unknown";
     const ownerNames = u.owners.map((o) => o.name).join(", ");
-    return { unit_id: u.unit_id, label: u.label, shares: u.shares, owner_ids: u.owners.map((o) => o.user_id), owner_names: u.split ? `${ownerNames}${u.voter_name ? ` · lasthebber ${u.voter_name}` : " · geen lasthebber"}` : ownerNames, status, holder_name: status === "proxy" ? r?.holder_name ?? null : null, holder_id: status === "proxy" ? r?.proxy_user_id ?? null : null, present: status === "attending" || status === "proxy", split: u.split, suspended: u.suspended, voter_id: u.voter_id, voter_name: u.voter_name };
+    return { unit_id: u.unit_id, label: u.label, shares: u.shares, owner_ids: u.owners.map((o) => o.user_id), owner_names: u.split ? `${ownerNames}${u.voter_name ? ` · lasthebber ${u.voter_name}` : " · geen lasthebber"}` : ownerNames, status, holder_name: status === "proxy" ? r?.holder_name ?? null : null, holder_id: status === "proxy" ? r?.proxy_user_id ?? null : null, present: status === "attending" || status === "proxy", remote: status === "attending" ? r?.status === "remote" : status === "proxy" ? rsvps.some((x) => x.user_id === r?.proxy_user_id && x.status === "remote") : false, acting_id: status === "proxy" ? r?.proxy_user_id ?? null : status === "attending" ? u.voter_id : null, split: u.split, suspended: u.suspended, voter_id: u.voter_id, voter_name: u.voter_name };
   });
   const withOwner = rows.filter((r) => r.owner_ids.length);
   const totalShares = withOwner.reduce((s, r) => s + r.shares, 0);
@@ -78,7 +78,7 @@ export interface TallyResult {
 
 /**
  * Telt een stemming tijdens de AV per kavel, met
- * - stemplafond (art. 3.87 §8, lid 2): niemand stemt, ook niet als lastgever of lasthebber, voor meer stemmen dan alle andere aanwezige of
+ * - stemplafond (art. 3.87 §7, lid 4): niemand stemt, ook niet als lastgever of lasthebber, voor meer stemmen dan alle andere aanwezige of
  *   vertegenwoordigde mede-eigenaars samen; het teveel wordt evenredig over zijn keuzes geschrapt;
  * - belangenconflict (art. 3.87 §9): wie in conflictIds staat, neemt niet deel, persoonlijk noch bij volmacht: zijn eigen kavels en de kavels
  *   waarvoor hij volmacht draagt tellen niet mee;

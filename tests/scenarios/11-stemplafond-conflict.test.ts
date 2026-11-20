@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { B, Client, as } from "./client";
 
-/** Stemplafond (art. 3.87 §8, lid 2) en belangenconflict (art. 3.87 §9) bij de stemming tijdens de AV. */
+/** Stemplafond (art. 3.87 §7, lid 4) en belangenconflict (art. 3.87 §9) bij de stemming tijdens de AV. */
 describe("Stemplafond en belangenconflict", () => {
   let synd: Client, jan: Client, marie: Client, ahmed: Client; let mid = "";
   const allFor = (except: Record<string, string> = {}) => ["un-a1", "un-a2", "un-a3", "un-g1", "un-g2"].map((u) => ({ unit_id: u, choice: except[u] ?? "for" }));
@@ -22,7 +22,7 @@ describe("Stemplafond en belangenconflict", () => {
     expect(dry.data.votes_for).toBe(300); expect(dry.data.votes_against).toBe(300); expect(dry.data.reached).toBe(false);
     expect((await synd.get(`/api/buildings/${B}/agenda?meeting=${mid}`)).data.items.find((i: any) => i.id === id).status).toBe("scheduled"); // proefberekening bewaart niets
     const r = await synd.post(`/api/buildings/${B}/meetings/${mid}/agenda/${id}/vote`, { votes: allFor({ "un-a1": "against", "un-g1": "against" }) });
-    expect(r.status).toBe(200); expect(r.data.decision).toMatch(/Verworpen/); expect(r.data.decision).toMatch(/Stemplafond toegepast \(art\. 3\.87 §8 BW\): Marie Claes telde voor 300 in plaats van 700/);
+    expect(r.status).toBe(200); expect(r.data.decision).toMatch(/Verworpen/); expect(r.data.decision).toMatch(/Stemplafond toegepast \(art\. 3\.87 §7, lid 4 BW\): Marie Claes telde voor 300 in plaats van 700/);
     const saved = (await synd.get(`/api/buildings/${B}/agenda?meeting=${mid}`)).data.items.find((i: any) => i.id === id);
     expect(saved.vote_adjustments.capped[0].counted).toBe(300);
   });

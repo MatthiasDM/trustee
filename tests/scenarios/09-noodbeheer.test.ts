@@ -56,7 +56,7 @@ describe("Mede-eigenaars roepen zelf bijeen", () => {
     expect((await marie.post(`/api/buildings/${B}/meetings/${m.data.id}/agenda/${item.id}/vote`, { votes: [{ unit_id: "un-a1", choice: "for" }, { unit_id: "un-a2", choice: "for" }, { unit_id: "un-a3", choice: "against" }, { unit_id: "un-g1", choice: "for" }, { unit_id: "un-g2", choice: "for" }] })).status).toBe(200);
     expect((await marie.post(`/api/buildings/${B}/meetings/${m.data.id}/minutes/generate`)).status).toBe(200);
     expect((await lotte.post(`/api/buildings/${B}/meetings/${m.data.id}/minutes/finalize`)).status).toBe(403);
-    expect((await marie.post(`/api/buildings/${B}/meetings/${m.data.id}/minutes/finalize`)).status).toBe(200);
+    expect((await marie.post(`/api/buildings/${B}/meetings/${m.data.id}/minutes/finalize`, { unsigned_reason: "Testvergadering zonder zitting: niemand kon tekenen" })).status).toBe(200);
     // andere vergaderingen blijft ze niet beheren
     const other = (await synd.get(`/api/buildings/${B}/meetings`)).data.find((x: any) => x.id !== m.data.id && !x.cancelled_at);
     if (other) expect((await marie.get(`/api/buildings/${B}/meetings/${other.id}/convene`)).status).toBe(403);

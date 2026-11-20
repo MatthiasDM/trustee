@@ -18,6 +18,7 @@ import { runBackups } from "./lib/backup";
 import admin from "./routes/admin";
 import webhooks from "./routes/webhooks";
 import registered from "./routes/registered";
+import { signing } from "./routes/signing";
 import { purgeTrash } from "./routes/documents";
 import { cleanupDemos, demo, removeOldestDemos } from "./routes/demo";
 import { decisionReminders, decisions } from "./routes/decisions";
@@ -68,6 +69,7 @@ app.route("/api/buildings", subassociations);
 app.route("/api/admin", admin);
 app.route("/api/webhooks", webhooks);
 app.route("/api/buildings", registered);
+app.route("/api/buildings", signing);
 
 app.post("/api/admin/run-cron", async (c) => { if (c.env.TEST_MODE !== "1") return c.json({ error: "Niet gevonden" }, 404); return c.json(await runCron(c.env, "test")); });
 /** Testomgeving: de termijn van 30 dagen van een 1/5-verzoek laten verstrijken. */

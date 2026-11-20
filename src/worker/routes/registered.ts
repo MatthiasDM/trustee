@@ -117,6 +117,7 @@ registered.get("/:buildingId/meetings/:meetingId/registered/letters.pdf", requir
       pdf.text(`U wordt als mede-eigenaar${r.units ? ` (kavel ${r.units})` : ""} opgeroepen voor de vergadering "${m.title}"${m.is_second_call ? " (tweede vergadering)" : ""}.`);
       pdf.text(`Datum en uur: ${when}`, 10, { bold: true });
       pdf.text(`Plaats: ${m.location ?? "nog mee te delen"}`, 10, { bold: true });
+      if (m.remote_allowed) pdf.text(`Deze bijeenroeping voorziet in deelname vanop afstand (art. 3.87 §1 BW).${m.remote_url ? ` Videovergadering: ${m.remote_url}.` : ""} Meld u vooraf aan als deelnemer vanop afstand op ${c.env.APP_URL}/b/${b.id}/meetings of bij de syndicus; u stemt dan zelf in de stemronde die de voorzitter per agendapunt opent.${m.remote_info ? ` ${m.remote_info}` : ""}`);
       pdf.h2("Agenda");
       if (items.length) items.forEach((it, n) => { pdf.text(`${n + 1}. ${it.title}${MAJ[it.required_majority] && it.required_majority !== "none" ? ` (${MAJ[it.required_majority].label})` : ""}`, 9.5, { bold: true }); if (it.description) pdf.text(it.description); });
       if (m.agenda) pdf.text(m.agenda);

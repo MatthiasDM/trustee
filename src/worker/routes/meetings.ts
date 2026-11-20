@@ -11,6 +11,7 @@ import { canManageMeeting, hasSyndicus, ownerConveneRight } from "../lib/governa
 import { suspendedFor, voterIds, votingUnits, weightOf } from "../lib/voting";
 import { Pdf, pdfOpts } from "../lib/pdf";
 import { storeDocument } from "../lib/reports";
+import { bodyHash, eligibleSigners, missingOfficers, signatureSection, signaturesOf } from "../lib/minutes";
 
 const meetings = new Hono<AppEnv>();
 meetings.use("*", requireAuth);
@@ -27,6 +28,10 @@ const schema = z.object({
   secretary_user_id: z.string().nullable().optional(),
   notify: z.boolean().default(true),
   unanimity_followup_of: z.string().nullable().optional(),
+  // deelname vanop afstand: enkel als de bijeenroeping erin voorziet (art. 3.87 §1 BW)
+  remote_allowed: z.boolean().optional(),
+  remote_url: z.string().url().max(500).refine((u) => /^https:\/\//.test(u), "De link moet met https:// beginnen").nullable().optional(),
+  remote_info: z.string().max(2000).nullable().optional(),
 });
 
 /** Nieuwe AV na een eenparigheid gemist door afwezigheid: minstens 30 dagen na de eerste vergadering (art. 3.88 §4 BW). */
@@ -51,13 +56,15 @@ meetings.get("/:buildingId/meetings", requireBuilding(), async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT m.*, d.name AS minutes_name, ch.name AS chair_name, se.name AS secretary_name, cv.name AS convened_by_name, cb.name AS cancelled_by_name, cr.name AS created_by_name,
        (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.status='attending') AS attending,
+       (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.status='remote') AS remote,
        (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.status='proxy') AS proxy,
+       (SELECT COUNT(*) FROM minutes_signatures s WHERE s.meeting_id = m.id) AS signatures,
        (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.status='absent') AS absent,
        (SELECT status FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.user_id = ?2) AS my_rsvp,
        (SELECT reported_missing_at FROM minutes_receipts mr WHERE mr.meeting_id = m.id AND mr.user_id = ?2) AS my_minutes_missing
      FROM meetings m LEFT JOIN documents d ON d.id = m.minutes_document_id LEFT JOIN users ch ON ch.id = m.chair_user_id LEFT JOIN users se ON se.id = m.secretary_user_id LEFT JOIN users cv ON cv.id = m.convened_by LEFT JOIN users cb ON cb.id = m.cancelled_by LEFT JOIN users cr ON cr.id = m.created_by WHERE m.building_id = ?1 ORDER BY m.starts_at DESC`
   ).bind(b.id, c.get("user").id).all();
-  return c.json((rows.results as any[]).map((m) => ({ ...m, can_manage: canManageMeeting(b, c.get("user").id, m) })));
+  return c.json((rows.results as any[]).map((m) => { const manage = canManageMeeting(b, c.get("user").id, m); return { ...m, remote_url: manage || m.my_rsvp === "remote" ? m.remote_url : null, minutes_body: manage ? m.minutes_body : null, can_manage: manage }; }));
 });
 
 meetings.post("/:buildingId/meetings", requireBuilding(), async (c) => {
@@ -72,7 +79,8 @@ meetings.post("/:buildingId/meetings", requireBuilding(), async (c) => {
   const id = uid();
   await c.env.DB.prepare("INSERT INTO meetings (id, building_id, title, type, starts_at, location, agenda, minutes_document_id, created_by, convened_by_owners, legal_basis, request_id, unanimity_followup_of) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
     .bind(id, b.id, body.title, body.type, body.starts_at, body.location ?? null, body.agenda ?? null, body.minutes_document_id ?? null, user.id, right ? 1 : 0, right?.text ?? null, right?.request_id ?? null, body.unanimity_followup_of ?? null).run();
-  await audit(c.env, b.id, user.id, right ? "meeting.create_by_owner" : "meeting.create", "meeting", id, { title: body.title, basis: right?.basis ?? null });
+  if (body.remote_allowed) await c.env.DB.prepare("UPDATE meetings SET remote_allowed = 1, remote_url = ?, remote_info = ? WHERE id = ?").bind(body.remote_url ?? null, body.remote_info ?? null, id).run();
+  await audit(c.env, b.id, user.id, right ? "meeting.create_by_owner" : "meeting.create", "meeting", id, { title: body.title, basis: right?.basis ?? null, remote: !!body.remote_allowed });
   if (right) {
     // het verzoek is hiermee ingewilligd door de ondertekenaar zelf; onderwerp op de agenda, en bij gebreke van een syndicus ook de aanwijzing
     const req = right.request_id ? await c.env.DB.prepare("SELECT * FROM meeting_requests WHERE id = ?").bind(right.request_id).first<any>() : null;
@@ -102,6 +110,14 @@ meetings.patch("/:buildingId/meetings/:meetingId", requireBuilding(), async (c) 
   if (fields.length) await c.env.DB.prepare(`UPDATE meetings SET ${fields.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ? AND building_id = ?`).bind(...fields.map(([, v]) => v), c.req.param("meetingId"), b.id).run();
   // Al opgeroepen en datum of plaats gewijzigd: iedereen verwittigen en de oproeping als "opnieuw te versturen" markeren (nieuwe termijn van 15 dagen).
   const moved = before.convened_at && ((rest.starts_at && rest.starts_at !== before.starts_at) || (rest.location !== undefined && (rest.location ?? null) !== (before.location ?? null)));
+  // Deelname vanop afstand kan enkel als de bijeenroeping erin voorziet: na de oproeping aan- of uitzetten vraagt een nieuwe oproeping.
+  const remoteChanged = before.convened_at && rest.remote_allowed !== undefined && !!rest.remote_allowed !== !!before.remote_allowed;
+  if (remoteChanged && !moved) {
+    await c.env.DB.prepare("UPDATE meetings SET convened_at = NULL, convened_by = NULL WHERE id = ?").bind(before.id).run();
+    await notifyBuilding(c.env, { buildingId: b.id, type: "meeting", title: `Gewijzigd: ${before.title}`, body: rest.remote_allowed ? "Deelname vanop afstand wordt mogelijk. De syndicus verstuurt een nieuwe oproeping." : "Deelname vanop afstand is niet langer mogelijk. De syndicus verstuurt een nieuwe oproeping.", link: `/b/${b.id}/meetings`, roles: before.type === "raad" ? ["syndicus", "raad"] : undefined, excludeUserId: c.get("user").id });
+    await audit(c.env, b.id, c.get("user").id, "meeting.remote_changed", "meeting", before.id, { remote_allowed: !!rest.remote_allowed });
+  }
+  if (rest.remote_allowed === false) await c.env.DB.prepare("UPDATE meeting_rsvps SET status = 'attending' WHERE meeting_id = ? AND status = 'remote'").bind(before.id).run();
   if (moved) {
     await c.env.DB.prepare("UPDATE meetings SET convened_at = NULL, convened_by = NULL WHERE id = ?").bind(before.id).run();
     const when = new Date(rest.starts_at ?? before.starts_at).toLocaleString("nl-BE", { timeZone: "Europe/Brussels", dateStyle: "full", timeStyle: "short" });
@@ -169,8 +185,9 @@ export async function convenePreview(c: Context<AppEnv>, m: any) {
   const noAddress = registered.filter((r) => !r.registered_sent && !r.postal_address);
   if (noAddress.length) warnings.push(`Geen postadres voor ${noAddress.map((r) => r.name).join(", ")}: vul het in onder Leden vóór je de aangetekende brieven aanmaakt.`);
   if (m.type !== "raad" && recipients.some((r: any) => r.role === "huurder") && !m.resident_notice_document_id) warnings.push("Er zijn bewoners zonder stemrecht: deel hen de datum mee en hang de mededeling op in de gemeenschappelijke delen, zodat ze schriftelijk vragen kunnen indienen (art. 3.89 §5, 6° BW). Maak ze aan met 'Mededeling bewoners'.");
+  if (m.remote_allowed && !m.remote_url) warnings.push("Deelname vanop afstand staat aan, maar er is geen link naar de videovergadering ingevuld. Vul hem in bij Bewerken, zodat hij in de oproeping staat.");
   if (m.convened_at) warnings.push(`Al opgeroepen op ${m.convened_at.slice(0, 10)}. Opnieuw versturen stuurt een herinnering aan iedereen.`);
-  return { meeting: { id: m.id, title: m.title, starts_at: m.starts_at, type: m.type, convened_at: m.convened_at, is_second_call: !!m.is_second_call }, days_until: days, min_days: minDays, agenda_items: agenda, recipients, registered_needed: registered.map((r) => r.user_id), registered_open: registered.filter((r) => !r.registered_sent).map((r) => r.user_id), warnings };
+  return { meeting: { id: m.id, title: m.title, starts_at: m.starts_at, type: m.type, convened_at: m.convened_at, is_second_call: !!m.is_second_call, remote_allowed: !!m.remote_allowed }, days_until: days, min_days: minDays, agenda_items: agenda, recipients, registered_needed: registered.map((r) => r.user_id), registered_open: registered.filter((r) => !r.registered_sent).map((r) => r.user_id), warnings };
 }
 meetings.get("/:buildingId/meetings/:meetingId/convene", requireBuilding(), async (c) => {
   const m = await managedMeeting(c);
@@ -186,18 +203,19 @@ meetings.post("/:buildingId/meetings/:meetingId/convene", requireBuilding(), asy
   if (p.warnings.length && !acknowledge) throw new HttpError(400, `Bevestig eerst de waarschuwingen: ${p.warnings[0]}`);
   const when = new Date(m.starts_at).toLocaleString("nl-BE", { timeZone: "Europe/Brussels", dateStyle: "full", timeStyle: "short" });
   await c.env.DB.prepare("UPDATE meetings SET convened_at = ?, convened_by = ? WHERE id = ?").bind(now(), user.id, m.id).run();
-  await notifyBuilding(c.env, { buildingId: b.id, type: "meeting", title: `${m.convened_at ? "Herinnering oproeping" : "Oproeping"}: ${m.title}`, body: `${when}${m.location ? ` — ${m.location}` : ""}. De agenda staat in Trustee. Laat weten of je aanwezig bent of geef een volmacht.`, link: `/b/${b.id}/meetings`, userIds: p.recipients.map((r: any) => r.user_id), excludeUserId: user.id });
-  await audit(c.env, b.id, user.id, "meeting.convene", "meeting", m.id, { recipients: p.recipients.length, registered_needed: p.registered_needed, registered_open: p.registered_open, days_until: p.days_until, acknowledged: p.warnings });
+  await notifyBuilding(c.env, { buildingId: b.id, type: "meeting", title: `${m.convened_at ? "Herinnering oproeping" : "Oproeping"}: ${m.title}`, body: `${when}${m.location ? ` — ${m.location}` : ""}. De agenda staat in Trustee. Laat weten of je aanwezig bent of geef een volmacht.${m.remote_allowed ? ` Deze bijeenroeping voorziet in deelname vanop afstand (art. 3.87 §1 BW): meld je in Trustee aan als "Vanop afstand"; de link en de afspraken vind je dan bij de vergadering.${m.remote_info ? ` ${m.remote_info}` : ""}` : ""}`, link: `/b/${b.id}/meetings`, userIds: p.recipients.map((r: any) => r.user_id), excludeUserId: user.id });
+  await audit(c.env, b.id, user.id, "meeting.convene", "meeting", m.id, { remote_allowed: !!m.remote_allowed, recipients: p.recipients.length, registered_needed: p.registered_needed, registered_open: p.registered_open, days_until: p.days_until, acknowledged: p.warnings });
   return c.json({ ok: true, recipients: p.recipients.length, registered_needed: p.registered_open.length });
 });
 
 meetings.put("/:buildingId/meetings/:meetingId/rsvp", requireBuilding(), async (c) => {
   const b = c.get("building");
   const user = c.get("user");
-  const { status, proxy_user_id } = z.object({ status: z.enum(["attending", "proxy", "absent"]), proxy_user_id: z.string().nullable().optional() }).parse(await c.req.json());
-  const m = await c.env.DB.prepare("SELECT id, cancelled_at FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
+  const { status, proxy_user_id } = z.object({ status: z.enum(["attending", "remote", "proxy", "absent"]), proxy_user_id: z.string().nullable().optional() }).parse(await c.req.json());
+  const m = await c.env.DB.prepare("SELECT id, cancelled_at, remote_allowed FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
   if (!m) throw new HttpError(404, "Vergadering niet gevonden");
   if (m.cancelled_at) throw new HttpError(400, "Deze vergadering is geannuleerd");
+  if (status === "remote" && !m.remote_allowed) throw new HttpError(400, "Deze vergadering voorziet geen deelname vanop afstand; dat kan enkel als de bijeenroeping erin voorziet (art. 3.87 §1 BW)");
   if (!isCoOwner(b)) throw new HttpError(403, "Enkel mede-eigenaars melden hun aanwezigheid of geven een volmacht; de syndicus woont de AV ambtshalve bij");
   {
     const vunits = await votingUnits(c.env, b.id); const sus = suspendedFor(vunits, user.id);
@@ -233,15 +251,19 @@ meetings.get("/:buildingId/meetings/:meetingId/proxy-candidates", requireBuildin
 
 /**
  * Stemming per agendapunt tijdens de AV registreren (syndicus/raad): keuze per kavel, gewogen naar aandelen.
- * Onthoudingen tellen niet mee voor de meerderheid (art. 3.88 §1). Namen van tegenstemmers worden bewaard voor de notulen (art. 3.87 §12).
+ * Onthoudingen tellen niet mee voor de meerderheid (art. 3.87 §8). Namen van tegenstemmers worden bewaard voor de notulen (art. 3.87 §10).
  */
 meetings.post("/:buildingId/meetings/:meetingId/agenda/:itemId/vote", requireBuilding(), async (c) => {
   const b = c.get("building"); const user = c.get("user");
   await managedMeeting(c);
   const item = await c.env.DB.prepare("SELECT * FROM agenda_items WHERE id = ? AND meeting_id = ? AND building_id = ?").bind(c.req.param("itemId"), c.req.param("meetingId"), b.id).first<any>();
   if (!item) throw new HttpError(404, "Agendapunt niet gevonden op deze vergadering");
-  const { votes, decision, dry_run } = z.object({ votes: z.array(z.object({ unit_id: z.string(), choice: z.enum(["for", "against", "abstain", "absent"]) })), decision: z.string().max(3000).optional(), dry_run: z.boolean().default(false) }).parse(await c.req.json());
+  const { votes: entered, decision, dry_run } = z.object({ votes: z.array(z.object({ unit_id: z.string(), choice: z.enum(["for", "against", "abstain", "absent"]) })), decision: z.string().max(3000).optional(), dry_run: z.boolean().default(false) }).parse(await c.req.json());
   const att = await attendance(c.env, b.id, c.req.param("meetingId"));
+  // Wie vanop afstand deelneemt, stemt zelf in de stemronde: die stem gaat voor op wat hier ingevuld is. Enkel van wie nog steeds vanop afstand aangemeld is.
+  const ballots = (await c.env.DB.prepare("SELECT unit_id, user_id, choice FROM remote_ballots WHERE item_id = ?").bind(item.id).all<{ unit_id: string; user_id: string; choice: string }>()).results
+    .filter((x) => att.rows.some((r) => r.unit_id === x.unit_id && r.present && r.remote && r.acting_id === x.user_id));
+  const votes = [...entered.filter((v) => !ballots.some((x) => x.unit_id === v.unit_id)), ...ballots.map((x) => ({ unit_id: x.unit_id, choice: x.choice as "for" | "against" | "abstain" }))];
   const conflictIds: string[] = item.conflict_user_ids ? JSON.parse(item.conflict_user_ids) : [];
   const ids = [...new Set([...att.rows.flatMap((r) => [r.voter_id, r.holder_id]), ...conflictIds].filter(Boolean) as string[])];
   const names: Record<string, string> = {};
@@ -251,19 +273,30 @@ meetings.post("/:buildingId/meetings/:meetingId/agenda/:itemId/vote", requireBui
   const t = tally(att.rows, votes, item.required_majority, conflictIds, names, { weights, followup: !!meetingRow?.unanimity_followup_of && item.required_majority === "unanimous" });
   if (t.invalid.length && !dry_run) throw new HttpError(400, `Kavel ${t.invalid.map((x) => x.label).join(", ")}: deelnamerecht geschorst, er is geen lasthebber aangewezen (art. 3.87 §1, lid 2 BW). Registreer als afwezig.`);
   const notes: string[] = [];
-  if (t.capped.length) notes.push(`Stemplafond toegepast (art. 3.87 §8 BW): ${t.capped.map((x) => `${x.name} telde voor ${x.counted} in plaats van ${x.had} aandelen`).join("; ")}.`);
+  if (t.capped.length) notes.push(`Stemplafond toegepast (art. 3.87 §7, lid 4 BW): ${t.capped.map((x) => `${x.name} telde voor ${x.counted} in plaats van ${x.had} aandelen`).join("; ")}.`);
   if (t.excluded.length) notes.push(`Niet deelgenomen wegens belangenconflict (art. 3.87 §9 BW)${item.conflict_reason ? ` — ${item.conflict_reason}` : ""}: kavel ${t.excluded.map((x) => `${x.label} (${x.name})`).join(", ")}.`);
+  if (ballots.length) notes.push(`Vanop afstand gestemd (art. 3.87 §1 BW): kavel ${ballots.map((x) => att.rows.find((r) => r.unit_id === x.unit_id)?.label ?? x.unit_id).join(", ")}.`);
   if (weights) notes.push(`Enkel gestemd door de mede-eigenaars die de lasten van dit deel dragen, naar hun aandeel daarin (art. 3.87 §6, lid 2 BW).`);
   if (meetingRow?.unanimity_followup_of && item.required_majority === "unanimous") notes.push("Nieuwe vergadering na een eenparigheid die door afwezigheid niet bereikt werd: eenparigheid van de aanwezige of vertegenwoordigde mede-eigenaars (art. 3.88 §4 BW).");
   if (t.missed_by_absence) notes.push("Eenparigheid niet bereikt enkel door afwezigheid: een nieuwe algemene vergadering na minstens dertig dagen kan beslissen met eenparigheid van de aanwezige of vertegenwoordigde mede-eigenaars (art. 3.88 §4 BW).");
   const fmt = (x: number) => String(Math.round(x * 100) / 100);
   const text = decision ?? [`${t.reached ? "Goedgekeurd" : "Verworpen"} met ${fmt(t.votes_for)} aandelen vóór, ${fmt(t.votes_against)} tegen en ${fmt(t.votes_abstain)} onthoudingen (${MAJ[item.required_majority]?.label ?? item.required_majority}${item.required_majority !== "none" && item.required_majority !== "unanimous" ? `, ${(t.pct * 100).toFixed(1)} % van de uitgebrachte stemmen` : ""}).`, ...notes].join(" ");
-  if (dry_run) return c.json({ ...t, decision: text });
-  await c.env.DB.prepare("UPDATE agenda_items SET votes_for = ?, votes_against = ?, votes_abstain = ?, voters_for = ?, voters_against = ?, voters_abstain = ?, dissenters = ?, vote_detail = ?, vote_adjustments = ?, voted_at = ?, status = 'decided', decision = ?, adopted = ?, updated_at = ? WHERE id = ?")
+  if (dry_run) return c.json({ ...t, decision: text, remote: ballots.map((x) => ({ unit_id: x.unit_id, choice: x.choice })) });
+  await c.env.DB.prepare("UPDATE agenda_items SET votes_for = ?, votes_against = ?, votes_abstain = ?, voters_for = ?, voters_against = ?, voters_abstain = ?, dissenters = ?, vote_detail = ?, vote_adjustments = ?, voted_at = ?, status = 'decided', decision = ?, adopted = ?, updated_at = ?, ballot_closed_at = CASE WHEN ballot_opened_at IS NOT NULL AND ballot_closed_at IS NULL THEN updated_at ELSE ballot_closed_at END WHERE id = ?")
     .bind(t.votes_for, t.votes_against, t.votes_abstain, t.voters_for, t.voters_against, t.voters_abstain, JSON.stringify(t.dissenters), JSON.stringify(votes), JSON.stringify({ capped: t.capped, excluded: t.excluded }), new Date().toISOString(), text, t.reached ? 1 : 0, new Date().toISOString(), item.id).run();
   await audit(c.env, b.id, user.id, "agenda.vote", "agenda_item", item.id, { for: t.votes_for, against: t.votes_against, abstain: t.votes_abstain, reached: t.reached, capped: t.capped.length, excluded: t.excluded.length });
   return c.json({ ok: true, ...t, decision: text });
 });
+
+/** Een handtekening geldt voor exact één tekst: wijzigt de tekst, dan vervallen de handtekeningen onder de vorige versie. */
+async function resetSignatures(c: Context<AppEnv>, meetingId: string, newBody: string): Promise<number> {
+  const hash = await bodyHash(newBody);
+  const stale = (await c.env.DB.prepare("SELECT user_id FROM minutes_signatures WHERE meeting_id = ? AND body_hash != ?").bind(meetingId, hash).all<{ user_id: string }>()).results;
+  if (!stale.length) return 0;
+  await c.env.DB.prepare("DELETE FROM minutes_signatures WHERE meeting_id = ? AND body_hash != ?").bind(meetingId, hash).run();
+  await audit(c.env, c.get("building").id, c.get("user").id, "minutes.signatures_reset", "meeting", meetingId, { user_ids: stale.map((s) => s.user_id) });
+  return stale.length;
+}
 
 /** Ontwerp van de notulen genereren uit vergadering, aanwezigheid en agendapunten. */
 meetings.post("/:buildingId/meetings/:meetingId/minutes/generate", requireBuilding(), async (c) => {
@@ -280,7 +313,8 @@ meetings.post("/:buildingId/meetings/:meetingId/minutes/generate", requireBuildi
   L.push(`Vereniging van mede-eigenaars ${b.name}`, `Datum: ${when}${m.location ? ` · Plaats: ${m.location}` : ""}${m.is_second_call ? " · Tweede bijeenroeping" : ""}`);
   L.push(`Voorzitter: ${m.chair_name ?? "…"} · Secretaris: ${m.secretary_name ?? "…"}`, "");
   L.push("## Aanwezigheid en quorum");
-  for (const r of a.rows) L.push(`- Kavel ${r.label} (${r.shares} aandelen) — ${r.owner_names || "geen eigenaar geregistreerd"}: ${r.status === "attending" ? "aanwezig" : r.status === "proxy" ? `vertegenwoordigd bij volmacht door ${r.holder_name}` : r.status === "absent" ? "afwezig" : r.status === "suspended" ? "deelnamerecht geschorst (gesplitste eigendom zonder lasthebber, art. 3.87 §1, lid 2 BW)" : "niet gemeld"}`);
+  for (const r of a.rows) L.push(`- Kavel ${r.label} (${r.shares} aandelen) — ${r.owner_names || "geen eigenaar geregistreerd"}: ${r.status === "attending" ? (r.remote ? "aanwezig vanop afstand" : "aanwezig") : r.status === "proxy" ? `vertegenwoordigd bij volmacht door ${r.holder_name}${r.remote ? " (vanop afstand)" : ""}` : r.status === "absent" ? "afwezig" : r.status === "suspended" ? "deelnamerecht geschorst (gesplitste eigendom zonder lasthebber, art. 3.87 §1, lid 2 BW)" : "niet gemeld"}`);
+  if (m.remote_allowed) L.push(`De bijeenroeping voorzag in deelname vanop afstand (art. 3.87 §1 BW). Vanop afstand: ${a.rows.filter((r) => r.present && r.remote).length} kavel(s).`);
   L.push(`Aanwezig of vertegenwoordigd: ${a.quorum.present_owners} van ${a.quorum.total_owners} mede-eigenaars, ${a.quorum.present_shares} van ${a.quorum.total_shares} aandelen. ${a.quorum.explanation}`, "");
   const questions = (await c.env.DB.prepare("SELECT q.body, u.name FROM meeting_questions q JOIN users u ON u.id = q.author_id WHERE q.meeting_id = ? ORDER BY q.created_at").bind(m.id).all()).results as any[];
   if (questions.length) { L.push("## Vragen en opmerkingen van bewoners zonder stemrecht (art. 3.89 §5, 6° BW)"); for (const q of questions) L.push(`- ${q.name}: ${q.body.replace(/\n+/g, " ")}`); L.push(""); }
@@ -293,8 +327,9 @@ meetings.post("/:buildingId/meetings/:meetingId/minutes/generate", requireBuildi
   });
   L.push("## Varia", "…", "", `Opgemaakt door de syndicus. Elke mede-eigenaar kan binnen vier maanden na de vergadering een onregelmatige, bedrieglijke of onrechtmatige beslissing aanvechten bij de vrederechter (art. 3.92 §3 BW).`);
   const body = L.join("\n");
+  const reset = await resetSignatures(c, m.id, body);
   await c.env.DB.prepare("UPDATE meetings SET minutes_status = 'draft', minutes_body = ? WHERE id = ?").bind(body, m.id).run();
-  return c.json({ body });
+  return c.json({ body, signatures_reset: reset });
 });
 
 meetings.patch("/:buildingId/meetings/:meetingId/minutes", requireBuilding(), async (c) => {
@@ -304,8 +339,9 @@ meetings.patch("/:buildingId/meetings/:meetingId/minutes", requireBuilding(), as
   const m = await c.env.DB.prepare("SELECT minutes_status FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
   if (!m) throw new HttpError(404, "Vergadering niet gevonden");
   if (m.minutes_status === "final") throw new HttpError(400, "De notulen zijn al definitief");
+  const reset = await resetSignatures(c, c.req.param("meetingId"), body);
   await c.env.DB.prepare("UPDATE meetings SET minutes_status = 'draft', minutes_body = ? WHERE id = ?").bind(body, c.req.param("meetingId")).run();
-  return c.json({ ok: true });
+  return c.json({ ok: true, signatures_reset: reset });
 });
 
 /** Notulen definitief maken: document in Documenten (Verslagen AV), koppelen, verzenden aan alle stemgerechtigden (art. 3.87 §12: binnen 30 dagen). */
@@ -313,7 +349,14 @@ meetings.post("/:buildingId/meetings/:meetingId/minutes/finalize", requireBuildi
   const b = c.get("building"); const user = c.get("user");
   const m = await managedMeeting(c, { finalize: true });
   if (m.minutes_status !== "draft" || !m.minutes_body) throw new HttpError(400, "Maak eerst een ontwerp van de notulen");
-  const html = renderMinutesHtml(`Notulen ${m.title}`, b.name, m.minutes_body);
+  // Ondertekening (art. 3.87 §10): voorzitter en secretaris tekenen; zonder hun handtekening enkel met een opgegeven reden, die in de notulen komt.
+  const { unsigned_reason } = z.object({ unsigned_reason: z.string().trim().min(10).max(500).optional() }).parse(await c.req.json().catch(() => ({})));
+  const hash = await bodyHash(m.minutes_body);
+  const sigs = await signaturesOf(c.env, m.id);
+  const missing = m.type === "raad" ? [] : missingOfficers(m, sigs, hash);
+  if (missing.length && !unsigned_reason) throw new HttpError(400, `De notulen zijn niet ondertekend: ${missing.join(" en ")}. De voorzitter, de secretaris en de nog aanwezige mede-eigenaars tekenen aan het einde van de zitting (art. 3.87 §10 BW). Laat tekenen, registreer de papieren handtekeningen, of geef de reden op waarom je zonder handtekening definitief maakt.`, "minutes_unsigned");
+  const reason = missing.length ? unsigned_reason ?? null : null;
+  const html = renderMinutesHtml(`Notulen ${m.title}`, b.name, m.minutes_body + "\n" + signatureSection(sigs, await eligibleSigners(c.env, b.id, m), hash, reason));
   const docId = uid();
   const folder = await c.env.DB.prepare("SELECT id FROM folders WHERE building_id = ? AND name LIKE '%erslag%' LIMIT 1").bind(b.id).first<any>();
   const name = `Notulen ${m.title} (${m.starts_at.slice(0, 10)}).html`;
@@ -321,16 +364,16 @@ meetings.post("/:buildingId/meetings/:meetingId/minutes/finalize", requireBuildi
   await c.env.DOCS.put(key, html, { httpMetadata: { contentType: "text/html; charset=utf-8" } });
   await c.env.DB.batch([
     c.env.DB.prepare("INSERT INTO documents (id, building_id, folder_id, name, description, category, r2_key, size, mime, visibility, uploaded_by) VALUES (?,?,?,?,?,?,?,?,?,'all',?)").bind(docId, b.id, folder?.id ?? null, name, "Definitieve notulen, verzonden aan alle stemgerechtigde mede-eigenaars.", "verslag_av", key, html.length, "text/html", user.id),
-    c.env.DB.prepare("UPDATE meetings SET minutes_status = 'final', minutes_finalized_at = ?, minutes_sent_at = ?, minutes_document_id = ? WHERE id = ?").bind(new Date().toISOString(), new Date().toISOString(), docId, m.id),
+    c.env.DB.prepare("UPDATE meetings SET minutes_status = 'final', minutes_finalized_at = ?, minutes_sent_at = ?, minutes_document_id = ?, minutes_hash = ?, minutes_unsigned_reason = ? WHERE id = ?").bind(new Date().toISOString(), new Date().toISOString(), docId, hash, reason, m.id),
   ]);
-  await audit(c.env, b.id, user.id, "minutes.finalize", "meeting", m.id);
+  await audit(c.env, b.id, user.id, "minutes.finalize", "meeting", m.id, { hash, signatures: sigs.filter((s) => s.body_hash === hash).length, unsigned_reason: reason });
   await notifyBuilding(c.env, { buildingId: b.id, type: "minutes", title: `Notulen: ${m.title}`, body: "De notulen van de algemene vergadering zijn beschikbaar. Beslissingen kunnen binnen 4 maanden aangevochten worden (art. 3.92 §3 BW).", link: `/b/${b.id}/meetings`, roles: ["syndicus", "raad", "eigenaar", "commissaris"], excludeUserId: user.id, email: true });
   // bezorging per stemgerechtigde vastleggen (art. 3.87 §12): één per kavel (eigenaar of lasthebber), plus de andere syndici
   const recipients = new Set(voterIds(await votingUnits(c.env, b.id)));
   for (const r of (await c.env.DB.prepare("SELECT user_id FROM building_members WHERE building_id = ? AND role = 'syndicus' AND user_id != ?").bind(b.id, user.id).all<{ user_id: string }>()).results) recipients.add(r.user_id);
   const at = now();
   if (recipients.size) await c.env.DB.batch([...recipients].map((uid2) => c.env.DB.prepare("INSERT INTO minutes_receipts (meeting_id, user_id, delivered_at) VALUES (?,?,?) ON CONFLICT(meeting_id, user_id) DO UPDATE SET delivered_at = excluded.delivered_at").bind(m.id, uid2, at)));
-  return c.json({ ok: true, documentId: docId });
+  return c.json({ ok: true, documentId: docId, signatures: sigs.filter((s) => s.body_hash === hash).length, unsigned: !!reason });
 });
 
 // ---------- Verzoek tot AV door mede-eigenaars met minstens 1/5 van de aandelen (art. 3.87 §2) ----------
@@ -418,7 +461,7 @@ meetings.get("/:buildingId/meetings/:meetingId/minutes/receipts", requireBuildin
   const due = new Date(new Date(m.starts_at).getTime() + 30 * 86400_000).toISOString().slice(0, 10);
   return c.json({ due, sent_at: m.minutes_sent_at, late: m.minutes_sent_at ? m.minutes_sent_at.slice(0, 10) > due : new Date().toISOString().slice(0, 10) > due, rows, opened: rows.filter((r) => r.opened_at).length, total: rows.filter((r) => r.delivered_at).length, missing });
 });
-/** Een stemgerechtigde meldt dat hij de notulen niet (tijdig) ontving (art. 3.87 §12, lid 2): schriftelijk, gelogd, de syndicus wordt verwittigd. */
+/** Een stemgerechtigde meldt dat hij de notulen niet (tijdig) ontving (art. 3.87 §12): schriftelijk, gelogd, de syndicus wordt verwittigd. */
 meetings.post("/:buildingId/meetings/:meetingId/minutes/not-received", requireBuilding(), async (c) => {
   const b = c.get("building"); const user = c.get("user");
   if (!isCoOwner(b)) throw new HttpError(403, "Enkel stemgerechtigde mede-eigenaars ontvangen de notulen");

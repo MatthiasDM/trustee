@@ -181,7 +181,7 @@ async function structuralWarnings(env: AppEnv["Bindings"], buildingId: string): 
   const zero = vunits.filter((u) => !u.shares);
   if (zero.length) out.push(`Kavel ${zero.map((u) => u.label).join(", ")} heeft geen aandelen in de gemeenschappelijke delen: ze stemt niet en draagt geen lasten volgens aandelen. Controleer de basisakte.`);
   const voters = new Set(owned.map((u) => u.voter_id).filter(Boolean));
-  if (voters.size === 2) out.push("Er zijn maar twee stemgerechtigden: door het stemplafond beslist geen van beiden alleen (art. 3.87 §8 BW). Raken ze het niet eens, dan kan elk de rechter vragen een AV te laten bijeenroepen (art. 3.92 §4) of toestemming te geven voor dringende werken (art. 3.92 §5).");
+  if (voters.size === 2) out.push("Er zijn maar twee stemgerechtigden: door het stemplafond beslist geen van beiden alleen (art. 3.87 §7, lid 4 BW). Raken ze het niet eens, dan kan elk de rechter vragen een AV te laten bijeenroepen (art. 3.92 §4) of toestemming te geven voor dringende werken (art. 3.92 §5).");
   return out;
 }
 

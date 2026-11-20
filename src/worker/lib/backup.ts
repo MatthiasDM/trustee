@@ -46,10 +46,12 @@ export const BACKUP_TABLES: Spec[] = [
   { table: "meeting_rsvps", where: via("meeting_id", "meetings"), users: ["user_id", "proxy_user_id"] },
   { table: "meeting_questions", where: own, users: ["author_id"] },
   { table: "minutes_receipts", where: via("meeting_id", "meetings"), users: ["user_id"] },
+  { table: "minutes_signatures", where: via("meeting_id", "meetings"), users: ["user_id", "recorded_by"] },
   { table: "registered_mail", where: own, users: ["user_id", "created_by"] },
   { table: "meeting_requests", where: own, users: ["created_by", "resolved_by"] },
   { table: "meeting_request_signatures", where: via("request_id", "meeting_requests"), users: ["user_id"] },
   { table: "agenda_items", where: own, users: ["submitted_by"] },
+  { table: "remote_ballots", where: via("item_id", "agenda_items"), users: ["user_id"] },
   { table: "mandates", where: own, users: ["user_id"] },
   // boekhouding
   { table: "fiscal_years", where: own },

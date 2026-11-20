@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
-import { Calendar, CalendarPlus, Check, FileText, MapPin, Pencil, ScrollText, Send, Users, X, Gavel } from "lucide-react";
+import { Calendar, CalendarPlus, Check, FileText, MapPin, Pencil, PenLine, ScrollText, Send, Users, Video, X, Gavel } from "lucide-react";
 import { toast } from "sonner";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useBuilding, useFetch } from "../components/Layout";
 import { AgendaSection, MeetingAgenda } from "../components/AgendaSection";
 import { AttendancePanel, MinutesDialog, ProxyDialog } from "../components/MeetingTools";
@@ -9,6 +9,9 @@ import { MeetingRequests } from "../components/MeetingRequests";
 import { CancelMeetingDialog, ConveneDialog } from "../components/ConveneDialog";
 import { ResidentQuestions } from "../components/ResidentQuestions";
 import { MinutesReceipts } from "../components/MinutesReceipts";
+import { SignMinutesDialog } from "../components/MinutesSigning";
+import { RemoteParticipation } from "../components/RemoteParticipation";
+import { Switch } from "../components/ui/switch";
 import { Badge } from "../components/ui/badge";
 import { Empty, ErrorBox, Field, PageHeader, Spinner } from "../components/ui";
 import { Button } from "../components/ui/button";
@@ -30,10 +33,14 @@ export function MeetingsPage() {
   const [open, setOpen] = useState<boolean | { title: string; type: string; basis?: string | null }>(false); const [edit, setEdit] = useState<any>(null); const [rsvps, setRsvps] = useState<any>(null);
   const [conveneFor, setConveneFor] = useState<string | null>(null); const [cancelFor, setCancelFor] = useState<any>(null);
   const [proxyFor, setProxyFor] = useState<string | null>(null); const [minutesFor, setMinutesFor] = useState<any>(null); const [showAtt, setShowAtt] = useState<Record<string, boolean>>({});
+  const [sp, setSp] = useSearchParams(); const [signFor, setSignFor] = useState<any>(null);
   const members = useFetch<{ members: { user_id: string; name: string }[] }>(`/api/buildings/${b.id}/members`);
   const rsvp = async (id: string, status: string) => { await api.put(`/api/buildings/${b.id}/meetings/${id}/rsvp`, { status }); meetings.reload(); toast.success("Aanwezigheid opgeslagen"); };
   const now = new Date();
   const list = meetings.data ?? [];
+  // link uit de uitnodiging om te tekenen: /meetings?sign=<vergadering>
+  const signParam = sp.get("sign"); const signMeeting = signFor ?? (signParam ? list.find((m) => m.id === signParam) : null);
+  const closeSign = () => { setSignFor(null); if (signParam) { sp.delete("sign"); setSp(sp, { replace: true }); } };
   const upcoming = list.filter((m) => new Date(m.starts_at) >= now && !m.cancelled_at).sort((a, c) => a.starts_at.localeCompare(c.starts_at));
   const past = list.filter((m) => new Date(m.starts_at) < now && !m.cancelled_at);
   const cancelled = list.filter((m) => m.cancelled_at);
@@ -51,10 +58,12 @@ export function MeetingsPage() {
       {m.agenda && <details className="mt-3 text-sm"><summary className="cursor-pointer text-primary">Toelichting / vrije agenda</summary><div className="mt-2 whitespace-pre-wrap text-muted-foreground">{m.agenda}</div></details>}
       {m.minutes_document_id && <a className="mt-3 inline-flex items-center gap-1.5 text-sm text-primary hover:underline" href={`/api/buildings/${b.id}/documents/${m.minutes_document_id}/download?inline=1`} target="_blank" rel="noreferrer"><FileText className="size-4" />Verslag: {m.minutes_name}</a>}
       {new Date(m.starts_at) >= now && b.isOwner && <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4 text-sm"><span className="text-muted-foreground">{t("Aanwezig?")}</span>
-        {[["attending", t("Ja")], ["proxy", t("Volmacht")], ["absent", t("Nee")]].map(([s, l]) => <Button key={s} size="sm" variant={m.my_rsvp === s ? "default" : "outline"} onClick={() => s === "proxy" ? setProxyFor(m.id) : rsvp(m.id, s)}>{s === "attending" ? <Check /> : s === "absent" ? <X /> : <Users />}{l}</Button>)}
-        <span className="ml-auto text-xs text-muted-foreground">{m.attending} aanwezig · {m.proxy} volmacht · {m.absent} afwezig</span><Button size="sm" variant="ghost" onClick={() => setShowAtt({ ...showAtt, [m.id]: !showAtt[m.id] })}>Quorum</Button></div>}
+        {[["attending", t("Ja")], ...(m.remote_allowed ? [["remote", "Vanop afstand"]] : []), ["proxy", t("Volmacht")], ["absent", t("Nee")]].map(([s, l]) => <Button key={s} size="sm" variant={m.my_rsvp === s ? "default" : "outline"} onClick={() => s === "proxy" ? setProxyFor(m.id) : rsvp(m.id, s)}>{s === "attending" ? <Check /> : s === "remote" ? <Video /> : s === "absent" ? <X /> : <Users />}{l}</Button>)}
+        <span className="ml-auto text-xs text-muted-foreground">{m.attending} aanwezig{m.remote_allowed ? ` · ${m.remote} vanop afstand` : ""} · {m.proxy} volmacht · {m.absent} afwezig</span><Button size="sm" variant="ghost" onClick={() => setShowAtt({ ...showAtt, [m.id]: !showAtt[m.id] })}>Quorum</Button></div>}
+      <RemoteParticipation meeting={m} />
       {(showAtt[m.id] || new Date(m.starts_at) < now) && <AttendancePanel meeting={m} onChanged={() => meetings.reload()} />}
-      {(b.isBoard || m.can_manage) && <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3 text-sm"><Button size="sm" variant={m.minutes_status === "final" ? "outline" : "default"} onClick={() => setMinutesFor(m)}><ScrollText />{m.minutes_status === "final" ? "Notulen (definitief)" : m.minutes_status === "draft" ? "Notulen (ontwerp)" : "Notulen opstellen"}</Button>{m.minutes_status === "final" && m.minutes_sent_at && <span className="text-xs text-muted-foreground">verzonden {fmtDateTime(m.minutes_sent_at)}</span>}</div>}
+      {(b.isBoard || m.can_manage) && <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3 text-sm"><Button size="sm" variant={m.minutes_status === "final" ? "outline" : "default"} onClick={() => setMinutesFor(m)}><ScrollText />{m.minutes_status === "final" ? "Notulen (definitief)" : m.minutes_status === "draft" ? "Notulen (ontwerp)" : "Notulen opstellen"}</Button>{m.minutes_status === "final" && m.minutes_sent_at && <span className="text-xs text-muted-foreground">verzonden {fmtDateTime(m.minutes_sent_at)}</span>}{m.minutes_status === "draft" && <span className="text-xs text-muted-foreground">{m.signatures} handtekening(en)</span>}</div>}
+      {m.minutes_status === "draft" && !m.can_manage && !b.isBoard && b.isOwner && m.type !== "raad" && <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3 text-sm"><Button size="sm" variant="outline" onClick={() => setSignFor(m)}><PenLine />Notulen nalezen en tekenen</Button><span className="text-xs text-muted-foreground">Voor de voorzitter, de secretaris en wie aanwezig was (art. 3.87 §10 BW).</span></div>}
     </div>
   </div>; };
   return <div>
@@ -68,6 +77,7 @@ export function MeetingsPage() {
     {conveneFor && <ConveneDialog meetingId={conveneFor} onClose={() => setConveneFor(null)} onDone={() => { setConveneFor(null); meetings.reload(); }} />}
     {cancelFor && <CancelMeetingDialog meeting={cancelFor} onClose={() => setCancelFor(null)} onDone={() => { setCancelFor(null); setEdit(null); meetings.reload(); }} />}
     {proxyFor && <ProxyDialog meetingId={proxyFor} onClose={() => setProxyFor(null)} onDone={() => { setProxyFor(null); meetings.reload(); }} />}
+    {signMeeting && <SignMinutesDialog meeting={signMeeting} onClose={closeSign} onDone={() => { closeSign(); meetings.reload(); }} />}
     {minutesFor && <MinutesDialog meeting={minutesFor} members={members.data?.members ?? []} onClose={() => setMinutesFor(null)} onDone={() => { setMinutesFor(null); meetings.reload(); }} />}
     {(open || edit) && <MeetingForm meeting={edit} preset={typeof open === "object" ? open : undefined} onClose={() => { setOpen(false); setEdit(null); }} onDone={() => { setOpen(false); setEdit(null); meetings.reload(); }} onCancel={(m) => setCancelFor(m)} />}
     <Dialog open={!!rsvps} onOpenChange={(o) => !o && setRsvps(null)}><DialogContent><DialogHeader><DialogTitle>Aanwezigheden: {rsvps?.m.title}</DialogTitle></DialogHeader>
@@ -81,11 +91,11 @@ function MeetingForm({ meeting, preset, onClose, onDone, onCancel }: { meeting: 
   const pastMeetings = (all.data ?? []).filter((m) => m.type !== "raad" && !m.cancelled_at && new Date(m.starts_at) < new Date() && m.id !== meeting?.id);
   const docs = useFetch<Doc[]>(`/api/buildings/${b.id}/documents?category=verslag_av`);
   const toLocal = (s?: string) => s ? new Date(new Date(s).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "";
-  const [f, setF] = useState({ title: meeting?.title ?? preset?.title ?? "", type: meeting?.type ?? preset?.type ?? "av", starts_at: toLocal(meeting?.starts_at), location: meeting?.location ?? "", agenda: meeting?.agenda ?? "", minutes_document_id: meeting?.minutes_document_id ?? "", unanimity_followup_of: meeting?.unanimity_followup_of ?? "" });
+  const [f, setF] = useState({ title: meeting?.title ?? preset?.title ?? "", type: meeting?.type ?? preset?.type ?? "av", starts_at: toLocal(meeting?.starts_at), location: meeting?.location ?? "", agenda: meeting?.agenda ?? "", minutes_document_id: meeting?.minutes_document_id ?? "", unanimity_followup_of: meeting?.unanimity_followup_of ?? "", remote_allowed: !!meeting?.remote_allowed, remote_url: meeting?.remote_url ?? "", remote_info: meeting?.remote_info ?? "" });
   const [error, setError] = useState<unknown>(null);
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setError(null);
-    const body = { ...f, starts_at: new Date(f.starts_at).toISOString(), unanimity_followup_of: f.unanimity_followup_of || null, minutes_document_id: f.minutes_document_id || null, location: f.location || null, agenda: f.agenda || null };
+    const body = { ...f, starts_at: new Date(f.starts_at).toISOString(), unanimity_followup_of: f.unanimity_followup_of || null, minutes_document_id: f.minutes_document_id || null, location: f.location || null, agenda: f.agenda || null, remote_url: f.remote_allowed && f.remote_url ? f.remote_url : null, remote_info: f.remote_allowed && f.remote_info ? f.remote_info : null };
     try { if (meeting) await api.patch(`/api/buildings/${b.id}/meetings/${meeting.id}`, body); else await api.post(`/api/buildings/${b.id}/meetings`, body); onDone(); } catch (err) { setError(err); }
   };
   return <Dialog open onOpenChange={(o) => !o && onClose()}><DialogContent className="sm:max-w-2xl">
@@ -95,6 +105,9 @@ function MeetingForm({ meeting, preset, onClose, onDone, onCancel }: { meeting: 
       <Field label="Titel"><Input required value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="bv. Jaarlijkse algemene vergadering 2026" /></Field>
       {f.type !== "raad" && <Field label="Nieuwe AV na eenparigheid gemist door afwezigheid (art. 3.88 §4)" hint="Minstens 30 dagen na de eerste vergadering; daar volstaat eenparigheid van de aanwezige of vertegenwoordigde mede-eigenaars."><Select value={f.unanimity_followup_of || NONE} onValueChange={(v) => setF({ ...f, unanimity_followup_of: v === NONE ? "" : v })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={NONE}>nee</SelectItem>{(pastMeetings ?? []).map((pm: any) => <SelectItem key={pm.id} value={pm.id}>{pm.title} · {new Date(pm.starts_at).toLocaleDateString("nl-BE")}</SelectItem>)}</SelectContent></Select></Field>}
       <Field label="Locatie"><Input value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} placeholder="bv. Inkomhal / online via Teams" /></Field>
+      {f.type !== "raad" && <div className="grid gap-3 rounded-lg border p-3"><label className="flex items-center gap-2 text-sm font-medium"><Switch checked={f.remote_allowed} onCheckedChange={(v) => setF({ ...f, remote_allowed: v })} />Deelname vanop afstand toelaten</label>
+        <p className="text-xs text-muted-foreground">Kan enkel als de bijeenroeping erin voorziet (art. 3.87 §1 BW): de oproeping en de aangetekende brief vermelden het. Wie zich vanop afstand aanmeldt, telt mee voor het quorum en stemt zelf in de stemronde die je per agendapunt opent. Trustee controleert de identiteit niet met itsme of eID: doe dat in beeld.{meeting?.convened_at ? " Deze vergadering is al opgeroepen: wijzig je dit, dan moet je een nieuwe oproeping versturen." : ""}</p>
+        {f.remote_allowed && <><Field label="Link naar de videovergadering"><Input type="url" value={f.remote_url} onChange={(e) => setF({ ...f, remote_url: e.target.value })} placeholder="https://…" /></Field><Field label="Afspraken" hint="Bijvoorbeeld: camera aan bij het aanmelden, tot wanneer aanmelden, wat bij een technisch probleem."><Textarea value={f.remote_info} onChange={(e) => setF({ ...f, remote_info: e.target.value })} /></Field></>}</div>}
       <Field label="Agenda"><Textarea className="min-h-36" value={f.agenda} onChange={(e) => setF({ ...f, agenda: e.target.value })} placeholder={"1. Goedkeuring verslag vorige AV\n2. Jaarrekening & kwijting syndicus\n3. Begroting\n4. Varia"} /></Field>
       <Field label="Verslag (document)" hint="Upload het verslag eerst bij Documenten (categorie “Verslagen algemene vergadering”). Leden worden verwittigd wanneer je het koppelt."><Select value={f.minutes_document_id || NONE} onValueChange={(v) => setF({ ...f, minutes_document_id: v === NONE ? "" : v })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={NONE}>— geen —</SelectItem>{(docs.data ?? []).map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select></Field>
       {preset?.basis && <p className="rounded-lg border border-amber-300 bg-amber-50/60 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">Je roept deze vergadering zelf bijeen als mede-eigenaar. Grond: {preset.basis}. Je beheert ze daarna zelf: agenda, oproeping, aanwezigheden, stemmingen en notulen.</p>}

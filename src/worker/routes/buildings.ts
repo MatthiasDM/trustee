@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
-import { requireAuth, requireBuilding } from "../lib/auth";
+import { isBoard, requireAuth, requireBuilding, requireTwoFactor } from "../lib/auth";
 import { HttpError, patchOf, plusMs, randomToken, uid, now } from "../lib/util";
 import { layout, sendEmail } from "../lib/email";
 import { audit, escapeHtml, notifyBuilding } from "../lib/notify";
@@ -43,6 +43,7 @@ const buildingSchema = z.object({
 /** Nieuw gebouw (VME) aanmaken binnen een org waar de gebruiker admin is. */
 buildings.post("/", async (c) => {
   const user = c.get("user");
+  requireTwoFactor(c); // wie een gebouw aanmaakt, wordt er syndicus van
   const body = buildingSchema.extend({ org_id: z.string().optional(), org_name: z.string().min(2).max(120).optional() }).parse(await c.req.json());
   let orgId = body.org_id;
   if (!orgId) {
@@ -105,7 +106,7 @@ buildings.patch("/:buildingId", requireBuilding("syndicus"), async (c) => {
 buildings.get("/:buildingId/members", requireBuilding(), async (c) => {
   const b = c.get("building");
   const rows = await c.env.DB.prepare(
-    `SELECT bm.user_id, u.name, u.email, u.phone, bm.role, bm.joined_at, bm.ecomm_consent_at, bm.ecomm_consent_via,
+    `SELECT bm.user_id, u.name, u.email, u.phone, bm.role, bm.joined_at, bm.ecomm_consent_at, bm.ecomm_consent_via, ${isBoard(b.role) ? "bm.postal_address, u.email_bounced_at, u.email_bounce_reason," : ""}
             (SELECT GROUP_CONCAT(un.label, ', ') FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE uo.user_id = bm.user_id AND un.building_id = bm.building_id) AS units
      FROM building_members bm JOIN users u ON u.id = bm.user_id WHERE bm.building_id = ? ORDER BY bm.role, u.name`
   ).bind(b.id).all();
@@ -117,7 +118,7 @@ buildings.get("/:buildingId/members", requireBuilding(), async (c) => {
 
 buildings.patch("/:buildingId/members/:userId", requireBuilding("syndicus"), async (c) => {
   const b = c.get("building");
-  const body = z.object({ role: z.enum(ROLES).optional(), ecomm_consent_at: z.string().nullable().optional() }).parse(await c.req.json());
+  const body = z.object({ role: z.enum(ROLES).optional(), ecomm_consent_at: z.string().nullable().optional(), postal_address: z.string().max(400).nullable().optional(), email_bounce_clear: z.literal(true).optional() }).parse(await c.req.json());
   if (body.role) {
     if (["syndicus", "raad", "commissaris"].includes(body.role)) {
       const today = new Date().toISOString().slice(0, 10);
@@ -131,6 +132,18 @@ buildings.patch("/:buildingId/members/:userId", requireBuilding("syndicus"), asy
   if (body.ecomm_consent_at !== undefined) {
     await c.env.DB.prepare("UPDATE building_members SET ecomm_consent_at = ?, ecomm_consent_via = ? WHERE building_id = ? AND user_id = ?").bind(body.ecomm_consent_at, body.ecomm_consent_at ? "written" : null, b.id, c.req.param("userId")).run();
     await audit(c.env, b.id, c.get("user").id, "member.ecomm_consent_written", "user", c.req.param("userId"), { date: body.ecomm_consent_at });
+  }
+  // Postadres (woonplaats of zetel) voor aangetekende zendingen.
+  if (body.postal_address !== undefined) {
+    await c.env.DB.prepare("UPDATE building_members SET postal_address = ? WHERE building_id = ? AND user_id = ?").bind(body.postal_address?.trim() || null, b.id, c.req.param("userId")).run();
+    await audit(c.env, b.id, c.get("user").id, "member.postal_address", "user", c.req.param("userId"));
+  }
+  // De syndicus bevestigt dat het e-mailadres weer werkt (bv. na contact met het lid); anders wist de eerstvolgende geslaagde bezorging de markering.
+  if (body.email_bounce_clear) {
+    const member = await c.env.DB.prepare("SELECT 1 FROM building_members WHERE building_id = ? AND user_id = ?").bind(b.id, c.req.param("userId")).first();
+    if (!member) throw new HttpError(404, "Geen lid van dit gebouw");
+    await c.env.DB.prepare("UPDATE users SET email_bounced_at = NULL, email_bounce_reason = NULL WHERE id = ?").bind(c.req.param("userId")).run();
+    await audit(c.env, b.id, c.get("user").id, "email.bounce_cleared", "user", c.req.param("userId"));
   }
   return c.json({ ok: true });
 });
@@ -159,9 +172,10 @@ buildings.delete("/:buildingId/members/:userId", requireBuilding("syndicus"), as
 /** Eigen notificatievoorkeuren voor dit gebouw. */
 buildings.patch("/:buildingId/me/preferences", requireBuilding(), async (c) => {
   const b = c.get("building");
-  const body = z.object({ notify_email: z.boolean().optional(), notify_push: z.boolean().optional(), ecomm_consent: z.boolean().optional() }).parse(await c.req.json());
+  const body = z.object({ notify_email: z.boolean().optional(), notify_push: z.boolean().optional(), ecomm_consent: z.boolean().optional(), postal_address: z.string().max(400).nullable().optional() }).parse(await c.req.json());
   await c.env.DB.prepare("UPDATE building_members SET notify_email = COALESCE(?, notify_email), notify_push = COALESCE(?, notify_push) WHERE building_id = ? AND user_id = ?")
     .bind(body.notify_email === undefined ? null : +body.notify_email, body.notify_push === undefined ? null : +body.notify_push, b.id, c.get("user").id).run();
+  if (body.postal_address !== undefined) await c.env.DB.prepare("UPDATE building_members SET postal_address = ? WHERE building_id = ? AND user_id = ?").bind(body.postal_address?.trim() || null, b.id, c.get("user").id).run();
   // Akkoord met elektronische oproeping en kennisgeving (in plaats van aangetekend): door het lid zelf gegeven, gelogd.
   if (body.ecomm_consent !== undefined) {
     await c.env.DB.prepare("UPDATE building_members SET ecomm_consent_at = ?, ecomm_consent_via = ? WHERE building_id = ? AND user_id = ?").bind(body.ecomm_consent ? now() : null, body.ecomm_consent ? "app" : null, b.id, c.get("user").id).run();
@@ -170,7 +184,7 @@ buildings.patch("/:buildingId/me/preferences", requireBuilding(), async (c) => {
   return c.json({ ok: true });
 });
 buildings.get("/:buildingId/me/preferences", requireBuilding(), async (c) => {
-  const row = await c.env.DB.prepare("SELECT notify_email, notify_push, ecomm_consent_at, ecomm_consent_via FROM building_members WHERE building_id = ? AND user_id = ?").bind(c.get("building").id, c.get("user").id).first();
+  const row = await c.env.DB.prepare("SELECT notify_email, notify_push, ecomm_consent_at, ecomm_consent_via, postal_address FROM building_members WHERE building_id = ? AND user_id = ?").bind(c.get("building").id, c.get("user").id).first();
   return c.json(row ?? { notify_email: 1, notify_push: 1 });
 });
 
@@ -196,7 +210,7 @@ buildings.post("/:buildingId/invites", rateLimit({ name: "invites", limit: 20, w
     const url = `${c.env.APP_URL}/invite/${token}`;
     await sendEmail(c.env, email, `Uitnodiging voor ${b.name}`,
       layout(c.env, `Je bent uitgenodigd voor ${escapeHtml(b.name)}`, `<p>${escapeHtml(user.name)} nodigt je uit om toe te treden tot het platform van de VME <strong>${escapeHtml(b.name)}</strong> als ${inv.role}.</p><p>Hier vind je alle documenten, mededelingen, vragen en stemmingen van je gebouw.</p>`, { label: "Uitnodiging accepteren", url }),
-      `Je bent uitgenodigd voor ${b.name}: ${url}`);
+      `Je bent uitgenodigd voor ${b.name}: ${url}`, { buildingId: b.id, kind: "invite" });
     created.push(id); tokens.push({ email, token });
   }
   await audit(c.env, b.id, user.id, "invite.create", undefined, undefined, { count: created.length });
@@ -285,6 +299,12 @@ buildings.put("/:buildingId/units/:unitId/representative", requireBuilding("synd
   return c.json({ ok: true });
 });
 
+// ---- Bezorgstatus van e-mail (laatste 200): verstuurd, bezorgd, vertraagd, onbezorgbaar ----
+buildings.get("/:buildingId/deliveries", requireBuilding("syndicus", "raad", "commissaris"), async (c) => {
+  const rows = await c.env.DB.prepare("SELECT e.id, e.user_id, u.name AS user_name, e.to_email, e.subject, e.kind, e.provider_id, e.status, e.detail, e.created_at, e.updated_at FROM email_log e LEFT JOIN users u ON u.id = e.user_id WHERE e.building_id = ? ORDER BY e.created_at DESC LIMIT 200").bind(c.get("building").id).all();
+  return c.json(rows.results);
+});
+
 // ---- Audit log ----
 buildings.get("/:buildingId/audit", requireBuilding("syndicus", "raad", "commissaris"), async (c) => {
   const rows = await c.env.DB.prepare("SELECT a.*, u.name AS user_name FROM audit_log a LEFT JOIN users u ON u.id = a.user_id WHERE a.building_id = ? ORDER BY a.created_at DESC LIMIT 200").bind(c.get("building").id).all();
@@ -307,15 +327,18 @@ buildings.get("/:buildingId/archive.zip", requireBuilding("syndicus", "raad"), a
   const folders = new Map<string, string>(); for (const f of data.folders as any[]) folders.set(f.id, f.name.replace(/[\\/:*?"<>|]/g, "_"));
   const files: Record<string, Uint8Array> = {};
   files["export.json"] = new TextEncoder().encode(JSON.stringify(data, null, 1));
-  files["LEESMIJ.txt"] = new TextEncoder().encode(`Archief van ${b.name}, gemaakt op ${new Date().toISOString()} met Trustee.\n\nexport.json: alle gegevens (leden, kavels, vergaderingen, beslissingen, stemmingen, boekhouding, logboek) in open JSON-formaat.\ndocumenten/: alle documenten in hun mapstructuur; afrekeningen en herinneringen per kavel staan in documenten/kavels/.\n\nDe wettelijke bewaarplicht (o.m. 7 jaar voor boekhoudkundige stukken) rust op de syndicus. Bewaar dit archief op een veilige plaats.\n`);
+  files["LEESMIJ.txt"] = new TextEncoder().encode(`Archief van ${b.name}, gemaakt op ${new Date().toISOString()} met Trustee.\n\nexport.json: alle gegevens (leden, kavels, vergaderingen, beslissingen, stemmingen, boekhouding, logboek) in open JSON-formaat; hieruit kan platformbeheer het gebouw volledig terugzetten.\ndocumenten-index.json: welk bestand in documenten/ bij welk document (id en opslagsleutel) uit export.json hoort.\ndocumenten/: alle documenten in hun mapstructuur; afrekeningen en herinneringen per kavel staan in documenten/kavels/.\n\nDe wettelijke bewaarplicht (o.m. 7 jaar voor boekhoudkundige stukken) rust op de syndicus. Bewaar dit archief op een veilige plaats.\n`);
   const used = new Set<string>();
+  const index: { id: string; r2_key: string; pad: string }[] = [];
   for (const d of data.documents as any[]) {
     if (d.deleted_at) continue;
     const obj = await c.env.DOCS.get(d.r2_key); if (!obj) continue;
     const dir = d.unit_id ? "documenten/kavels" : `documenten/${d.folder_id ? folders.get(d.folder_id) ?? "overig" : "algemeen"}`;
     let name = `${dir}/${d.name.replace(/[\\/:*?"<>|]/g, "_")}`; let i = 2; while (used.has(name)) { name = name.replace(/(\.[^.]+)?$/, ` (${i++})$1`); } used.add(name);
     files[name] = new Uint8Array(await obj.arrayBuffer());
+    index.push({ id: d.id, r2_key: d.r2_key, pad: name });
   }
+  files["documenten-index.json"] = new TextEncoder().encode(JSON.stringify(index, null, 1));
   const zip = zipSync(files, { level: 6 });
   await audit(c.env, b.id, c.get("user").id, "building.archive", undefined, undefined, { documents: used.size });
   return new Response(zip as any, { headers: { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="archief-${b.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.zip"` } });

@@ -1,5 +1,5 @@
 export class ApiError extends Error {
-  constructor(public status: number, message: string, public issues?: string[]) { super(message); }
+  constructor(public status: number, message: string, public issues?: string[], public code?: string) { super(message); }
 }
 
 async function request<T>(method: string, url: string, body?: unknown, isForm = false): Promise<T> {
@@ -11,7 +11,10 @@ async function request<T>(method: string, url: string, body?: unknown, isForm = 
   });
   const ct = res.headers.get("content-type") ?? "";
   const data = ct.includes("application/json") ? await res.json() : await res.text();
-  if (!res.ok) throw new ApiError(res.status, (data as any)?.error ?? `Fout ${res.status}`, (data as any)?.issues);
+  if (!res.ok) {
+    if ((data as any)?.code === "totp_required") window.dispatchEvent(new Event("trustee:totp-required")); // zie TwoFactorGate
+    throw new ApiError(res.status, (data as any)?.error ?? `Fout ${res.status}`, (data as any)?.issues, (data as any)?.code);
+  }
   return data as T;
 }
 

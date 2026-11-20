@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, Mail, Send } from "lucide-react";
+import { AlertTriangle, Mail, MailCheck, MailWarning, Send, Stamp } from "lucide-react";
 import { toast } from "sonner";
 import { useBuilding, useFetch } from "./Layout";
 import { ErrorBox, RoleBadge, Spinner } from "./ui";
@@ -8,6 +8,7 @@ import { Badge } from "./ui/badge";
 import { Checkbox } from "./ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 import { api, fmtDate, fmtDateTime } from "../lib/api";
+import { RegisteredDialog } from "./RegisteredDialog";
 
 /**
  * Oproeping versturen: voorbeeld met ontvangers, akkoord voor elektronische oproeping (anders aangetekend),
@@ -15,7 +16,8 @@ import { api, fmtDate, fmtDateTime } from "../lib/api";
  */
 export function ConveneDialog({ meetingId, onClose, onDone }: { meetingId: string; onClose: () => void; onDone: () => void }) {
   const b = useBuilding();
-  const { data, loading } = useFetch<any>(`/api/buildings/${b.id}/meetings/${meetingId}/convene`);
+  const { data, loading, reload } = useFetch<any>(`/api/buildings/${b.id}/meetings/${meetingId}/convene`);
+  const [registered, setRegistered] = useState(false);
   const [ack, setAck] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<unknown>(null);
   const send = async () => { setBusy(true); setError(null); try { const r = await api.post<any>(`/api/buildings/${b.id}/meetings/${meetingId}/convene`, { acknowledge: ack }); toast.success(`Oproeping verstuurd aan ${r.recipients} leden${r.registered_needed ? `; ${r.registered_needed} nog aangetekend` : ""}`); onDone(); } catch (e) { setError(e); } finally { setBusy(false); } };
   return <Dialog open onOpenChange={(o) => !o && onClose()}><DialogContent className="sm:max-w-2xl">
@@ -24,15 +26,16 @@ export function ConveneDialog({ meetingId, onClose, onDone }: { meetingId: strin
       <div className="grid gap-2 text-sm sm:grid-cols-3">
         <div className="rounded-lg border p-3"><div className="text-lg font-semibold tabular-nums">{data.days_until}</div><div className="text-xs text-muted-foreground">dagen tot de vergadering (min. {data.min_days})</div></div>
         <div className="rounded-lg border p-3"><div className="text-lg font-semibold tabular-nums">{data.agenda_items}</div><div className="text-xs text-muted-foreground">geagendeerde punten</div></div>
-        <div className="rounded-lg border p-3"><div className="text-lg font-semibold tabular-nums">{data.registered_needed.length}</div><div className="text-xs text-muted-foreground">aangetekend te versturen</div></div>
+        <div className="rounded-lg border p-3"><div className="text-lg font-semibold tabular-nums">{data.registered_open.length}<span className="text-sm font-normal text-muted-foreground"> / {data.registered_needed.length}</span></div><div className="text-xs text-muted-foreground">aangetekend nog te versturen</div></div>
       </div>
       {data.warnings.length > 0 && <ul className="grid gap-1.5">{data.warnings.map((w: string, i: number) => <li key={i} className="flex gap-2 rounded-lg border border-amber-300 bg-amber-50/60 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"><AlertTriangle className="mt-0.5 size-4 shrink-0" />{w}</li>)}</ul>}
       <div className="max-h-64 overflow-y-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-muted/60 text-left text-xs text-muted-foreground"><tr><th className="px-3 py-1.5 font-medium">Lid</th><th className="px-3 py-1.5 font-medium">Kavel</th><th className="px-3 py-1.5 font-medium">Verzending</th></tr></thead>
-        <tbody>{data.recipients.map((r: any) => <tr key={r.user_id} className="border-t"><td className="px-3 py-1.5"><div className="flex items-center gap-2">{r.name}<RoleBadge role={r.role} /></div></td><td className="px-3 py-1.5 text-muted-foreground">{r.units ?? "–"}</td><td className="px-3 py-1.5">{r.role === "huurder" ? <span className="text-xs text-muted-foreground">ter info</span> : r.ecomm_consent_at ? <Badge variant="success"><Mail />elektronisch (akkoord {fmtDate(r.ecomm_consent_at)})</Badge> : <Badge variant="warning">aangetekend</Badge>}</td></tr>)}</tbody></table></div>
+        <tbody>{data.recipients.map((r: any) => <tr key={r.user_id} className="border-t"><td className="px-3 py-1.5"><div className="flex items-center gap-2">{r.name}<RoleBadge role={r.role} /></div></td><td className="px-3 py-1.5 text-muted-foreground">{r.units ?? "–"}</td><td className="px-3 py-1.5">{r.role === "huurder" ? <span className="text-xs text-muted-foreground">ter info</span> : r.registered_sent ? <Badge variant="success"><MailCheck />aangetekend verstuurd {fmtDate(r.registered_sent.sent_at)}</Badge> : r.email_bounced_at && data.registered_needed.includes(r.user_id) ? <Badge variant="warning" title={`E-mail onbezorgbaar sinds ${fmtDate(r.email_bounced_at)}`}><MailWarning />e-mail onbezorgbaar: aangetekend</Badge> : r.ecomm_consent_at ? <Badge variant="success"><Mail />elektronisch (akkoord {fmtDate(r.ecomm_consent_at)})</Badge> : <Badge variant="warning">aangetekend</Badge>}</td></tr>)}</tbody></table></div>
       {data.meeting.convened_at && <p className="text-xs text-muted-foreground">Eerder opgeroepen op {fmtDateTime(data.meeting.convened_at)}.</p>}
       {data.warnings.length > 0 && <label className="flex items-start gap-2 text-sm"><Checkbox checked={ack} onCheckedChange={(v) => setAck(!!v)} className="mt-0.5" /><span>Ik heb de waarschuwingen gelezen en neem de verantwoordelijkheid voor deze oproeping (en voor de aangetekende verzending waar nodig).</span></label>}
       <ErrorBox error={error} />
-      <DialogFooter><Button variant="outline" onClick={onClose}>Annuleren</Button><Button disabled={busy || (data.warnings.length > 0 && !ack)} onClick={send}><Send />{data.meeting.convened_at ? "Opnieuw versturen" : "Oproeping versturen"}</Button></DialogFooter>
+      <DialogFooter className="sm:justify-between">{data.registered_needed.length > 0 ? <Button variant="outline" onClick={() => setRegistered(true)}><Stamp />Aangetekende brieven</Button> : <span />}<div className="flex flex-col-reverse gap-2 sm:flex-row"><Button variant="outline" onClick={onClose}>Annuleren</Button><Button disabled={busy || (data.warnings.length > 0 && !ack)} onClick={send}><Send />{data.meeting.convened_at ? "Opnieuw versturen" : "Oproeping versturen"}</Button></div></DialogFooter>
+      {registered && <RegisteredDialog meetingId={meetingId} kind="convocation" onClose={() => { setRegistered(false); reload(); }} />}
     </>}
   </DialogContent></Dialog>;
 }

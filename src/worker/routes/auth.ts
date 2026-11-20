@@ -3,7 +3,7 @@ import { z } from "zod";
 import { LEGAL_VERSIONS, type LegalDoc } from "../../shared/legal";
 import type { AppEnv } from "../env";
 import { hashPassword, verifyPassword } from "../lib/password";
-import { createSession, destroySession, loadUser, requireAuth } from "../lib/auth";
+import { createSession, destroySession, loadUser, requireAuth, twoFactorEnforced } from "../lib/auth";
 import { HttpError, plusMs, randomToken, uid } from "../lib/util";
 import { layout, sendEmail } from "../lib/email";
 import { audit } from "../lib/notify";
@@ -81,6 +81,14 @@ auth.post("/login/totp", rateLimit({ name: "totp", limit: 8, windowSec: 900, key
   return c.json({ ok: true });
 });
 
+/** Beheert deze gebruiker een gebouw: platformbeheer, kantoormedewerker, syndicus, lopend mandaat als (voorlopig) syndicus, of vereffenaar. */
+async function managesBuilding(db: D1Database, user: { id: string; is_superadmin: number }) {
+  if (user.is_superadmin) return true;
+  return !!(await db.prepare(`SELECT 1 AS x WHERE EXISTS(SELECT 1 FROM org_members WHERE user_id = ?1) OR EXISTS(SELECT 1 FROM building_members WHERE user_id = ?1 AND role = 'syndicus')
+     OR EXISTS(SELECT 1 FROM mandates WHERE user_id = ?1 AND organ IN ('syndicus','voorlopig_syndicus','voorlopig_bewindvoerder') AND start_date <= date('now') AND end_date >= date('now'))
+     OR EXISTS(SELECT 1 FROM buildings WHERE liquidator_user_id = ?1 AND dissolution_status = 'in_liquidation')`).bind(user.id).first());
+}
+
 /** Stap 1 van activatie: geheim genereren (10 min geldig in KV) en als otpauth-URL teruggeven voor de authenticator-app. */
 auth.post("/totp/setup", requireAuth, async (c) => {
   const user = c.get("user");
@@ -104,6 +112,7 @@ auth.post("/totp/enable", requireAuth, async (c) => {
 auth.post("/totp/disable", requireAuth, async (c) => {
   const user = c.get("user");
   const { password, code } = z.object({ password: z.string(), code: z.string() }).parse(await c.req.json());
+  if (twoFactorEnforced(c) && await managesBuilding(c.env.DB, user)) throw new HttpError(400, "Je beheert een gebouw of kantoor: tweestapsverificatie is dan verplicht en kan niet worden uitgeschakeld");
   const u = await c.env.DB.prepare("SELECT password_hash, totp_secret FROM users WHERE id = ?").bind(user.id).first<any>();
   if (!u || !(await verifyPassword(password, u.password_hash))) throw new HttpError(401, "Wachtwoord onjuist");
   if (!u.totp_secret || !(await verifyTotp(u.totp_secret, code))) throw new HttpError(400, "Ongeldige code");
@@ -162,7 +171,10 @@ auth.get("/me", async (c) => {
   ).bind(user.id).all();
   const unread = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL").bind(user.id).first<{ n: number }>();
   const sec = await c.env.DB.prepare("SELECT (SELECT totp_enabled_at FROM users WHERE id = ?1) AS totp_enabled_at, (SELECT COUNT(*) FROM sessions WHERE user_id = ?1) AS sessions").bind(user.id).first<any>();
-  return c.json({ user, demo: demoInfo, demo_enabled: c.env.DEMO_MODE === "1", demo_only: c.env.DEMO_ONLY === "1", security: { totp_enabled: !!sec?.totp_enabled_at, sessions: sec?.sessions ?? 0 }, orgs: orgs.results, buildings: buildings.results, unread: unread?.n ?? 0, vapidPublicKey: c.env.VAPID_PUBLIC_KEY || null, consents_required: await pendingConsents(c.env, user.id), legal_versions: LEGAL_VERSIONS });
+  // Wie een gebouw beheert (syndicus, kantoor, voorlopig syndicus, vereffenaar, platformbeheer) moet tweestapsverificatie hebben; zie requireTwoFactor.
+  const manages = !!user.is_superadmin || orgs.results.length > 0 || (buildings.results as any[]).some((b) => b.role === "syndicus");
+  const totpRequired = twoFactorEnforced(c) && manages;
+  return c.json({ user, demo: demoInfo, demo_enabled: c.env.DEMO_MODE === "1", demo_only: c.env.DEMO_ONLY === "1", security: { totp_enabled: !!sec?.totp_enabled_at, totp_required: totpRequired, sessions: sec?.sessions ?? 0 }, orgs: orgs.results, buildings: buildings.results, unread: unread?.n ?? 0, vapidPublicKey: c.env.VAPID_PUBLIC_KEY || null, consents_required: await pendingConsents(c.env, user.id), legal_versions: LEGAL_VERSIONS });
 });
 
 auth.patch("/me", requireAuth, async (c) => {

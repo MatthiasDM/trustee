@@ -14,6 +14,8 @@ function reset() {
   execSync(`npx wrangler d1 migrations apply trustee-db --local --persist-to ${STATE}`, { stdio: "inherit" });
   execSync(`node scripts/seed.mjs`, { stdio: "inherit" });
   execSync(`npx wrangler d1 execute trustee-db --local --persist-to ${STATE} --file=./seed/seed.sql`, { stdio: "inherit" });
+  // Platformbeheerder (superadmin) enkel in de testomgeving, voor de hersteltest; zelfde wachtwoord als de demo-gebruikers.
+  execSync(`npx wrangler d1 execute trustee-db --local --persist-to ${STATE} --command "INSERT INTO users (id, email, name, password_hash, is_superadmin) SELECT 'u-platform', 'platform@demo.be', 'Platformbeheer', password_hash, 1 FROM users WHERE id = 'u-syndicus'"`, { stdio: "inherit" });
 }
 async function waitHealthy(ms = 60000) {
   const t0 = Date.now();

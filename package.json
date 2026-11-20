@@ -9,6 +9,8 @@
     "build": "tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p tsconfig.json && vitest run && vite build",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
+    "deploy:production": "node scripts/check-production.mjs --secrets && tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p tsconfig.json && vitest run && CLOUDFLARE_ENV=production vite build && wrangler deploy && node scripts/check-production.mjs --access",
+    "db:migrate:production": "wrangler d1 migrations apply trustee-prod --remote --env production",
     "db:migrate:local": "wrangler d1 migrations apply trustee-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply trustee-db --remote",
     "db:seed:local": "wrangler d1 execute trustee-db --local --file=./seed/seed.sql",

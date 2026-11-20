@@ -38,7 +38,7 @@ async function validateFollowup(c: Context<AppEnv>, originalId: string | null | 
 }
 
 /** Laadt de vergadering en controleert dat de gebruiker ze mag beheren (orgaan, of de mede-eigenaar die ze wettig zelf bijeenriep). */
-async function managedMeeting(c: Context<AppEnv>, opts: { finalize?: boolean } = {}) {
+export async function managedMeeting(c: Context<AppEnv>, opts: { finalize?: boolean } = {}) {
   const b = c.get("building"); const user = c.get("user");
   const m = await c.env.DB.prepare("SELECT * FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
   if (!m) throw new HttpError(404, "Vergadering niet gevonden");
@@ -142,10 +142,10 @@ meetings.post("/:buildingId/meetings/:meetingId/cancel", requireBuilding(), asyn
 });
 
 /** Voorbeeld van de oproeping: ontvangers, akkoord elektronische communicatie, termijn (art. 3.87 §3: minstens 15 dagen), agenda. */
-async function convenePreview(c: Context<AppEnv>, m: any) {
+export async function convenePreview(c: Context<AppEnv>, m: any) {
   const b = c.get("building");
   const roles = m.type === "raad" ? ["syndicus", "raad"] : ["syndicus", "raad", "eigenaar", "commissaris", "huurder"];
-  const recipients = (await c.env.DB.prepare(`SELECT bm.user_id, u.name, u.email, bm.role, bm.ecomm_consent_at, bm.ecomm_consent_via, bm.notify_email,
+  const recipients = (await c.env.DB.prepare(`SELECT bm.user_id, u.name, u.email, bm.role, bm.ecomm_consent_at, bm.ecomm_consent_via, bm.notify_email, bm.postal_address, u.email_bounced_at,
       (SELECT GROUP_CONCAT(un.label, ', ') FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE uo.user_id = bm.user_id AND un.building_id = bm.building_id) AS units
      FROM building_members bm JOIN users u ON u.id = bm.user_id WHERE bm.building_id = ? AND bm.role IN (${roles.map(() => "?").join(",")}) ORDER BY bm.role, u.name`).bind(b.id, ...roles).all()).results as any[];
   const days = Math.floor((new Date(m.starts_at).getTime() - Date.now()) / 86400_000);
@@ -159,11 +159,18 @@ async function convenePreview(c: Context<AppEnv>, m: any) {
   const suspendedUnits = vunits.filter((u) => u.suspended);
   if (suspendedUnits.length) warnings.push(`Kavel ${suspendedUnits.map((u) => u.label).join(", ")}: gesplitste eigendom zonder lasthebber. Het deelnamerecht is geschorst tot de belanghebbenden schriftelijk een lasthebber aanwijzen (art. 3.87 §1, lid 2 BW); registreer die onder Kavels.`);
   const voters = recipients.filter((r) => r.role !== "huurder" && !r.represented_by && (r.units || r.role === "eigenaar" || r.role === "raad"));
-  const registered = voters.filter((r) => !r.ecomm_consent_at);
-  if (registered.length) warnings.push(`${registered.length} stemgerechtigde(n) zonder akkoord voor elektronische oproeping: aan hen moet de oproeping per aangetekende brief worden verstuurd. Registreer hun schriftelijk akkoord onder Leden, of verstuur aangetekend.`);
+  // Aangetekend: wie niet instemde met elektronische oproeping, en wie wel instemde maar van wie het e-mailadres onbezorgbaar is (bounce).
+  const registered = voters.filter((r) => !r.ecomm_consent_at || r.email_bounced_at);
+  const sent = (await c.env.DB.prepare("SELECT user_id, sent_at, tracking_number, method FROM registered_mail WHERE meeting_id = ? AND kind = 'convocation' ORDER BY sent_at").bind(m.id).all<any>()).results;
+  for (const r of recipients) { const s = sent.filter((x) => x.user_id === r.user_id).pop(); if (s) r.registered_sent = s; }
+  const noConsent = registered.filter((r) => !r.ecomm_consent_at && !r.registered_sent); const bounced = registered.filter((r) => r.ecomm_consent_at && !r.registered_sent);
+  if (noConsent.length) warnings.push(`${noConsent.length} stemgerechtigde(n) zonder akkoord voor elektronische oproeping: aan hen moet de oproeping per aangetekende brief worden verstuurd. Registreer hun schriftelijk akkoord onder Leden, of maak de brieven aan en registreer de verzending.`);
+  if (bounced.length) warnings.push(`${bounced.length} stemgerechtigde(n) met een onbezorgbaar e-mailadres (${bounced.map((r) => r.name).join(", ")}): de elektronische oproeping bereikt hen niet. Verstuur aangetekend en vraag een werkend adres.`);
+  const noAddress = registered.filter((r) => !r.registered_sent && !r.postal_address);
+  if (noAddress.length) warnings.push(`Geen postadres voor ${noAddress.map((r) => r.name).join(", ")}: vul het in onder Leden vóór je de aangetekende brieven aanmaakt.`);
   if (m.type !== "raad" && recipients.some((r: any) => r.role === "huurder") && !m.resident_notice_document_id) warnings.push("Er zijn bewoners zonder stemrecht: deel hen de datum mee en hang de mededeling op in de gemeenschappelijke delen, zodat ze schriftelijk vragen kunnen indienen (art. 3.89 §5, 6° BW). Maak ze aan met 'Mededeling bewoners'.");
   if (m.convened_at) warnings.push(`Al opgeroepen op ${m.convened_at.slice(0, 10)}. Opnieuw versturen stuurt een herinnering aan iedereen.`);
-  return { meeting: { id: m.id, title: m.title, starts_at: m.starts_at, type: m.type, convened_at: m.convened_at, is_second_call: !!m.is_second_call }, days_until: days, min_days: minDays, agenda_items: agenda, recipients, registered_needed: registered.map((r) => r.user_id), warnings };
+  return { meeting: { id: m.id, title: m.title, starts_at: m.starts_at, type: m.type, convened_at: m.convened_at, is_second_call: !!m.is_second_call }, days_until: days, min_days: minDays, agenda_items: agenda, recipients, registered_needed: registered.map((r) => r.user_id), registered_open: registered.filter((r) => !r.registered_sent).map((r) => r.user_id), warnings };
 }
 meetings.get("/:buildingId/meetings/:meetingId/convene", requireBuilding(), async (c) => {
   const m = await managedMeeting(c);
@@ -180,8 +187,8 @@ meetings.post("/:buildingId/meetings/:meetingId/convene", requireBuilding(), asy
   const when = new Date(m.starts_at).toLocaleString("nl-BE", { timeZone: "Europe/Brussels", dateStyle: "full", timeStyle: "short" });
   await c.env.DB.prepare("UPDATE meetings SET convened_at = ?, convened_by = ? WHERE id = ?").bind(now(), user.id, m.id).run();
   await notifyBuilding(c.env, { buildingId: b.id, type: "meeting", title: `${m.convened_at ? "Herinnering oproeping" : "Oproeping"}: ${m.title}`, body: `${when}${m.location ? ` — ${m.location}` : ""}. De agenda staat in Trustee. Laat weten of je aanwezig bent of geef een volmacht.`, link: `/b/${b.id}/meetings`, userIds: p.recipients.map((r: any) => r.user_id), excludeUserId: user.id });
-  await audit(c.env, b.id, user.id, "meeting.convene", "meeting", m.id, { recipients: p.recipients.length, registered_needed: p.registered_needed, days_until: p.days_until, acknowledged: p.warnings });
-  return c.json({ ok: true, recipients: p.recipients.length, registered_needed: p.registered_needed.length });
+  await audit(c.env, b.id, user.id, "meeting.convene", "meeting", m.id, { recipients: p.recipients.length, registered_needed: p.registered_needed, registered_open: p.registered_open, days_until: p.days_until, acknowledged: p.warnings });
+  return c.json({ ok: true, recipients: p.recipients.length, registered_needed: p.registered_open.length });
 });
 
 meetings.put("/:buildingId/meetings/:meetingId/rsvp", requireBuilding(), async (c) => {

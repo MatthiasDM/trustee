@@ -18,6 +18,8 @@ export class Pdf {
   h2(t: string) { this.need(26); this.y -= 8; this.page.drawText(this.clean(t), { x: this.M, y: this.y - 12, size: 12.5, font: this.bold }); this.page.drawLine({ start: { x: this.M, y: this.y - 16 }, end: { x: this.W - this.M, y: this.y - 16 }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) }); this.y -= 24; }
   text(t: string, size = 9.5, opts: { bold?: boolean; color?: [number, number, number] } = {}) { const font = opts.bold ? this.bold : this.font; for (const line of this.wrap(t, size, font, this.W - 2 * this.M)) { this.need(size + 4); this.page.drawText(line, { x: this.M, y: this.y - size, size, font, color: opts.color ? rgb(...opts.color) : undefined }); this.y -= size + 4; } this.y -= 2; }
   space(h = 6) { this.y -= h; }
+  /** Begint een nieuwe pagina (bv. één brief per geadresseerde). */
+  pageBreak() { this.newPage(); }
   /** Tabel: cols = [{label, width (fractie), align}], rows = string[][]; laatste rij kan vet (totaal). */
   table(cols: { label: string; w: number; align?: "left" | "right" }[], rows: string[][], opts: { totalRow?: boolean; size?: number } = {}) {
     const size = opts.size ?? 8.5; const total = this.W - 2 * this.M; const widths = cols.map((c) => c.w * total);

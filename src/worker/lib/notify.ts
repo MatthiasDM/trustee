@@ -46,7 +46,7 @@ export async function notifyBuilding(env: Env, input: NotifyInput) {
   await Promise.all(recipients.map(async (r) => {
     if (r.notify_push) await sendPushToUser(env, r.user_id, { title: input.title, body: input.body, url, tag: input.type });
     if (r.notify_email && input.email !== false) {
-      await sendEmail(env, r.email, input.title, layout(env, input.title, `<p>${escapeHtml(input.body ?? "")}</p>`, { label: "Openen in Trustee", url }), `${input.body ?? ""}\n\n${url}`);
+      await sendEmail(env, r.email, input.title, layout(env, input.title, `<p>${escapeHtml(input.body ?? "")}</p>`, { label: "Openen in Trustee", url }), `${input.body ?? ""}\n\n${url}`, { buildingId: input.buildingId, userId: r.user_id, kind: input.type });
     }
   }));
 }

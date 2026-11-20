@@ -17,7 +17,7 @@ export function safeFilename(name: string): string {
   return name.replace(/[^\w.\-() ]+/g, "_").slice(0, 180);
 }
 export class HttpError extends Error {
-  constructor(public status: number, message: string) { super(message); }
+  constructor(public status: number, message: string, public code?: string) { super(message); }
 }
 
 /**

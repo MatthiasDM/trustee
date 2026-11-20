@@ -14,9 +14,9 @@ Geen andere partijen krijgen persoonsgegevens. Geen analytics- of advertentiedie
 ## Maatregelen
 
 - **Toegang**: per gebouw en per rol afgedwongen op de server; mede-eigenaars zien enkel hun eigen kavelgegevens; raad en commissaris hebben wettelijk inzagerecht, met kennisgeving aan de syndicus.
-- **Authenticatie**: wachtwoorden gehasht met PBKDF2-SHA256 (100.000 iteraties), sessies van 30 dagen in een HttpOnly-cookie, tweestapsverificatie (TOTP) voor syndici en kantoorleden, rate limiting op aanmelden, registreren en wachtwoordherstel.
+- **Authenticatie**: wachtwoorden gehasht met PBKDF2-SHA256 (100.000 iteraties), sessies van 30 dagen in een HttpOnly-cookie, tweestapsverificatie (TOTP), verplicht voor syndici, kantoorleden en platformbeheer, rate limiting op aanmelden, registreren en wachtwoordherstel.
 - **Versleuteling**: TLS voor alle verkeer; opslag bij Cloudflare versleuteld at rest.
-- **Audit-log**: elke beheershandeling (leden, documenten, boekingen, vergaderingen, stemmingen, instellingen) wordt gelogd met gebruiker en tijdstip en is zichtbaar voor syndicus, raad en commissaris.
+- **Audit-log**: elke beheershandeling (leden, documenten, boekingen, vergaderingen, stemmingen, instellingen) wordt gelogd met gebruiker en tijdstip en is zichtbaar voor syndicus, raad en commissaris. Ook de toegang van platformbeheer tot een gebouw staat in dat log.
 - **Back-ups**: dagelijkse export per gebouw naar aparte opslag, 36 maanden bewaard; hersteltest elk kwartaal.
 - **Prullenbak**: verwijderde documenten blijven 30 dagen herstelbaar.
 - **Scheiding**: aparte test- en previewomgevingen met eigen database en opslag; productiegegevens worden nooit in testomgevingen gebruikt.

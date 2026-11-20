@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
-import { requireAuth } from "../lib/auth";
+import { requireAuth, requireTwoFactor } from "../lib/auth";
 import { HttpError, plusMs, randomToken, uid } from "../lib/util";
 import { layout, sendEmail } from "../lib/email";
 import { escapeHtml } from "../lib/notify";
@@ -15,6 +15,7 @@ async function requireOrg(c: Context<AppEnv>, orgId: string, roles?: string[]) {
   const m = await c.env.DB.prepare("SELECT om.role, o.* FROM org_members om JOIN orgs o ON o.id = om.org_id WHERE om.org_id = ? AND om.user_id = ?").bind(orgId, user.id).first<any>();
   if (!m && !user.is_superadmin) throw new HttpError(403, "Geen toegang tot deze organisatie");
   if (roles && m && !roles.includes(m.role)) throw new HttpError(403, "Onvoldoende rechten");
+  requireTwoFactor(c);
   return m ?? { role: "owner" };
 }
 

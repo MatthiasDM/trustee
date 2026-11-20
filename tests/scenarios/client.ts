@@ -5,9 +5,11 @@ export const PW = "wachtwoord123";
 
 export class Client {
   cookie = "";
+  /** Extra headers op elke aanvraag, bv. x-test-enforce-2fa om de 2FA-plicht in de testomgeving af te dwingen. */
+  headers: Record<string, string> = {};
   constructor(public label = "anon") {}
   async raw(method: string, path: string, body?: unknown, form?: FormData) {
-    const send = () => fetch(BASE + path, { method, headers: { ...(this.cookie ? { cookie: this.cookie } : {}), ...(body !== undefined && !form ? { "content-type": "application/json" } : {}) }, body: form ?? (body !== undefined ? JSON.stringify(body) : undefined), redirect: "manual" });
+    const send = () => fetch(BASE + path, { method, headers: { ...this.headers, ...(this.cookie ? { cookie: this.cookie } : {}), ...(body !== undefined && !form ? { "content-type": "application/json" } : {}) }, body: form ?? (body !== undefined ? JSON.stringify(body) : undefined), redirect: "manual" });
     let res = await send();
     // De Vite-devserver geeft sporadisch een HTML-500 (herladen van de worker); dat is geen API-fout: één keer opnieuw proberen.
     if (res.status === 500 && !form && (await res.clone().text()).includes("<!DOCTYPE")) { await new Promise((r) => setTimeout(r, 700)); res = await send(); }

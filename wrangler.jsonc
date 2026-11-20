@@ -20,7 +20,21 @@
     { "binding": "KV", "id": "REPLACE_WITH_KV_ID" }
   ],
   "triggers": { "crons": ["*/15 * * * *"] },
-  "env": { "demo": { "name": "trustee-demo", "workers_dev": false, "vars": { "APP_NAME": "Trustee (demo)", "DEMO_MODE": "1", "DEMO_ONLY": "1", "APP_URL": "https://trustee.m-dm.org", "VAPID_SUBJECT": "mailto:admin@example.com", "VAPID_PUBLIC_KEY": "", "EMAIL_FROM": "Trustee <noreply@example.com>" }, "d1_databases": [{ "binding": "DB", "database_name": "trustee-demo", "database_id": "local-demo", "migrations_dir": "migrations" }], "r2_buckets": [{ "binding": "DOCS", "bucket_name": "trustee-demo-docs" }], "kv_namespaces": [{ "binding": "KV", "id": "local-demo" }], "ratelimits": [{ "name": "RL_READ", "namespace_id": "2001", "simple": { "limit": 300, "period": 60 } }, { "name": "RL_WRITE", "namespace_id": "2002", "simple": { "limit": 60, "period": 60 } }], "triggers": { "crons": [] } }, "test": { "vars": { "APP_NAME": "Trustee", "DEMO_MODE": "1", "APP_URL": "http://localhost:5199", "VAPID_SUBJECT": "mailto:test@example.com", "VAPID_PUBLIC_KEY": "", "EMAIL_FROM": "Trustee <test@example.com>" }, "d1_databases": [{ "binding": "DB", "database_name": "trustee-db", "database_id": "REPLACE_WITH_D1_ID", "migrations_dir": "migrations" }], "r2_buckets": [{ "binding": "DOCS", "bucket_name": "trustee-docs" }], "kv_namespaces": [{ "binding": "KV", "id": "REPLACE_WITH_KV_ID" }] } },
+  "env": {
+    // Productie: alle opslag in de EU. D1 en R2 worden met --jurisdiction eu aangemaakt (zie README › Productie in de EU);
+    // `npm run deploy:production` weigert te deployen zolang hier nog REPLACE_ staat.
+    "production": {
+      "name": "trustee",
+      "workers_dev": false,
+      // Interne instantie: enkel bereikbaar via Cloudflare Access (zie README › Productie afschermen). De API controleert zelf het Access-token.
+      "routes": [{ "pattern": "trustee-intern.m-dm.org", "custom_domain": true }],
+      "vars": { "APP_NAME": "Trustee", "DEMO_MODE": "0", "APP_URL": "https://trustee-intern.m-dm.org", "VAPID_SUBJECT": "https://m-dm.org", "VAPID_PUBLIC_KEY": "BP2BPcWT7XovK8O30kh6A9oCq8daeVcXMfNvhEjYsvvJLf8A87Eah8hCY5fVUuwD4Oik2V0T_nlAwvhcDWg346Y", "EMAIL_FROM": "Trustee <noreply@m-dm.org>", "ACCESS_TEAM_DOMAIN": "REPLACE_WITH_TEAM.cloudflareaccess.com", "ACCESS_AUD": "REPLACE_WITH_ACCESS_AUD" },
+      "d1_databases": [{ "binding": "DB", "database_name": "trustee-prod", "database_id": "c122e8d4-60f4-4bbf-8c50-3f460d7536f9", "migrations_dir": "migrations" }],
+      "r2_buckets": [{ "binding": "DOCS", "bucket_name": "trustee-prod-docs", "jurisdiction": "eu" }],
+      "kv_namespaces": [{ "binding": "KV", "id": "aa7e7b53d1c946a8bbd2ec8804bf4a42" }],
+      "triggers": { "crons": ["*/15 * * * *"] }
+    },
+    "demo": { "name": "trustee-demo", "workers_dev": false, "vars": { "APP_NAME": "Trustee (demo)", "DEMO_MODE": "1", "DEMO_ONLY": "1", "APP_URL": "https://trustee.m-dm.org", "VAPID_SUBJECT": "mailto:admin@example.com", "VAPID_PUBLIC_KEY": "", "EMAIL_FROM": "Trustee <noreply@example.com>" }, "d1_databases": [{ "binding": "DB", "database_name": "trustee-demo", "database_id": "local-demo", "migrations_dir": "migrations" }], "r2_buckets": [{ "binding": "DOCS", "bucket_name": "trustee-demo-docs" }], "kv_namespaces": [{ "binding": "KV", "id": "local-demo" }], "ratelimits": [{ "name": "RL_READ", "namespace_id": "2001", "simple": { "limit": 300, "period": 60 } }, { "name": "RL_WRITE", "namespace_id": "2002", "simple": { "limit": 60, "period": 60 } }], "triggers": { "crons": [] } }, "test": { "vars": { "RESEND_WEBHOOK_SECRET": "whsec_dHJ1c3RlZS10ZXN0LXdlYmhvb2stc2VjcmV0", "APP_NAME": "Trustee", "DEMO_MODE": "1", "APP_URL": "http://localhost:5199", "VAPID_SUBJECT": "mailto:test@example.com", "VAPID_PUBLIC_KEY": "", "EMAIL_FROM": "Trustee <test@example.com>" }, "d1_databases": [{ "binding": "DB", "database_name": "trustee-db", "database_id": "REPLACE_WITH_D1_ID", "migrations_dir": "migrations" }], "r2_buckets": [{ "binding": "DOCS", "bucket_name": "trustee-docs" }], "kv_namespaces": [{ "binding": "KV", "id": "REPLACE_WITH_KV_ID" }] } },
   "vars": {
     "APP_NAME": "Trustee",
     "DEMO_MODE": "0",

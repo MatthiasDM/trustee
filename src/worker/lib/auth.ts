@@ -3,6 +3,7 @@ import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import type { AppEnv, AuthUser } from "../env";
 import { HttpError, plusMs, uid } from "./util";
 import { touchDemo } from "./demo";
+import { audit } from "./notify";
 
 const COOKIE = "trustee_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 dagen
@@ -26,7 +27,7 @@ export async function loadUser(c: Context<AppEnv>): Promise<AuthUser | null> {
   const id = getCookie(c, COOKIE);
   if (!id) return null;
   const row = await c.env.DB.prepare(
-    `SELECT u.id, u.email, u.name, u.locale, u.is_superadmin, u.phone, u.demo_group, s.expires_at
+    `SELECT u.id, u.email, u.name, u.locale, u.is_superadmin, u.phone, u.demo_group, (u.totp_enabled_at IS NOT NULL) AS totp, s.expires_at
      FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`
   ).bind(id).first<AuthUser & { expires_at: string }>();
   if (!row) return null;
@@ -45,6 +46,26 @@ export const requireAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
   c.set("user", user);
   await next();
 };
+
+/**
+ * Tweestapsverificatie is verplicht voor wie een gebouw beheert: syndicus, kantoormedewerker, voorlopig syndicus, vereffenaar en platformbeheer.
+ * Niet in een demo-omgeving (DEMO_MODE=1: daar wisselt iedereen vrij van gebruiker). In de testomgeving dwingt de header x-test-enforce-2fa de regel af.
+ */
+export const twoFactorEnforced = (c: Context<AppEnv>) => c.env.DEMO_MODE !== "1" || (c.env.TEST_MODE === "1" && c.req.header("x-test-enforce-2fa") === "1");
+export function requireTwoFactor(c: Context<AppEnv>) {
+  if (twoFactorEnforced(c) && !c.get("user").totp) throw new HttpError(403, "Tweestapsverificatie is verplicht voor wie een gebouw beheert. Schakel ze eerst in.", "totp_required");
+}
+
+/** Toegang van platformbeheer tot een gebouw waar het geen lid of kantoormedewerker is: elke wijziging gelogd, inzage één keer per uur. Zichtbaar in het activiteitenlog van het gebouw. */
+async function logPlatformAccess(c: Context<AppEnv>, buildingId: string) {
+  const user = c.get("user"); const read = ["GET", "HEAD"].includes(c.req.method);
+  if (read) {
+    const key = `platform:access:${user.id}:${buildingId}:${new Date().toISOString().slice(0, 13)}`;
+    if (await c.env.KV.get(key)) return;
+    await c.env.KV.put(key, "1", { expirationTtl: 3700 });
+  }
+  await audit(c.env, buildingId, user.id, read ? "platform.access" : "platform.write", "building", buildingId, { method: c.req.method, path: c.req.path });
+}
 
 /** Laadt het gebouw uit :buildingId en controleert lidmaatschap (of superadmin / org-admin). */
 export const requireBuilding = (...roles: string[]): MiddlewareHandler<AppEnv> => async (c, next) => {
@@ -68,6 +89,8 @@ export const requireBuilding = (...roles: string[]): MiddlewareHandler<AppEnv> =
   const acting = (!!b.acting || liquidator) && b.role !== "syndicus";
   const role = acting ? "syndicus" : (b.role ?? (user.is_superadmin ? "syndicus" : null));
   if (!role) throw new HttpError(403, "Geen toegang tot dit gebouw");
+  if (role === "syndicus") requireTwoFactor(c);
+  if (!b.role && !acting && user.is_superadmin) await logPlatformAccess(c, b.id);
   // Na de afsluiting van de vereffening: enkel nog inzage en export (boeken en bescheiden worden 5 jaar bewaard, art. 3.98 §4)
   if (b.dissolution_status === "closed" && !["GET", "HEAD"].includes(c.req.method)) throw new HttpError(403, "De vereffening van deze VME is afgesloten: enkel inzage en export zijn nog mogelijk");
   if (roles.length && !roles.includes(role)) throw new HttpError(403, "Onvoldoende rechten");

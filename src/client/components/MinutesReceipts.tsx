@@ -1,20 +1,23 @@
 import { useState } from "react";
-import { MailCheck, MailWarning } from "lucide-react";
+import { MailCheck, MailWarning, Stamp } from "lucide-react";
 import { toast } from "sonner";
 import { useBuilding, useFetch } from "./Layout";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { api, fmtDate, fmtDateTime } from "../lib/api";
+import { RegisteredDialog } from "./RegisteredDialog";
 
 /** Ontvangst van de notulen (art. 3.87 §12 BW): overzicht voor wie de vergadering beheert, melding "niet ontvangen" voor mede-eigenaars. */
 export function MinutesReceipts({ meeting, canManage, onChanged }: { meeting: any; canManage: boolean; onChanged: () => void }) {
   const b = useBuilding();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false); const [registered, setRegistered] = useState(false);
   const past = new Date(meeting.starts_at) < new Date();
   if (!past || meeting.cancelled_at || meeting.type === "raad") return null;
   return <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
     {canManage && meeting.minutes_status === "final" && <Button size="sm" variant="ghost" onClick={() => setOpen(true)}><MailCheck />Ontvangst notulen</Button>}
+    {canManage && meeting.minutes_status === "final" && <Button size="sm" variant="ghost" onClick={() => setRegistered(true)}><Stamp />Notulen aangetekend</Button>}
+    {registered && <RegisteredDialog meetingId={meeting.id} kind="minutes" onClose={() => setRegistered(false)} />}
     {b.isOwner && !canManage && (meeting.my_minutes_missing ? <Badge variant="secondary">niet ontvangen gemeld op {fmtDate(meeting.my_minutes_missing)}</Badge>
       : <Button size="sm" variant="ghost" onClick={async () => { if (!confirm("Melden aan de syndicus dat je de notulen niet ontving? (art. 3.87 §12 BW)")) return; await api.post(`/api/buildings/${b.id}/meetings/${meeting.id}/minutes/not-received`); toast.success("Gemeld aan de syndicus"); onChanged(); }}><MailWarning />Notulen niet ontvangen</Button>)}
     {open && <ReceiptsDialog meetingId={meeting.id} onClose={() => setOpen(false)} />}

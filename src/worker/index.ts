@@ -15,6 +15,9 @@ import agenda from "./routes/agenda";
 import mandates, { ORGAN_RULES } from "./routes/mandates";
 import ledger, { postDueScheduled } from "./routes/ledger";
 import { runBackups } from "./lib/backup";
+import admin from "./routes/admin";
+import webhooks from "./routes/webhooks";
+import registered from "./routes/registered";
 import { purgeTrash } from "./routes/documents";
 import { cleanupDemos, demo, removeOldestDemos } from "./routes/demo";
 import { decisionReminders, decisions } from "./routes/decisions";
@@ -26,6 +29,7 @@ import { handover } from "./routes/handover";
 import { minutesLateReminders } from "./lib/minutes";
 import { loadUser } from "./lib/auth";
 import { isPublicDemo, publicDemoCron, publicDemoGuard } from "./lib/publicdemo";
+import { accessGuard } from "./lib/access";
 import reports, { autoReminders } from "./routes/reports";
 import orgs from "./routes/orgs";
 import suppliers, { runDueRecurring } from "./routes/suppliers";
@@ -36,6 +40,7 @@ const app = new Hono<AppEnv>();
 app.use("*", logger());
 app.use("*", secureHeaders({ crossOriginEmbedderPolicy: false }));
 
+app.use("/api/*", accessGuard);
 app.use("/api/*", publicDemoGuard);
 
 app.get("/api/health", (c) => c.json({ ok: true, ts: new Date().toISOString() }));
@@ -60,6 +65,9 @@ app.route("/api/buildings", transfers);
 app.route("/api/buildings", infrastructure);
 app.route("/api/buildings", dissolution);
 app.route("/api/buildings", subassociations);
+app.route("/api/admin", admin);
+app.route("/api/webhooks", webhooks);
+app.route("/api/buildings", registered);
 
 app.post("/api/admin/run-cron", async (c) => { if (c.env.TEST_MODE !== "1") return c.json({ error: "Niet gevonden" }, 404); return c.json(await runCron(c.env, "test")); });
 /** Testomgeving: de termijn van 30 dagen van een 1/5-verzoek laten verstrijken. */
@@ -69,7 +77,7 @@ app.post("/api/admin/reset-consents", async (c) => { if (c.env.TEST_MODE !== "1"
 
 app.notFound((c) => c.json({ error: "Niet gevonden" }, 404));
 app.onError((err, c) => {
-  if (err instanceof HttpError) return c.json({ error: err.message }, err.status as any);
+  if (err instanceof HttpError) return c.json({ error: err.message, ...(err.code ? { code: err.code } : {}) }, err.status as any);
   if (err instanceof ZodError) return c.json({ error: "Ongeldige invoer", issues: err.issues.map((i) => `${i.path.join(".")}: ${i.message}`) }, 400);
   console.error(err);
   return c.json({ error: "Interne fout" }, 500);

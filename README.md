@@ -42,28 +42,59 @@ Demo-accounts (wachtwoord `wachtwoord123`): `syndicus@demo.be` (syndicus), `jan@
 
 Zonder `RESEND_API_KEY` worden e-mails naar de console gelogd.
 
-## Deployen naar Cloudflare
+## Productie in de EU
+
+De omgeving `production` in `wrangler.jsonc` bewaart alle gegevens in de EU. De jurisdictie van D1 en R2 ligt vast bij het aanmaken en is nadien niet meer te wijzigen.
 
 ```bash
 npx wrangler login
-npx wrangler d1 create trustee-db        # zet database_id in wrangler.jsonc
-npx wrangler r2 bucket create trustee-docs --jurisdiction eu   # EU-opslag, zoals de handleiding belooft
-npx wrangler kv namespace create KV      # zet id in wrangler.jsonc
-npm run db:migrate:remote
+npx wrangler d1 create trustee-prod --jurisdiction eu          # zet database_id in env.production
+npx wrangler r2 bucket create trustee-prod-docs --jurisdiction eu
+npx wrangler kv namespace create KV --env production           # zet id in env.production
+npm run db:migrate:production
 
-npm run vapid                             # genereert sleutelpaar
-npx wrangler secret put VAPID_PRIVATE_KEY
-npx wrangler secret put RESEND_API_KEY    # optioneel
-# zet VAPID_PUBLIC_KEY, APP_URL (https://…), VAPID_SUBJECT en EMAIL_FROM in wrangler.jsonc › vars
+npm run vapid                                                  # sleutelpaar; de publieke sleutel in env.production › vars
+npx wrangler secret put VAPID_PRIVATE_KEY --env production
+npx wrangler secret put RESEND_API_KEY --env production
+npx wrangler secret put RESEND_WEBHOOK_SECRET --env production # zie E-mail hieronder
+# vul in env.production › vars: APP_URL (https://…), VAPID_SUBJECT, VAPID_PUBLIC_KEY, EMAIL_FROM, ACCESS_TEAM_DOMAIN, ACCESS_AUD
 
-npm run deploy
+npm run deploy:production
 ```
+
+`npm run deploy:production` controleert eerst de configuratie (`scripts/check-production.mjs`) en weigert bij placeholders, een bucket buiten de EU, `DEMO_MODE` anders dan `0`, een adres zonder https of ontbrekende secrets.
+
+Wat "in de EU" hier wel en niet betekent:
+
+- **D1 en R2** (alle gegevens, documenten en back-ups) staan en draaien in de EU.
+- **KV** heeft geen jurisdictie. Er staan enkel tellers voor rate limiting, kortlevende 2FA-uitdagingen en de status van de laatste cron in, geen gegevens van gebouwen.
+- **De Worker zelf** draait op het Cloudflare-datacenter dat het dichtst bij de bezoeker ligt. Voor bezoekers in België is dat in de EU, maar het is niet afgedwongen; dat kan enkel met de betaalde Data Localization Suite.
+- **Resend** (e-mail) en de logs van Workers Observability zijn aparte verwerkingen; neem ze op in de lijst van subverwerkers.
+
+In productie (`DEMO_MODE=0`) is tweestapsverificatie verplicht voor wie een gebouw beheert, en wordt elke toegang van een platformbeheerder (`users.is_superadmin`) tot een gebouw gelogd in het activiteitenlog van dat gebouw.
+
+### Productie afschermen (Cloudflare Access)
+
+De productie-omgeving is een interne instantie: ze is enkel bereikbaar voor wie door Cloudflare Access wordt toegelaten. De afscherming staat op twee plaatsen, zodat een fout in de ene de instantie niet openzet:
+
+- **Cloudflare Access** staat vóór het adres en vraagt een aanmelding voor iemand de app te zien krijgt.
+- **De API controleert zelf het Access-token** (`src/worker/lib/access.ts`): met `ACCESS_TEAM_DOMAIN` en `ACCESS_AUD` gezet, weigert `/api/*` elk verzoek zonder geldig token voor deze toepassing (403, `access_required`). Enkel `/api/webhooks/*` is uitgezonderd; die route heeft een eigen handtekening.
+
+Instellen, vóór de eerste deploy:
+
+1. Zero Trust › Access › Applications › *Add an application* › *Self-hosted*, met het adres uit `routes` in `env.production`. Voeg een policy *Allow* toe met enkel je eigen e-mailadres(sen).
+2. Maak een tweede toepassing voor hetzelfde adres met pad `api/webhooks/resend` en een policy *Bypass* voor *Everyone*, anders bereikt Resend de webhook niet.
+3. Zet in `env.production › vars` het teamdomein (`ACCESS_TEAM_DOMAIN`, bv. `mijnteam.cloudflareaccess.com`) en de *Application Audience (AUD) Tag* van de eerste toepassing (`ACCESS_AUD`).
+4. `npm run deploy:production` controleert na de deploy of het adres naar Access doorstuurt en of de API zonder token weigert (`node scripts/check-production.mjs --access`).
+
+De controle weigert te deployen zonder deze twee waarden of met `workers_dev` aan (het workers.dev-adres valt buiten de Access-toepassing). De statische bestanden van de app (dezelfde code als in deze repo) worden niet door de Worker maar door Access afgeschermd; alle gegevens lopen via de API.
 
 ### E-mail (Resend) en domein
 
 1. Voeg in Resend je verzenddomein toe (bv. `trustee.be`) en zet de **DKIM**- en **SPF**-records (en optioneel DMARC) in je DNS; zonder die records belanden uitnodigingen in spam.
 2. Zet `EMAIL_FROM` op een adres van dat domein, bv. `Trustee <noreply@trustee.be>`, en `RESEND_API_KEY` als secret.
 3. Test met `POST /api/auth/forgot-password` op een eigen adres.
+4. Maak in Resend een webhook naar `https://<domein>/api/webhooks/resend` voor de gebeurtenissen `email.sent`, `email.delivered`, `email.delivery_delayed`, `email.bounced`, `email.complained`, `email.failed` en `email.suppressed`, en zet het ondertekeningsgeheim (`whsec_…`) als secret `RESEND_WEBHOOK_SECRET`. Zonder dat geheim bestaat de route niet. Een bounce of klacht markeert het lid als onbezorgbaar en verwittigt de syndicus; de bezorgstatus per bericht staat in `email_log` (`GET /api/buildings/:id/deliveries`).
 
 ### Beveiliging en bewaking
 

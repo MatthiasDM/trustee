@@ -6,6 +6,7 @@ import { ErrorBox, Field } from "./ui";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Textarea } from "./ui/textarea";
+import { Input } from "./ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Switch } from "./ui/switch";
@@ -18,15 +19,18 @@ import { ApiError } from "../lib/api";
 
 const NONE = "__none__";
 
-/** Volmacht geven: kies een stemgerechtigde mede-eigenaar (niet de syndicus). */
+/** Volmacht geven: een lid van het gebouw (niet de syndicus) of een derde op naam (art. 3.87 §7 BW). */
+const EXTERNAL = "__external__";
 export function ProxyDialog({ meetingId, onClose, onDone }: { meetingId: string; onClose: () => void; onDone: () => void }) {
   const b = useBuilding();
-  const cands = useFetch<{ user_id: string; name: string; proxies: number }[]>(`/api/buildings/${b.id}/meetings/${meetingId}/proxy-candidates`);
-  const [holder, setHolder] = useState(""); const [error, setError] = useState<unknown>(null);
-  return <Dialog open onOpenChange={(o) => !o && onClose()}><DialogContent><DialogHeader><DialogTitle>Volmacht geven</DialogTitle><DialogDescription>Wie stemt in jouw plaats? Enkel mede-eigenaars; de syndicus mag geen volmacht dragen en niemand meer dan drie (art. 3.87 §7 BW).</DialogDescription></DialogHeader>
-    <form className="grid gap-3" onSubmit={async (e: FormEvent) => { e.preventDefault(); setError(null); try { await api.put(`/api/buildings/${b.id}/meetings/${meetingId}/rsvp`, { status: "proxy", proxy_user_id: holder }); toast.success("Volmacht geregistreerd"); onDone(); } catch (err) { setError(err); } }}>
-      <Field label="Volmachtdrager"><Select value={holder || NONE} onValueChange={(v) => setHolder(v === NONE ? "" : v)}><SelectTrigger className="w-full"><SelectValue placeholder="Kies een mede-eigenaar" /></SelectTrigger><SelectContent><SelectItem value={NONE}>— kies —</SelectItem>{(cands.data ?? []).map((c) => <SelectItem key={c.user_id} value={c.user_id}>{c.name}{c.proxies ? ` (draagt al ${c.proxies})` : ""}</SelectItem>)}</SelectContent></Select></Field>
-      <ErrorBox error={error} /><DialogFooter><Button disabled={!holder}>Volmacht geven</Button></DialogFooter></form></DialogContent></Dialog>;
+  const cands = useFetch<{ user_id: string; name: string; role: string; proxies: number }[]>(`/api/buildings/${b.id}/meetings/${meetingId}/proxy-candidates`);
+  const [holder, setHolder] = useState(""); const [name, setName] = useState(""); const [error, setError] = useState<unknown>(null);
+  const external = holder === EXTERNAL;
+  return <Dialog open onOpenChange={(o) => !o && onClose()}><DialogContent><DialogHeader><DialogTitle>Volmacht geven</DialogTitle><DialogDescription>Wie stemt in jouw plaats? Een lid van het gebouw of iemand van buiten de mede-eigendom. De syndicus mag geen volmacht dragen en niemand meer dan drie (art. 3.87 §7 BW).</DialogDescription></DialogHeader>
+    <form className="grid gap-3" onSubmit={async (e: FormEvent) => { e.preventDefault(); setError(null); try { await api.put(`/api/buildings/${b.id}/meetings/${meetingId}/rsvp`, external ? { status: "proxy", proxy_name: name.trim() } : { status: "proxy", proxy_user_id: holder }); toast.success("Volmacht geregistreerd"); onDone(); } catch (err) { setError(err); } }}>
+      <Field label="Volmachtdrager"><Select value={holder || NONE} onValueChange={(v) => setHolder(v === NONE ? "" : v)}><SelectTrigger className="w-full"><SelectValue placeholder="Kies een volmachtdrager" /></SelectTrigger><SelectContent><SelectItem value={NONE}>— kies —</SelectItem>{(cands.data ?? []).map((c) => <SelectItem key={c.user_id} value={c.user_id}>{c.name}{c.role === "huurder" ? " (huurder)" : ""}{c.proxies ? ` (draagt al ${c.proxies})` : ""}</SelectItem>)}<SelectItem value={EXTERNAL}>Iemand anders (geen lid van het gebouw)</SelectItem></SelectContent></Select></Field>
+      {external && <Field label="Naam van de volmachtdrager" hint="De volmacht vermeldt de naam van de lasthebber. Iemand zonder account stemt ter plaatse en tekent de notulen op papier."><Input required minLength={3} value={name} onChange={(e) => setName(e.target.value)} placeholder="Voornaam en naam" /></Field>}
+      <ErrorBox error={error} /><DialogFooter><Button disabled={!holder || (external && name.trim().length < 3)}>Volmacht geven</Button></DialogFooter></form></DialogContent></Dialog>;
 }
 
 /** Aanwezigheid per kavel en quorumtoets (syndicus/raad zien namen; leden enkel de telling). */

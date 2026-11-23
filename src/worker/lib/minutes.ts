@@ -1,6 +1,6 @@
 import type { Env } from "../env";
 import { notifyBuilding } from "./notify";
-import { attendance } from "./meeting";
+import { attendance, isExternalHolder } from "./meeting";
 
 /** Cron: de syndicus verwittigen wanneer de notulen van een AV 30 dagen na de vergadering nog niet bezorgd zijn (art. 3.87 §12 BW); één keer. */
 export async function minutesLateReminders(env: Env) {
@@ -36,7 +36,7 @@ export async function eligibleSigners(env: Env, buildingId: string, m: { id: str
   const att = await attendance(env, buildingId, m.id);
   const by = new Map<string, Signer>();
   for (const r of att.rows) {
-    if (!r.present || !r.acting_id) continue;
+    if (!r.present || !r.acting_id || isExternalHolder(r.acting_id)) continue; // een derde zonder account tekent het papieren exemplaar
     const s = by.get(r.acting_id) ?? { user_id: r.acting_id, name: "", capacity: "owner" as Capacity, units: [], remote: false };
     s.units.push(r.label); s.remote = s.remote || r.remote; by.set(r.acting_id, s);
   }

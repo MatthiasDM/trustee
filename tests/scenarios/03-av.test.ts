@@ -14,9 +14,9 @@ describe("Algemene vergadering: agenda, volmachten, quorum, stemming, notulen", 
     expect((await synd.patch(`/api/buildings/${B}/agenda/${itemId}`, { meeting_id: meetingId })).status).toBe(200);
     const list = await marie.get(`/api/buildings/${B}/agenda?meeting=${meetingId}`); expect(list.data.items[0].status).toBe("scheduled");
   });
-  it("volmachtregels: niet aan syndicus, niet aan huurder, niet aan jezelf, max 3", async () => {
+  it("volmachtregels: niet aan de syndicus, niet aan jezelf; wel aan een huurder", async () => {
     expect((await marie.put(`/api/buildings/${B}/meetings/${meetingId}/rsvp`, { status: "proxy", proxy_user_id: "u-syndicus" })).data.error).toMatch(/syndicus/);
-    expect((await marie.put(`/api/buildings/${B}/meetings/${meetingId}/rsvp`, { status: "proxy", proxy_user_id: "u-lotte" })).status).toBe(400);
+    expect((await marie.put(`/api/buildings/${B}/meetings/${meetingId}/rsvp`, { status: "proxy", proxy_user_id: "u-lotte" })).status).toBe(200); // de lasthebber hoeft geen lid van de AV te zijn (art. 3.87 §7)
     expect((await marie.put(`/api/buildings/${B}/meetings/${meetingId}/rsvp`, { status: "proxy", proxy_user_id: "u-marie" })).status).toBe(400);
     expect((await marie.put(`/api/buildings/${B}/meetings/${meetingId}/rsvp`, { status: "proxy", proxy_user_id: "u-jan" })).status).toBe(200);
     expect((await jan.put(`/api/buildings/${B}/meetings/${meetingId}/rsvp`, { status: "attending" })).status).toBe(200);

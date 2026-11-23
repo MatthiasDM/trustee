@@ -211,7 +211,7 @@ meetings.post("/:buildingId/meetings/:meetingId/convene", requireBuilding(), asy
 meetings.put("/:buildingId/meetings/:meetingId/rsvp", requireBuilding(), async (c) => {
   const b = c.get("building");
   const user = c.get("user");
-  const { status, proxy_user_id } = z.object({ status: z.enum(["attending", "remote", "proxy", "absent"]), proxy_user_id: z.string().nullable().optional() }).parse(await c.req.json());
+  const { status, proxy_user_id, proxy_name } = z.object({ status: z.enum(["attending", "remote", "proxy", "absent"]), proxy_user_id: z.string().nullable().optional(), proxy_name: z.string().trim().max(160).nullable().optional() }).parse(await c.req.json());
   const m = await c.env.DB.prepare("SELECT id, cancelled_at, remote_allowed FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
   if (!m) throw new HttpError(404, "Vergadering niet gevonden");
   if (m.cancelled_at) throw new HttpError(400, "Deze vergadering is geannuleerd");
@@ -221,15 +221,16 @@ meetings.put("/:buildingId/meetings/:meetingId/rsvp", requireBuilding(), async (
     const vunits = await votingUnits(c.env, b.id); const sus = suspendedFor(vunits, user.id);
     if (sus.length && weightOf(vunits, user.id) <= 0) throw new HttpError(403, `Voor kavel ${sus.map((u) => u.label).join(", ")} neemt enkel de lasthebber deel aan de algemene vergadering${sus.some((u) => u.suspended) ? "; zolang die niet is aangewezen, is het deelnamerecht geschorst" : ` (${sus.map((u) => u.voter_name).join(", ")})`} (art. 3.87 §1, lid 2 BW)`);
   }
-  if (status === "proxy") { if (!proxy_user_id) throw new HttpError(400, "Kies wie je volmacht krijgt"); await validateProxy(c.env, b.id, c.req.param("meetingId"), user.id, proxy_user_id); }
-  await c.env.DB.prepare("INSERT INTO meeting_rsvps (meeting_id, user_id, status, proxy_user_id, updated_at) VALUES (?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(meeting_id, user_id) DO UPDATE SET status = excluded.status, proxy_user_id = excluded.proxy_user_id, updated_at = excluded.updated_at")
-    .bind(c.req.param("meetingId"), user.id, status, status === "proxy" ? proxy_user_id ?? null : null).run();
+  if (status === "proxy") { if (!proxy_user_id && !proxy_name) throw new HttpError(400, "Kies wie je volmacht krijgt, of vul de naam in van iemand van buiten de mede-eigendom"); await validateProxy(c.env, b.id, c.req.param("meetingId"), user.id, proxy_user_id ? { user_id: proxy_user_id } : { name: proxy_name }); }
+  await c.env.DB.prepare("INSERT INTO meeting_rsvps (meeting_id, user_id, status, proxy_user_id, proxy_name, updated_at) VALUES (?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(meeting_id, user_id) DO UPDATE SET status = excluded.status, proxy_user_id = excluded.proxy_user_id, proxy_name = excluded.proxy_name, updated_at = excluded.updated_at")
+    .bind(c.req.param("meetingId"), user.id, status, status === "proxy" ? proxy_user_id ?? null : null, status === "proxy" && !proxy_user_id ? proxy_name ?? null : null).run();
+  if (status === "proxy") await audit(c.env, b.id, user.id, "meeting.proxy", "meeting", c.req.param("meetingId"), proxy_user_id ? { holder_user_id: proxy_user_id } : { holder_name: proxy_name, external: true });
   return c.json({ ok: true });
 });
 
 meetings.get("/:buildingId/meetings/:meetingId/rsvps", requireBuilding(), async (c) => {
   await managedMeeting(c);
-  const rows = await c.env.DB.prepare("SELECT r.status, r.updated_at, u.name, u.email, pu.name AS proxy_name FROM meeting_rsvps r JOIN users u ON u.id = r.user_id LEFT JOIN users pu ON pu.id = r.proxy_user_id WHERE r.meeting_id = ? ORDER BY r.status, u.name").bind(c.req.param("meetingId")).all();
+  const rows = await c.env.DB.prepare("SELECT r.status, r.updated_at, u.name, u.email, COALESCE(pu.name, r.proxy_name) AS proxy_name FROM meeting_rsvps r JOIN users u ON u.id = r.user_id LEFT JOIN users pu ON pu.id = r.proxy_user_id WHERE r.meeting_id = ? ORDER BY r.status, u.name").bind(c.req.param("meetingId")).all();
   return c.json(rows.results);
 });
 
@@ -242,10 +243,10 @@ meetings.get("/:buildingId/meetings/:meetingId/attendance", requireBuilding(), a
   return c.json(canManageMeeting(b, c.get("user").id, m as any) ? a : { quorum: a.quorum, rows: [] });
 });
 
-/** Stemgerechtigde leden (voor volmachten): mede-eigenaars (kavelbezitters), nooit de syndicus, geen huurders. */
+/** Leden die een volmacht kunnen dragen: iedereen behalve de syndicus (art. 3.87 §7). Een derde zonder account wordt op naam ingevuld. */
 meetings.get("/:buildingId/meetings/:meetingId/proxy-candidates", requireBuilding(), async (c) => {
   const b = c.get("building"); const user = c.get("user");
-  const rows = (await c.env.DB.prepare("SELECT bm.user_id, u.name, (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = ? AND r.status = 'proxy' AND r.proxy_user_id = bm.user_id) AS proxies FROM building_members bm JOIN users u ON u.id = bm.user_id WHERE bm.building_id = ? AND bm.role NOT IN ('syndicus','huurder') AND bm.user_id != ? AND (bm.role IN ('eigenaar','raad') OR EXISTS (SELECT 1 FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = bm.building_id AND uo.user_id = bm.user_id)) ORDER BY u.name").bind(c.req.param("meetingId"), b.id, user.id).all()).results;
+  const rows = (await c.env.DB.prepare("SELECT bm.user_id, u.name, bm.role, (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = ? AND r.status = 'proxy' AND r.proxy_user_id = bm.user_id) AS proxies FROM building_members bm JOIN users u ON u.id = bm.user_id WHERE bm.building_id = ? AND bm.role != 'syndicus' AND bm.user_id != ? ORDER BY u.name").bind(c.req.param("meetingId"), b.id, user.id).all()).results;
   return c.json(rows);
 });
 
@@ -267,6 +268,7 @@ meetings.post("/:buildingId/meetings/:meetingId/agenda/:itemId/vote", requireBui
   const conflictIds: string[] = item.conflict_user_ids ? JSON.parse(item.conflict_user_ids) : [];
   const ids = [...new Set([...att.rows.flatMap((r) => [r.voter_id, r.holder_id]), ...conflictIds].filter(Boolean) as string[])];
   const names: Record<string, string> = {};
+  for (const r of att.rows) if (r.holder_id && r.holder_name) names[r.holder_id] = r.holder_name; // ook een derde zonder account
   if (ids.length) for (const r of (await c.env.DB.prepare(`SELECT id, name FROM users WHERE id IN (${ids.map(() => "?").join(",")})`).bind(...ids).all<{ id: string; name: string }>()).results) names[r.id] = r.name;
   const meetingRow = await c.env.DB.prepare("SELECT unanimity_followup_of FROM meetings WHERE id = ?").bind(c.req.param("meetingId")).first<{ unanimity_followup_of: string | null }>();
   const weights = item.charge_key_id ? await keyWeights(c.env, b.id, item.charge_key_id) : undefined;

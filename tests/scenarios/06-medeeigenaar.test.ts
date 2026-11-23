@@ -20,9 +20,9 @@ describe("Mede-eigenaarschap volgt uit kavels; documentreferenties bij stemminge
     expect((await ahmed.put(`/api/buildings/${B}/meetings/${meetingId}/rsvp`, { status: "proxy", proxy_user_id: "u-jan" })).status).toBe(200);
   });
 
-  it("volmachtkandidaten zijn enkel kavelbezitters, nooit de syndicus", async () => {
+  it("volmachtkandidaten zijn alle leden behalve de syndicus (art. 3.87 §7: lasthebber al dan niet lid van de AV)", async () => {
     const ids = (await marie.get(`/api/buildings/${B}/meetings/${meetingId}/proxy-candidates`)).data.map((r: any) => r.user_id);
-    expect(ids).toContain("u-jan"); expect(ids).toContain("u-ahmed"); expect(ids).not.toContain("u-syndicus"); expect(ids).not.toContain("u-lotte");
+    expect(ids).toContain("u-jan"); expect(ids).toContain("u-ahmed"); expect(ids).not.toContain("u-syndicus"); expect(ids).toContain("u-lotte");
   });
 
   it("syndicus kan niet stemmen in een eigenaarsstemming en kan geen AV eisen; agenderen mag wel", async () => {

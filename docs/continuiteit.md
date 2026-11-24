@@ -139,7 +139,7 @@ Algemeen principe: **niets echt verwijderen, alles terugdraaibaar, en wie verwit
 | | |
 |---|---|
 | Vandaag | Maandelijkse back-up naar R2 (JSON + documenten), enkel door platformbeheer te herstellen. PWA cachet de laatste schermen. |
-| Voorstel | **Zelfbedieningsexport** voor de syndicus én de raad: zip met alle documenten, boekhouding (CSV + PDF-jaarrekening), notulen, ledenlijst. Jaarlijks automatisch in Documenten geplaatst, zodat de VME haar archief altijd zelf heeft. Status-pagina; e-mails gaan via Resend ook door als de app plat ligt (cron staat op Cloudflare zelf, dus die niet). |
+| Voorstel | **Zelfbedieningsexport** voor de syndicus én de raad: zip met alle documenten, boekhouding (CSV + PDF-jaarrekening), notulen, ledenlijst. Jaarlijks automatisch in Documenten geplaatst, zodat de VME haar archief altijd zelf heeft. Status-pagina; e-mail loopt via Cloudflare zelf en valt dus samen met de app uit; een statuspagina hoort bij een andere partij. |
 
 ### D2. Gegevens per ongeluk massaal gewist (migratiefout, bug)
 
@@ -154,7 +154,7 @@ Algemeen principe: **niets echt verwijderen, alles terugdraaibaar, en wie verwit
 |---|---|
 | Wet | Oproeping per aangetekende brief tenzij de mede-eigenaar schriftelijk met een ander kanaal instemde (art. 3.87 §3 *(na te kijken)*); dit geldt voor de oproeping en de notulen. |
 | Vandaag | Melding altijd in-app; e-mail wordt gelogd maar niet-bezorging wordt niet opgevolgd. Geen registratie van instemming met elektronische communicatie. |
-| Voorstel | Per lid vastleggen "akkoord met elektronische oproeping (datum)"; zonder akkoord toont de oproepingslijst "aangetekend versturen" voor dat lid. Bounces van Resend verwerken (webhook) → lid "onbereikbaar". Leesbevestiging van oproepingen voor het dossier. |
+| Voorstel | Per lid vastleggen "akkoord met elektronische oproeping (datum)"; zonder akkoord toont de oproepingslijst "aangetekend versturen" voor dat lid. Bounces van Cloudflare Email Service verwerken (queue) → lid "onbereikbaar". Leesbevestiging van oproepingen voor het dossier. |
 
 ### D4. Cron draait niet (herinneringen, afschrijvingen, mandaatmeldingen blijven uit)
 

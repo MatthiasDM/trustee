@@ -1,13 +1,13 @@
 # Beveiliging en subverwerkers
 
-**Versie 2026-10-14.** Wat we doen om de gegevens van VME's te beschermen, en bij wie ze staan.
+**Versie 2026-11-24.** Wat we doen om de gegevens van VME's te beschermen, en bij wie ze staan.
 
 ## Subverwerkers
 
 | Partij | Rol | Locatie | Grondslag |
 |---|---|---|---|
 | Cloudflare, Inc. | Hosting van de applicatie (Workers), database (D1), bestandsopslag (R2, jurisdictie EU), sleutel-waarde-opslag (KV) | Europese Unie | Cloudflare Data Processing Addendum met standaardcontractbepalingen |
-| Resend | Verzending van e-mail (uitnodigingen, meldingen, wachtwoordherstel) | EU-regio | Verwerkersovereenkomst Resend |
+| Cloudflare, Inc. (Email Service) | Verzending van e-mail (uitnodigingen, meldingen, wachtwoordherstel) en de melding of een bericht bezorgd werd. Cloudflare bewaart afzender, ontvanger, onderwerp en status tot 30 dagen in een activiteitenlog | Wereldwijd netwerk van Cloudflare; niet beperkt tot de EU | Cloudflare Data Processing Addendum met standaardcontractbepalingen |
 
 Geen andere partijen krijgen persoonsgegevens. Geen analytics- of advertentiediensten.
 

@@ -16,7 +16,7 @@ import mandates, { ORGAN_RULES } from "./routes/mandates";
 import ledger, { postDueScheduled } from "./routes/ledger";
 import { runBackups } from "./lib/backup";
 import admin from "./routes/admin";
-import webhooks from "./routes/webhooks";
+import { applyEmailEvent, type EmailEvent } from "./lib/delivery";
 import registered from "./routes/registered";
 import { signing } from "./routes/signing";
 import { purgeTrash } from "./routes/documents";
@@ -67,10 +67,11 @@ app.route("/api/buildings", infrastructure);
 app.route("/api/buildings", dissolution);
 app.route("/api/buildings", subassociations);
 app.route("/api/admin", admin);
-app.route("/api/webhooks", webhooks);
 app.route("/api/buildings", registered);
 app.route("/api/buildings", signing);
 
+/** Testomgeving: een bezorgmelding verwerken zoals de queue dat doet. */
+app.post("/api/admin/email-event", async (c) => { if (c.env.TEST_MODE !== "1") return c.json({ error: "Niet gevonden" }, 404); return c.json(await applyEmailEvent(c.env, await c.req.json<EmailEvent>())); });
 app.post("/api/admin/run-cron", async (c) => { if (c.env.TEST_MODE !== "1") return c.json({ error: "Niet gevonden" }, 404); return c.json(await runCron(c.env, "test")); });
 /** Testomgeving: de termijn van 30 dagen van een 1/5-verzoek laten verstrijken. */
 app.post("/api/admin/age-request/:id", async (c) => { if (c.env.TEST_MODE !== "1") return c.json({ error: "Niet gevonden" }, 404); await c.env.DB.prepare("UPDATE meeting_requests SET deadline = date('now','-1 day'), threshold_reached_at = datetime('now','-31 days') WHERE id = ?").bind(c.req.param("id")).run(); return c.json({ ok: true }); });
@@ -134,5 +135,12 @@ export default {
   /** Cron: sluit verlopen stemmingen, stuurt herinneringen voor vergaderingen (24u vooraf), ruimt sessies op. */
   async scheduled(event: ScheduledEvent, env: AppEnv["Bindings"], ctx: ExecutionContext) {
     ctx.waitUntil(runCron(env, event.cron));
+  },
+  /** Bezorgmeldingen van Cloudflare Email Service (event subscription op de queue): bezorgd, vertraagd, bounce, klacht, onderdrukt. */
+  async queue(batch: MessageBatch<unknown>, env: AppEnv["Bindings"]) {
+    for (const msg of batch.messages) {
+      try { await applyEmailEvent(env, msg.body as EmailEvent); msg.ack(); }
+      catch (e) { console.error("email event failed", e); msg.retry(); }
+    }
   },
 };

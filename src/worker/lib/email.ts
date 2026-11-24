@@ -1,7 +1,7 @@
 import type { Env } from "../env";
 import { uid } from "./util";
 
-/** Context van een e-mail die bij een gebouw hoort: wordt bewaard in email_log, zodat de bezorgstatus (webhook) per lid te volgen is. */
+/** Context van een e-mail die bij een gebouw hoort: wordt bewaard in email_log, zodat de bezorgstatus (meldingen van Cloudflare Email Service via de queue) per lid te volgen is. */
 export interface EmailMeta { buildingId: string; userId?: string | null; kind: string }
 
 export async function sendEmail(env: Env, to: string, subject: string, html: string, text?: string, meta?: EmailMeta) {
@@ -13,22 +13,25 @@ export async function sendEmail(env: Env, to: string, subject: string, html: str
     } catch (e) { console.error("email_log failed", e); }
   };
   if (/@[^@]+\.invalid$/i.test(to)) { console.log(`[email:dev] to=${to} subject=${subject}`); return; } // demo-accounts hebben geen echt adres
-  if (!env.RESEND_API_KEY || env.TEST_MODE === "1") {
+  if (!env.EMAIL || env.TEST_MODE === "1") {
     console.log(`[email:dev] to=${to} subject=${subject}\n${text ?? html}`);
-    // testomgeving: doen alsof het bericht verstuurd is, met een eigen id, zodat de webhook getest kan worden
+    // testomgeving: doen alsof het bericht verstuurd is, met een eigen id, zodat de bezorgmeldingen getest kunnen worden
     await log(env.TEST_MODE === "1" ? "sent" : "logged", env.TEST_MODE === "1" ? `test-${uid()}` : null);
     return;
   }
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: env.EMAIL_FROM, to: [to], subject, html, text }),
-    });
-    if (!res.ok) { const detail = `${res.status} ${await res.text()}`; console.error("email failed", detail); await log("failed", null, detail); return; }
-    const data = (await res.json().catch(() => null)) as { id?: string } | null;
-    await log("sent", data?.id ?? null);
-  } catch (e) { console.error("email failed", e); await log("failed", null, String(e)); }
+    const res = await env.EMAIL.send({ from: parseAddress(env.EMAIL_FROM), to, subject, html, ...(text ? { text } : {}) });
+    await log("sent", res.messageId ?? null);
+  } catch (e: any) {
+    const detail = `${e?.code ?? "error"} ${e?.message ?? e}`;
+    console.error("email failed", detail); await log("failed", null, detail);
+  }
+}
+
+/** "Naam <adres>" of "adres" naar het formaat van de binding. */
+export function parseAddress(from: string): string | { email: string; name: string } {
+  const m = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(from);
+  return m && m[1] ? { name: m[1].replace(/^"|"$/g, ""), email: m[2].trim() } : (m ? m[2].trim() : from.trim());
 }
 
 export function layout(env: Env, title: string, bodyHtml: string, cta?: { label: string; url: string }) {

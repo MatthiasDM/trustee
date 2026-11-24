@@ -38,7 +38,7 @@ Een mede-eigenaar kan zich op de algemene vergadering laten vertegenwoordigen do
 
 ## Waar
 
-Alle gegevens staan in de Europese Unie bij Cloudflare (database, bestandsopslag, serverlogica). E-mails worden verstuurd via Resend; Resend meldt ons of een bericht bezorgd werd, en die melding is de bron van de bezorgstatus hierboven. Een aangetekende brief verstuurt de syndicus zelf: Trustee maakt de brief op en houdt het register bij, maar geeft je adres aan geen postbedrijf door. Zie de pagina *Beveiliging en subverwerkers*.
+Alle gegevens staan in de Europese Unie bij Cloudflare (database, bestandsopslag, serverlogica). E-mails worden verstuurd via Cloudflare Email Service. Dat verloopt over het wereldwijde netwerk van Cloudflare en is dus niet beperkt tot de EU; Cloudflare bewaart afzender, ontvanger, onderwerp en status tot 30 dagen. Cloudflare meldt ons of een bericht bezorgd werd, en die melding is de bron van de bezorgstatus hierboven. Een aangetekende brief verstuurt de syndicus zelf: Trustee maakt de brief op en houdt het register bij, maar geeft je adres aan geen postbedrijf door. Zie de pagina *Beveiliging en subverwerkers*.
 
 ## Jouw rechten
 

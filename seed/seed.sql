@@ -1,11 +1,11 @@
 
 -- Demo-data. Alle accounts: wachtwoord "wachtwoord123"
 INSERT OR IGNORE INTO users (id, email, name, password_hash) VALUES
- ('u-syndicus','syndicus@demo.be','Sofie Vermeulen','pbkdf2$100000$Q_CXG3NSS01RxC9FjfTy8g$pdB_IWShvp0cK93A3M6iXNSB2ZaJlX6nm1C6gogsKgM'),
- ('u-jan','jan@demo.be','Jan Peeters','pbkdf2$100000$Q_CXG3NSS01RxC9FjfTy8g$pdB_IWShvp0cK93A3M6iXNSB2ZaJlX6nm1C6gogsKgM'),
- ('u-marie','marie@demo.be','Marie Claes','pbkdf2$100000$Q_CXG3NSS01RxC9FjfTy8g$pdB_IWShvp0cK93A3M6iXNSB2ZaJlX6nm1C6gogsKgM'),
- ('u-ahmed','ahmed@demo.be','Ahmed El Idrissi','pbkdf2$100000$Q_CXG3NSS01RxC9FjfTy8g$pdB_IWShvp0cK93A3M6iXNSB2ZaJlX6nm1C6gogsKgM'),
- ('u-lotte','lotte@demo.be','Lotte De Smet','pbkdf2$100000$Q_CXG3NSS01RxC9FjfTy8g$pdB_IWShvp0cK93A3M6iXNSB2ZaJlX6nm1C6gogsKgM');
+ ('u-syndicus','syndicus@demo.be','Sofie Vermeulen','pbkdf2$100000$u0AO6eir_TVGACryQOj9sA$95qVc3F5yzXaJDNecIr0ee_jL3HuA0GRnFdWjaJDapQ'),
+ ('u-jan','jan@demo.be','Jan Peeters','pbkdf2$100000$u0AO6eir_TVGACryQOj9sA$95qVc3F5yzXaJDNecIr0ee_jL3HuA0GRnFdWjaJDapQ'),
+ ('u-marie','marie@demo.be','Marie Claes','pbkdf2$100000$u0AO6eir_TVGACryQOj9sA$95qVc3F5yzXaJDNecIr0ee_jL3HuA0GRnFdWjaJDapQ'),
+ ('u-ahmed','ahmed@demo.be','Ahmed El Idrissi','pbkdf2$100000$u0AO6eir_TVGACryQOj9sA$95qVc3F5yzXaJDNecIr0ee_jL3HuA0GRnFdWjaJDapQ'),
+ ('u-lotte','lotte@demo.be','Lotte De Smet','pbkdf2$100000$u0AO6eir_TVGACryQOj9sA$95qVc3F5yzXaJDNecIr0ee_jL3HuA0GRnFdWjaJDapQ');
 INSERT OR IGNORE INTO consents (id, user_id, document, version) VALUES
 ('c-u-syndicus-terms','u-syndicus','terms','2026-10-14'),('c-u-syndicus-privacy','u-syndicus','privacy','2026-11-24'),('c-u-jan-terms','u-jan','terms','2026-10-14'),('c-u-jan-privacy','u-jan','privacy','2026-11-24'),('c-u-marie-terms','u-marie','terms','2026-10-14'),('c-u-marie-privacy','u-marie','privacy','2026-11-24'),('c-u-ahmed-terms','u-ahmed','terms','2026-10-14'),('c-u-ahmed-privacy','u-ahmed','privacy','2026-11-24'),('c-u-lotte-terms','u-lotte','terms','2026-10-14'),('c-u-lotte-privacy','u-lotte','privacy','2026-11-24');
 INSERT OR IGNORE INTO orgs (id, name, slug, plan) VALUES ('org-demo','Syndicus Vermeulen bv','syndicus-vermeulen','pro');

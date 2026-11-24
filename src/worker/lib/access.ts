@@ -4,7 +4,7 @@ import type { AppEnv } from "../env";
 /**
  * Afscherming met Cloudflare Access: als ACCESS_TEAM_DOMAIN en ACCESS_AUD gezet zijn, aanvaardt de API enkel verzoeken
  * met een geldig Access-token (header Cf-Access-Jwt-Assertion). Zo blijft de instantie gesloten als de Access-toepassing
- * ontbreekt, verkeerd staat of omzeild wordt. De webhook van Resend heeft een eigen handtekening en is uitgezonderd.
+ * ontbreekt, verkeerd staat of omzeild wordt.
  */
 type Jwk = JsonWebKey & { kid?: string };
 export type KeyFetcher = (teamDomain: string) => Promise<Jwk[]>;
@@ -44,7 +44,7 @@ export async function verifyAccessJwt(token: string | null | undefined, teamDoma
 
 export const accessGuard: MiddlewareHandler<AppEnv> = async (c, next) => {
   const team = c.env.ACCESS_TEAM_DOMAIN; const aud = c.env.ACCESS_AUD;
-  if (!team || !aud || c.req.path.startsWith("/api/webhooks/")) return next();
+  if (!team || !aud) return next();
   if (!(await verifyAccessJwt(c.req.header("cf-access-jwt-assertion"), team, aud))) return c.json({ error: "Deze instantie is enkel bereikbaar via Cloudflare Access", code: "access_required" }, 403);
   return next();
 };

@@ -4,7 +4,7 @@ Stand op 13 oktober 2026, na de bouw van de boekhoudmodule. Gerangschikt per dom
 
 ## 1. Productierijp maken (R)
 
-- **E-mail via een eigen domein**: Resend is gekoppeld maar niet geconfigureerd; DKIM/SPF voor het verzenddomein, anders belanden uitnodigingen in spam.
+- **E-mail naar leden**: Cloudflare Email Service is gekoppeld (m-dm.org, SPF/DKIM door Cloudflare). Op het gratis Workers-plan enkel naar geverifieerde adressen; leden bereiken vraagt Workers Paid.
 - **Rate limiting en brute-force-bescherming** op login, wachtwoord-reset en uitnodigingen (KV-binding is al voorzien, nog niet gebruikt).
 - **Bestandsvalidatie bij upload**: enkel toegelaten MIME-types, virusscan of minstens blokkeren van uitvoerbare bestanden; voorvertoning van PDF en afbeeldingen in de app.
 - **Back-ups**: D1 Time Travel is er standaard, maar een geplande export (JSON/CSV) naar R2 per gebouw ontbreekt; relevant voor de bewaartermijn van 7 jaar (W).

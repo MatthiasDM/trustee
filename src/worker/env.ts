@@ -8,8 +8,7 @@ export interface Env {
   VAPID_SUBJECT: string;
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY?: string;
-  RESEND_API_KEY?: string;
-  RESEND_WEBHOOK_SECRET?: string; // ondertekeningsgeheim (whsec_…) van de Resend-webhook voor bezorgstatus en bounces
+  EMAIL?: SendEmail; // Cloudflare Email Service (send_email-binding); zonder binding wordt e-mail enkel gelogd
   EMAIL_FROM: string;
   SESSION_SECRET?: string;
   TEST_MODE?: string; // "1" in de testomgeving: uitnodigingstokens in API-antwoord, geen e-mail

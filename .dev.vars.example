@@ -1,8 +1,6 @@
 # Kopieer naar .dev.vars voor lokale ontwikkeling
 VAPID_PRIVATE_KEY=
 VAPID_PUBLIC_KEY=
-RESEND_API_KEY=
 SESSION_SECRET=change-me-in-production
 DEMO_MODE=1
-# Ondertekeningsgeheim van de Resend-webhook (whsec_…); zonder dit bestaat /api/webhooks/resend niet
-RESEND_WEBHOOK_SECRET=
+# E-mail: lokaal zonder send_email-binding, dus enkel gelogd in de console

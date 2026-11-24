@@ -10,7 +10,7 @@ Gebouwd op Cloudflare Workers:
 
 - **Workers** (Hono API) + **Workers Assets** (React PWA)
 - **D1** (SQLite) voor alle data, **R2** voor documenten, **KV** voor cache en rate limits
-- **Web Push** (VAPID, geen externe dienst) + **e-mail** via Resend
+- **Web Push** (VAPID, geen externe dienst) + **e-mail** via Cloudflare Email Service
 - **UI**: [shadcn/ui](https://ui.shadcn.com) (Radix-primitives + Tailwind v4), Lucide-iconen, Inter, licht en donker thema
 - **Cron trigger** (elke 15 min): stemmingen sluiten, herinneringen, back-ups, sessies opruimen
 
@@ -40,7 +40,7 @@ npm run dev                    # http://localhost:5173
 
 Demo-accounts (wachtwoord `wachtwoord123`): `syndicus@demo.be` (syndicus), `jan@demo.be` (raad), `marie@demo.be` / `ahmed@demo.be` (eigenaars), `lotte@demo.be` (huurder).
 
-Zonder `RESEND_API_KEY` worden e-mails naar de console gelogd.
+Lokaal is er geen `send_email`-binding: e-mails worden naar de console gelogd.
 
 ## Productie in de EU
 
@@ -55,21 +55,20 @@ npm run db:migrate:production
 
 npm run vapid                                                  # sleutelpaar; de publieke sleutel in env.production › vars
 npx wrangler secret put VAPID_PRIVATE_KEY --env production
-npx wrangler secret put RESEND_API_KEY --env production
-npx wrangler secret put RESEND_WEBHOOK_SECRET --env production # zie E-mail hieronder
+# e-mail: zie E-mail hieronder (domein, binding, queue)
 # vul in env.production › vars: APP_URL (https://…), VAPID_SUBJECT, VAPID_PUBLIC_KEY, EMAIL_FROM, ACCESS_TEAM_DOMAIN, ACCESS_AUD
 
 npm run deploy:production
 ```
 
-`npm run deploy:production` controleert eerst de configuratie (`scripts/check-production.mjs`) en weigert bij placeholders, een bucket buiten de EU, `DEMO_MODE` anders dan `0`, een adres zonder https of ontbrekende secrets.
+`npm run deploy:production` controleert eerst de configuratie (`scripts/check-production.mjs`) en weigert bij placeholders, een bucket buiten de EU, `DEMO_MODE` anders dan `0`, een adres zonder https, een ontbrekende e-mailbinding of queue, of ontbrekende secrets.
 
 Wat "in de EU" hier wel en niet betekent:
 
 - **D1 en R2** (alle gegevens, documenten en back-ups) staan en draaien in de EU.
 - **KV** heeft geen jurisdictie. Er staan enkel tellers voor rate limiting, kortlevende 2FA-uitdagingen en de status van de laatste cron in, geen gegevens van gebouwen.
 - **De Worker zelf** draait op het Cloudflare-datacenter dat het dichtst bij de bezoeker ligt. Voor bezoekers in België is dat in de EU, maar het is niet afgedwongen; dat kan enkel met de betaalde Data Localization Suite.
-- **Resend** (e-mail) en de logs van Workers Observability zijn aparte verwerkingen; neem ze op in de lijst van subverwerkers.
+- **E-mail** (Cloudflare Email Service) loopt over het wereldwijde netwerk van Cloudflare, en Cloudflare bewaart een activiteitenlog (afzender, ontvanger, onderwerp, status) tot 30 dagen. Dat en de logs van Workers Observability zijn aparte verwerkingen, die in de lijst van subverwerkers staan.
 
 In productie (`DEMO_MODE=0`) is tweestapsverificatie verplicht voor wie een gebouw beheert, en wordt elke toegang van een platformbeheerder (`users.is_superadmin`) tot een gebouw gelogd in het activiteitenlog van dat gebouw.
 
@@ -78,23 +77,33 @@ In productie (`DEMO_MODE=0`) is tweestapsverificatie verplicht voor wie een gebo
 De productie-omgeving is een interne instantie: ze is enkel bereikbaar voor wie door Cloudflare Access wordt toegelaten. De afscherming staat op twee plaatsen, zodat een fout in de ene de instantie niet openzet:
 
 - **Cloudflare Access** staat vóór het adres en vraagt een aanmelding voor iemand de app te zien krijgt.
-- **De API controleert zelf het Access-token** (`src/worker/lib/access.ts`): met `ACCESS_TEAM_DOMAIN` en `ACCESS_AUD` gezet, weigert `/api/*` elk verzoek zonder geldig token voor deze toepassing (403, `access_required`). Enkel `/api/webhooks/*` is uitgezonderd; die route heeft een eigen handtekening.
+- **De API controleert zelf het Access-token** (`src/worker/lib/access.ts`): met `ACCESS_TEAM_DOMAIN` en `ACCESS_AUD` gezet, weigert `/api/*` elk verzoek zonder geldig token voor deze toepassing (403, `access_required`).
 
 Instellen, vóór de eerste deploy:
 
 1. Zero Trust › Access › Applications › *Add an application* › *Self-hosted*, met het adres uit `routes` in `env.production`. Voeg een policy *Allow* toe met enkel je eigen e-mailadres(sen).
-2. Maak een tweede toepassing voor hetzelfde adres met pad `api/webhooks/resend` en een policy *Bypass* voor *Everyone*, anders bereikt Resend de webhook niet.
-3. Zet in `env.production › vars` het teamdomein (`ACCESS_TEAM_DOMAIN`, bv. `mijnteam.cloudflareaccess.com`) en de *Application Audience (AUD) Tag* van de eerste toepassing (`ACCESS_AUD`).
-4. `npm run deploy:production` controleert na de deploy of het adres naar Access doorstuurt en of de API zonder token weigert (`node scripts/check-production.mjs --access`).
+2. Zet in `env.production › vars` het teamdomein (`ACCESS_TEAM_DOMAIN`, bv. `mijnteam.cloudflareaccess.com`) en de *Application Audience (AUD) Tag* van de eerste toepassing (`ACCESS_AUD`).
+3. `npm run deploy:production` controleert na de deploy of het adres naar Access doorstuurt en of de API zonder token weigert (`node scripts/check-production.mjs --access`).
 
 De controle weigert te deployen zonder deze twee waarden of met `workers_dev` aan (het workers.dev-adres valt buiten de Access-toepassing). De statische bestanden van de app (dezelfde code als in deze repo) worden niet door de Worker maar door Access afgeschermd; alle gegevens lopen via de API.
 
-### E-mail (Resend) en domein
+### E-mail (Cloudflare Email Service)
 
-1. Voeg in Resend je verzenddomein toe (bv. `trustee.be`) en zet de **DKIM**- en **SPF**-records (en optioneel DMARC) in je DNS; zonder die records belanden uitnodigingen in spam.
-2. Zet `EMAIL_FROM` op een adres van dat domein, bv. `Trustee <noreply@trustee.be>`, en `RESEND_API_KEY` als secret.
-3. Test met `POST /api/auth/forgot-password` op een eigen adres.
-4. Maak in Resend een webhook naar `https://<domein>/api/webhooks/resend` voor de gebeurtenissen `email.sent`, `email.delivered`, `email.delivery_delayed`, `email.bounced`, `email.complained`, `email.failed` en `email.suppressed`, en zet het ondertekeningsgeheim (`whsec_…`) als secret `RESEND_WEBHOOK_SECRET`. Zonder dat geheim bestaat de route niet. Een bounce of klacht markeert het lid als onbezorgbaar en verwittigt de syndicus; de bezorgstatus per bericht staat in `email_log` (`GET /api/buildings/:id/deliveries`).
+Geen externe dienst en geen API-sleutel: de Worker verstuurt via een `send_email`-binding, en de bezorgmeldingen komen via een queue binnen.
+
+1. Activeer verzending voor je domein: `npx wrangler email sending enable m-dm.org`. Cloudflare zet zelf de SPF-, DKIM- en DMARC-records (controle: `npx wrangler email sending dns get m-dm.org`).
+2. Zet `EMAIL_FROM` op een adres van dat domein en zet hetzelfde adres in `allowed_sender_addresses` van de binding `EMAIL` in `env.production`.
+3. Maak de queue en abonneer ze op de bezorgmeldingen (zone-id: dashboard › domein › Overview):
+
+   ```bash
+   npx wrangler queues create trustee-prod-email-events
+   npx wrangler queues subscription create trustee-prod-email-events --source email.sending --zone-id <zone-id> --domain m-dm.org \
+     --events message.delivered,message.deferred,message.bounced,message.complained,message.rejected,message.failed --name trustee-prod-bezorging
+   ```
+
+4. De Worker verwerkt de queue (`queue()` in `src/worker/index.ts`). Een bounce, klacht of onderdrukt adres markeert het lid als onbezorgbaar en verwittigt de syndicus; de bezorgstatus per bericht staat in `email_log` (`GET /api/buildings/:id/deliveries`). Er is geen publiek eindpunt meer om te beveiligen.
+
+**Plan.** Op het gratis Workers-plan verstuurt Cloudflare enkel naar *geverifieerde bestemmingsadressen* van je account (Email Routing › Destination addresses). Voor een interne instantie met enkel je eigen adres volstaat dat. Om leden van een VME te bereiken is het Workers Paid-plan nodig (3.000 e-mails per maand inbegrepen). Zonder dat plan faalt een verzending naar een ander adres met `E_RECIPIENT_NOT_ALLOWED`; dat staat als `failed` in `email_log`.
 
 ### Beveiliging en bewaking
 
@@ -139,7 +148,7 @@ Omdat de preview een aparte database en bucket heeft, kan testdata nooit in prod
 
 ```
 src/worker/        Hono API (routes/auth, buildings, documents, posts, polls, meetings, notifications)
-src/worker/lib/    auth (PBKDF2 + sessiecookies), notify (in-app + push + mail fan-out), push (VAPID), email (Resend)
+src/worker/lib/    auth (PBKDF2 + sessiecookies), notify (in-app + push + mail fan-out), push (VAPID), email (Cloudflare Email Service), delivery (bezorgmeldingen uit de queue)
 src/client/        React 19 + React Router + Tailwind v4 PWA (shadcn/ui in components/ui, thema-tokens in styles.css)
 src/shared/        gedeelde types en labels
 migrations/        D1-migraties   seed/   demo-data   public/sw.js   service worker (push + cache)

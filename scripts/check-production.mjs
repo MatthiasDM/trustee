@@ -29,6 +29,11 @@ export function checkProduction(config) {
   if (!/^[a-z0-9-]+\.cloudflareaccess\.com$/.test(p.vars?.ACCESS_TEAM_DOMAIN ?? "") || !p.vars?.ACCESS_AUD) errors.push("ACCESS_TEAM_DOMAIN (<team>.cloudflareaccess.com) en ACCESS_AUD ontbreken: zonder Cloudflare Access is productie voor iedereen bereikbaar");
   if (p.workers_dev !== false) errors.push('"workers_dev" moet false zijn: het workers.dev-adres valt buiten de Access-toepassing');
   if (!p.d1_databases?.length || !p.kv_namespaces?.length) errors.push("D1-database en KV-namespace ontbreken");
+  const from = /<([^>]+)>/.exec(p.vars?.EMAIL_FROM ?? "")?.[1] ?? p.vars?.EMAIL_FROM;
+  const mail = p.send_email?.find((b) => b.name === "EMAIL");
+  if (!mail) errors.push('De send_email-binding "EMAIL" ontbreekt: zonder binding wordt geen enkele e-mail verstuurd (Cloudflare Email Service)');
+  else if (mail.allowed_sender_addresses && !mail.allowed_sender_addresses.includes(from)) errors.push(`EMAIL_FROM (${from}) staat niet in allowed_sender_addresses van de send_email-binding`);
+  if (!p.queues?.consumers?.length) errors.push("De queue voor bezorgmeldingen ontbreekt: zonder bounces geen aangetekende oproeping voor wie onbereikbaar is");
   if (!p.triggers?.crons?.length) errors.push("De cron ontbreekt: zonder cron geen back-ups, herinneringen of opruiming");
   return errors;
 }
@@ -39,7 +44,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (!errors.length && process.argv.includes("--secrets")) {
     // De waarden zijn niet opvraagbaar; enkel of ze gezet zijn. De jurisdictie van D1 is na aanmaak niet meer te wijzigen: gebruik --jurisdiction eu bij `d1 create`.
     const names = JSON.parse(execSync("npx wrangler secret list --env production --format json", { encoding: "utf8" })).map((s) => s.name);
-    for (const s of ["VAPID_PRIVATE_KEY", "RESEND_API_KEY", "RESEND_WEBHOOK_SECRET"]) if (!names.includes(s)) errors.push(`Secret ${s} is niet gezet (npx wrangler secret put ${s} --env production)`);
+    for (const s of ["VAPID_PRIVATE_KEY"]) if (!names.includes(s)) errors.push(`Secret ${s} is niet gezet (npx wrangler secret put ${s} --env production)`);
   }
   if (errors.length) { console.error("Productie is niet klaar:\n" + errors.map((e) => `  - ${e}`).join("\n")); process.exit(1); }
   if (process.argv.includes("--access")) {

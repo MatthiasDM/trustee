@@ -1,15 +1,11 @@
-import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { B, BASE, Client, PW, as, uniq } from "./client";
 import { totpCode } from "../../src/worker/lib/totp";
 
 const ENFORCE = { "x-test-enforce-2fa": "1" }; // de testomgeving draait in demomodus; deze header dwingt de 2FA-plicht af zoals in productie
-const WEBHOOK_SECRET = "whsec_dHJ1c3RlZS10ZXN0LXdlYmhvb2stc2VjcmV0"; // env.test in wrangler.jsonc
-
-async function webhook(event: unknown, opts: { sign?: boolean; ageSec?: number } = {}) {
-  const body = JSON.stringify(event); const id = uniq("msg"); const ts = String(Math.floor(Date.now() / 1000) - (opts.ageSec ?? 0));
-  const sig = "v1," + createHmac("sha256", Buffer.from(WEBHOOK_SECRET.replace("whsec_", ""), "base64")).update(`${id}.${ts}.${body}`).digest("base64");
-  const res = await fetch(`${BASE}/api/webhooks/resend`, { method: "POST", headers: { "content-type": "application/json", "svix-id": id, "svix-timestamp": ts, "svix-signature": opts.sign === false ? "v1,AAAA" : sig }, body });
+/** Een bezorgmelding van Cloudflare Email Service, zoals de queue ze aflevert (in de testomgeving via /api/admin/email-event). */
+async function emailEvent(kind: string, payload: Record<string, unknown>) {
+  const res = await fetch(`${BASE}/api/admin/email-event`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: `cf.email.sending.message.${kind}`, payload }) });
   return { status: res.status, data: await res.json() as any };
 }
 
@@ -54,9 +50,10 @@ describe("Platformbeheer: toegang tot een gebouw wordt gelogd", () => {
 
 describe("Bounces en aangetekende zendingen", () => {
   let meetingId = ""; let providerId = "";
-  it("webhook: zonder geldige handtekening of te oud wordt niets verwerkt", async () => {
-    expect((await webhook({ type: "email.bounced", data: { to: ["marie@demo.be"] } }, { sign: false })).status).toBe(401);
-    expect((await webhook({ type: "email.bounced", data: { to: ["marie@demo.be"] } }, { ageSec: 900 })).status).toBe(401);
+  it("onbekende of onvolledige meldingen veranderen niets", async () => {
+    expect((await emailEvent("opened", { recipient: "marie@demo.be" })).data.status).toBeNull();
+    const r = await fetch(`${BASE}/api/admin/email-event`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "cf.email.sending.message.bounced" }) });
+    expect((await r.json() as any).flagged).toEqual([]);
   });
   it("een bounce markeert het lid, verwittigt de syndicus en maakt de oproeping aangetekend", async () => {
     const s = await as("syndicus");
@@ -66,12 +63,12 @@ describe("Bounces en aangetekende zendingen", () => {
     const log = (await s.get(`/api/buildings/${B}/deliveries`)).data.find((e: any) => e.subject === title && e.to_email === "marie@demo.be");
     expect(log.status).toBe("sent"); providerId = log.provider_id;
     // tijdelijke bounce (volle mailbox): gelogd, lid niet gemarkeerd
-    const soft = await webhook({ type: "email.bounced", data: { email_id: providerId, to: ["marie@demo.be"], bounce: { type: "Transient", subType: "MailboxFull", message: "vol" } } });
+    const soft = await emailEvent("bounced", { messageId: providerId, recipient: "marie@demo.be", bounce: { type: "soft", classification: "temporary_failure", reason: "452 4.2.2 Mailbox full" } });
     expect(soft.status).toBe(200); expect(soft.data.flagged).toEqual([]);
     const before = (await s.get("/api/notifications")).data.items.filter((n: any) => n.type === "delivery").length;
-    const hard = await webhook({ type: "email.bounced", data: { email_id: providerId, to: ["marie@demo.be"], bounce: { type: "Permanent", subType: "General", message: "mailbox bestaat niet" } } });
+    const hard = await emailEvent("bounced", { messageId: providerId, recipient: "marie@demo.be", bounce: { type: "hard", classification: "permanent_failure", reason: "550 5.1.1 mailbox bestaat niet" } });
     expect(hard.data.flagged).toEqual(["u-marie"]);
-    expect((await webhook({ type: "email.bounced", data: { email_id: providerId, to: ["marie@demo.be"], bounce: { type: "Permanent" } } })).data.flagged).toEqual([]); // geen tweede melding
+    expect((await emailEvent("bounced", { messageId: providerId, recipient: "marie@demo.be", bounce: { type: "hard" } })).data.flagged).toEqual([]); // geen tweede melding
     expect((await s.get("/api/notifications")).data.items.filter((n: any) => n.type === "delivery").length).toBe(before + 1);
     const marie = (await s.get(`/api/buildings/${B}/members`)).data.members.find((m: any) => m.user_id === "u-marie");
     expect(marie.email_bounced_at).toBeTruthy(); expect(marie.email_bounce_reason).toContain("mailbox bestaat niet");
@@ -112,9 +109,9 @@ describe("Bounces en aangetekende zendingen", () => {
   });
   it("een latere geslaagde bezorging wist de markering; de syndicus kan ze ook zelf wissen", async () => {
     const s = await as("syndicus");
-    expect((await webhook({ type: "email.delivered", data: { email_id: providerId, to: ["marie@demo.be"] } })).data.cleared).toEqual(["u-marie"]);
+    expect((await emailEvent("delivered", { messageId: providerId, recipient: "marie@demo.be", delivery: { status: "delivered" } })).data.cleared).toEqual(["u-marie"]);
     expect((await s.get(`/api/buildings/${B}/members`)).data.members.find((m: any) => m.user_id === "u-marie").email_bounced_at).toBeNull();
-    expect((await webhook({ type: "email.complained", data: { to: ["marie@demo.be"] } })).data.flagged).toEqual(["u-marie"]); // zonder logboekregel: op adres
+    expect((await emailEvent("complained", { recipient: "marie@demo.be" })).data.flagged).toEqual(["u-marie"]); // zonder logboekregel: op adres
     expect((await s.patch(`/api/buildings/${B}/members/u-marie`, { email_bounce_clear: true })).status).toBe(200);
     expect((await s.get(`/api/buildings/${B}/members`)).data.members.find((m: any) => m.user_id === "u-marie").email_bounced_at).toBeNull();
     await s.post(`/api/buildings/${B}/meetings/${meetingId}/cancel`, { reason: "testvergadering" }).catch(() => {});

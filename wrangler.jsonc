@@ -28,7 +28,7 @@
       "workers_dev": false,
       // Interne instantie: enkel bereikbaar via Cloudflare Access (zie README › Productie afschermen). De API controleert zelf het Access-token.
       "routes": [{ "pattern": "trustee-intern.m-dm.org", "custom_domain": true }],
-      "vars": { "APP_NAME": "Trustee", "DEMO_MODE": "0", "APP_URL": "https://trustee-intern.m-dm.org", "VAPID_SUBJECT": "https://m-dm.org", "VAPID_PUBLIC_KEY": "BP2BPcWT7XovK8O30kh6A9oCq8daeVcXMfNvhEjYsvvJLf8A87Eah8hCY5fVUuwD4Oik2V0T_nlAwvhcDWg346Y", "EMAIL_FROM": "Trustee <noreply@m-dm.org>", "ACCESS_TEAM_DOMAIN": "REPLACE_WITH_TEAM.cloudflareaccess.com", "ACCESS_AUD": "REPLACE_WITH_ACCESS_AUD" },
+      "vars": { "APP_NAME": "Trustee", "DEMO_MODE": "0", "APP_URL": "https://trustee-intern.m-dm.org", "VAPID_SUBJECT": "https://m-dm.org", "VAPID_PUBLIC_KEY": "BP2BPcWT7XovK8O30kh6A9oCq8daeVcXMfNvhEjYsvvJLf8A87Eah8hCY5fVUuwD4Oik2V0T_nlAwvhcDWg346Y", "EMAIL_FROM": "Trustee <noreply@m-dm.org>", "ACCESS_TEAM_DOMAIN": "broken-truth-f013.cloudflareaccess.com", "ACCESS_AUD": "43b1073730fd1c523321508ac5801415b23131337180f13bf519c9564694c539" },
       "d1_databases": [{ "binding": "DB", "database_name": "trustee-prod", "database_id": "c122e8d4-60f4-4bbf-8c50-3f460d7536f9", "migrations_dir": "migrations" }],
       "r2_buckets": [{ "binding": "DOCS", "bucket_name": "trustee-prod-docs", "jurisdiction": "eu" }],
       "kv_namespaces": [{ "binding": "KV", "id": "aa7e7b53d1c946a8bbd2ec8804bf4a42" }],

@@ -1,5 +1,5 @@
 /** Versies van de juridische documenten. Een nieuwe versie vraagt elke gebruiker om opnieuw te aanvaarden; aanvaardingen worden gelogd. */
-export const LEGAL_VERSIONS = { terms: "2026-10-14", privacy: "2026-10-14" } as const;
+export const LEGAL_VERSIONS = { terms: "2026-10-14", privacy: "2026-11-24" } as const;
 export type LegalDoc = keyof typeof LEGAL_VERSIONS;
 /** Datum waarop het wettelijk kader (docs/wetgeving.md) het laatst op Justel geverifieerd werd. */
 export const LAW_VERIFIED_ON = "2026-10-16";

@@ -18,6 +18,10 @@ Voor de gegevens van een gebouw (leden, kavels, documenten, boekhouding, vergade
 | Kennisgevingen van inzage (raad, commissaris) | Wettelijke kennisgeving art. 3.90 en 3.91 BW | Levensduur van het gebouw |
 | Pushabonnementen | Meldingen, enkel als je dat aanzet | Tot je ze uitzet |
 | Inhoud die je plaatst | Werking van de VME | Zie verwerkersovereenkomst |
+| E-maillogboek: ontvanger, onderwerp, soort bericht, tijdstip en bezorgstatus (verstuurd, bezorgd, vertraagd, onbezorgbaar, als spam gemeld), met de reden die de ontvangende server opgeeft | Aantonen dat een oproeping of notulen verstuurd werden, en zien wie niet bereikt werd zodat de syndicus die persoon aangetekend kan oproepen (art. 3.87 §3 BW). Zichtbaar voor syndicus, raad van mede-eigendom en commissaris | Levensduur van het gebouw op het platform |
+| Markering "e-mail komt niet aan" bij je account, met de reden | Je niet langer enkel per e-mail oproepen zolang je adres niet werkt | Tot een volgende e-mail wel aankomt of de syndicus de markering wist |
+| Postadres (woonplaats of zetel), door jezelf of de syndicus ingevuld | Aangetekende oproeping of verzending van de notulen (art. 3.87 §3 BW). Zichtbaar voor jezelf en het bestuur | Zolang je lid bent van het gebouw |
+| Register van aangetekende zendingen: naam, adres, wijze van verzending, vervoerder, barcode, datum van afgifte en bezorging, eventueel het afgiftebewijs | Bewijs van een regelmatige oproeping. Zichtbaar voor wie de vergadering bijeenroept | Levensduur van het gebouw op het platform |
 | Volmachtdrager van buiten het gebouw: naam, eventueel e-mailadres, de volmachten die hij draagt, zijn stem en zijn handtekening onder de notulen | De volmacht uitvoeren en de algemene vergadering rechtsgeldig laten verlopen (art. 3.87 §7 en §10 BW) | Naam, stem en handtekening: zoals de notulen en het audit-log van het gebouw. E-mailadres: tot je vraagt het te wissen |
 
 Wij vragen geen bijzondere categorieën van persoonsgegevens en verzoeken je ze ook niet in vrije tekstvelden te zetten.
@@ -34,7 +38,7 @@ Een mede-eigenaar kan zich op de algemene vergadering laten vertegenwoordigen do
 
 ## Waar
 
-Alle gegevens staan in de Europese Unie bij Cloudflare (database, bestandsopslag, serverlogica). E-mails worden verstuurd via Resend. Zie de pagina *Beveiliging en subverwerkers*.
+Alle gegevens staan in de Europese Unie bij Cloudflare (database, bestandsopslag, serverlogica). E-mails worden verstuurd via Resend; Resend meldt ons of een bericht bezorgd werd, en die melding is de bron van de bezorgstatus hierboven. Een aangetekende brief verstuurt de syndicus zelf: Trustee maakt de brief op en houdt het register bij, maar geeft je adres aan geen postbedrijf door. Zie de pagina *Beveiliging en subverwerkers*.
 
 ## Jouw rechten
 

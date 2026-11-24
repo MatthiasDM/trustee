@@ -8,7 +8,7 @@ import { registerSW } from "./lib/push";
 import { AppShell } from "./components/Layout";
 import { ForgotPasswordPage, InvitePage, LoginPage, RegisterPage, ResetPasswordPage } from "./pages/AuthPages";
 import { HomePage } from "./pages/HomePage";
-import { DashboardPage } from "./pages/DashboardPage";
+import { DashboardEntry } from "./pages/DashboardPage";
 import { DocumentsPage } from "./pages/DocumentsPage";
 import { PostDetailPage, PostsPage } from "./pages/PostsPage";
 import { PollDetailPage, PollsPage } from "./pages/PollsPage";
@@ -45,7 +45,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/help" element={<HelpPage />} />
             <Route path="/org/:orgId" element={<OrgPage />} />
-            <Route path="/b/:buildingId" element={<DashboardPage />} />
+            <Route path="/b/:buildingId" element={<DashboardEntry />} />
             <Route path="/b/:buildingId/documents" element={<DocumentsPage />} />
             <Route path="/b/:buildingId/posts" element={<PostsPage />} />
             <Route path="/b/:buildingId/posts/:postId" element={<PostDetailPage />} />

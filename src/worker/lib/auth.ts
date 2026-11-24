@@ -4,6 +4,7 @@ import type { AppEnv, AuthUser } from "../env";
 import { HttpError, plusMs, uid } from "./util";
 import { touchDemo } from "./demo";
 import { audit } from "./notify";
+import { HOLDER_ROLE, holderMayAccess, holderMeetings } from "./proxyholder";
 
 const COOKIE = "trustee_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 dagen
@@ -87,14 +88,23 @@ export const requireBuilding = (...roles: string[]): MiddlewareHandler<AppEnv> =
   // De vereffenaar (art. 3.98 §2) heeft tijdens de vereffening de rechten van de syndicus, ook als hij geen lid is.
   const liquidator = b.dissolution_status === "in_liquidation" && b.liquidator_user_id === user.id && b.role !== "syndicus";
   const acting = (!!b.acting || liquidator) && b.role !== "syndicus";
-  const role = acting ? "syndicus" : (b.role ?? (user.is_superadmin ? "syndicus" : null));
+  let role = acting ? "syndicus" : (b.role ?? (user.is_superadmin ? "syndicus" : null));
+  // Geen lid, maar volmachtdrager voor een vergadering (art. 3.87 §7): toegang tot die vergadering en niets anders.
+  let holderOf: string[] | undefined;
+  if (!role) {
+    holderOf = await holderMeetings(c.env.DB, b.id, user.id);
+    if (holderOf.length) {
+      role = HOLDER_ROLE;
+      if (!holderMayAccess(c.req.method, c.req.path, (k) => c.req.query(k), holderOf)) throw new HttpError(403, "Als volmachtdrager heb je enkel toegang tot de vergadering waarvoor je een volmacht draagt");
+    }
+  }
   if (!role) throw new HttpError(403, "Geen toegang tot dit gebouw");
   if (role === "syndicus") requireTwoFactor(c);
   if (!b.role && !acting && user.is_superadmin) await logPlatformAccess(c, b.id);
   // Na de afsluiting van de vereffening: enkel nog inzage en export (boeken en bescheiden worden 5 jaar bewaard, art. 3.98 §4)
   if (b.dissolution_status === "closed" && !["GET", "HEAD"].includes(c.req.method)) throw new HttpError(403, "De vereffening van deze VME is afgesloten: enkel inzage en export zijn nog mogelijk");
   if (roles.length && !roles.includes(role)) throw new HttpError(403, "Onvoldoende rechten");
-  c.set("building", { ...b, role, acting });
+  c.set("building", { ...b, role, acting, holder_meetings: holderOf });
   if (b.demo_group) await touchDemo(c.env, b.id, b.demo_last_activity); // demo blijft leven zolang er activiteit is
   await next();
 };

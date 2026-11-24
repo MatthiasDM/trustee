@@ -1,4 +1,5 @@
-export type Role = "syndicus" | "raad" | "eigenaar" | "huurder" | "commissaris";
+/** "volmachtdrager" is geen lidmaatschap: tijdelijke toegang tot één vergadering voor een lasthebber van buiten het gebouw (art. 3.87 §7 BW). */
+export type Role = "syndicus" | "raad" | "eigenaar" | "huurder" | "commissaris" | "volmachtdrager";
 export type DocVisibility = "all" | "raad" | "syndicus" | "owners_only";
 export type PostType = "question" | "announcement" | "incident";
 export type PostStatus = "open" | "answered" | "in_progress" | "resolved" | "closed";
@@ -10,6 +11,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   eigenaar: "Mede-eigenaar",
   huurder: "Huurder",
   commissaris: "Commissaris van de rekeningen",
+  volmachtdrager: "Volmachtdrager",
 };
 
 export const DOC_CATEGORIES: Record<string, string> = {

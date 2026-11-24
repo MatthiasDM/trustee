@@ -23,6 +23,7 @@ export function agendaDeadline(avPeriodStart: string | null): { deadline: string
 agenda.get("/:buildingId/agenda", requireBuilding(), async (c) => {
   const b = c.get("building");
   const meetingId = c.req.query("meeting");
+  if (b.role === "volmachtdrager" && !(meetingId && b.holder_meetings?.includes(meetingId))) throw new HttpError(403, "Als volmachtdrager zie je enkel de agenda van je vergadering");
   const conds = ["a.building_id = ?"]; const params: unknown[] = [b.id];
   if (meetingId === "none") conds.push("a.meeting_id IS NULL");
   else if (meetingId) { conds.push("a.meeting_id = ?"); params.push(meetingId); }

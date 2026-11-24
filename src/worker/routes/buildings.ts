@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { activeExternalHolders } from "../lib/proxyholder";
 import type { AppEnv } from "../env";
 import { isBoard, requireAuth, requireBuilding, requireTwoFactor } from "../lib/auth";
 import { HttpError, patchOf, plusMs, randomToken, uid, now } from "../lib/util";
@@ -113,7 +114,9 @@ buildings.get("/:buildingId/members", requireBuilding(), async (c) => {
   const invites = b.role === "syndicus"
     ? (await c.env.DB.prepare("SELECT i.id, i.email, i.name, i.role, i.expires_at, i.accepted_at, i.created_at, u.label AS unit_label FROM invites i LEFT JOIN units u ON u.id = i.unit_id WHERE i.building_id = ? AND i.accepted_at IS NULL ORDER BY i.created_at DESC").bind(b.id).all()).results
     : [];
-  return c.json({ members: rows.results, invites });
+  // volmachtdragers van buiten het gebouw (tijdelijk account, art. 3.87 §7): zichtbaar voor wie een vergadering beheert, o.a. voor het belangenconflict
+  const proxy_holders = isBoard(b.role) ? await activeExternalHolders(c.env, b.id) : [];
+  return c.json({ members: rows.results, invites, proxy_holders });
 });
 
 buildings.patch("/:buildingId/members/:userId", requireBuilding("syndicus"), async (c) => {

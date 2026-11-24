@@ -1,3 +1,4 @@
+import { Navigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { ArrowRight, Calendar, FileText, HelpCircle, Home, Megaphone, MessageSquare, Pin, Users, Vote, Wrench, AlertTriangle } from "lucide-react";
 import { useBuilding, useFetch } from "../components/Layout";
@@ -16,6 +17,12 @@ function Section({ title, to, children }: { title: string; to: string; children:
   return <Card className="gap-0 py-0"><CardHeader className="border-b py-3.5"><CardTitle className="text-sm">{title}</CardTitle><CardAction><Button variant="ghost" size="sm" asChild><Link to={to}>{t("Alles")} <ArrowRight /></Link></Button></CardAction></CardHeader><CardContent className="px-0">{children}</CardContent></Card>;
 }
 const EmptyRow = ({ text }: { text: string }) => <p className="px-6 py-6 text-sm text-muted-foreground">{text}</p>;
+
+/** Een volmachtdrager van buiten het gebouw heeft enkel toegang tot zijn vergadering: geen overzicht. */
+export function DashboardEntry() {
+  const b = useBuilding();
+  return b.role === "volmachtdrager" ? <Navigate to={`/b/${b.id}/meetings`} replace /> : <DashboardPage />;
+}
 
 export function DashboardPage() {
   const b = useBuilding(); const t = useT();

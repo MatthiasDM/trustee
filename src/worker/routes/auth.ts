@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
+import { HOLDER_BUILDINGS_SQL, HOLDER_ROLE } from "../lib/proxyholder";
 import { LEGAL_VERSIONS, type LegalDoc } from "../../shared/legal";
 import type { AppEnv } from "../env";
 import { hashPassword, verifyPassword } from "../lib/password";
@@ -167,6 +168,12 @@ auth.get("/me", async (c) => {
      FROM mandates md JOIN buildings b ON b.id = md.building_id JOIN orgs o ON o.id = b.org_id
      WHERE md.user_id = ?1 AND md.organ IN ('syndicus','voorlopig_syndicus','voorlopig_bewindvoerder') AND md.start_date <= date('now') AND md.end_date >= date('now')
        AND b.id NOT IN (SELECT building_id FROM building_members WHERE user_id = ?1) AND b.org_id NOT IN (SELECT org_id FROM org_members WHERE user_id = ?1)
+     UNION
+     SELECT b.id, b.name, b.address, b.city, b.org_id, o.name AS org_name, b.dissolution_status, b.parent_building_id, b.sub_scope, (SELECT name FROM buildings pb WHERE pb.id = b.parent_building_id) AS parent_name, '${HOLDER_ROLE}' AS role, 0 AS units, 0 AS acting
+     FROM buildings b JOIN orgs o ON o.id = b.org_id
+     WHERE ${HOLDER_BUILDINGS_SQL} AND b.id NOT IN (SELECT building_id FROM building_members WHERE user_id = ?1) AND b.org_id NOT IN (SELECT org_id FROM org_members WHERE user_id = ?1)
+       AND NOT (b.liquidator_user_id IS ?1 AND b.dissolution_status IS 'in_liquidation')
+       AND NOT EXISTS (SELECT 1 FROM mandates md WHERE md.building_id = b.id AND md.user_id = ?1 AND md.organ IN ('syndicus','voorlopig_syndicus','voorlopig_bewindvoerder') AND md.start_date <= date('now') AND md.end_date >= date('now'))
      ORDER BY 2`
   ).bind(user.id).all();
   const unread = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL").bind(user.id).first<{ n: number }>();

@@ -37,7 +37,7 @@ Het dashboard opent met de **organen van de VME**: de volgende algemene vergader
 - **Eenparigheid gemist door afwezigheid.** Vraagt de wet eenparigheid en mislukt dat enkel omdat mede-eigenaars afwezig waren, dan kan een nieuwe AV minstens 30 dagen later beslissen met eenparigheid van wie aanwezig of vertegenwoordigd is (art. 3.88 §4 BW).
 - **Belangenconflict.** Werkt een mede-eigenaar voor de VME of levert hij haar diensten (bv. hij is de aannemer van de offerte), dan stemt hij niet mee over die opdracht, ook niet via volmachten die hij draagt (art. 3.87 §9 BW). De syndicus of de raad legt dat per agendapunt vast onder *Stemregels*.
 - **Meerdere eigenaars of vruchtgebruik.** Is een kavel van meerdere personen (onverdeeldheid, erfenis) of opgesplitst (blote eigendom en vruchtgebruik, erfpacht, opstal), dan moeten jullie samen één lasthebber aanwijzen en dat schriftelijk aan de syndicus laten weten. Tot dan is het stemrecht van de kavel geschorst. De syndicus registreert de lasthebber bij de kavel; die wordt opgeroepen en stemt voor de hele kavel (art. 3.87 §1, lid 2 BW).
-- **Aanwezigheid en volmacht.** Laat weten of je komt, een volmacht geeft of afwezig bent. Kies bij een volmacht wie voor jou stemt: een lid van het gebouw, of iemand van buiten de mede-eigendom (partner, advocaat) van wie je de naam invult; nooit de syndicus (art. 3.87 §7 BW). Iemand zonder account stemt ter plaatse en tekent de notulen op papier. Niemand mag meer dan drie volmachten dragen (tenzij alle stemmen samen hoogstens 10 % zijn); Trustee bewaakt dat. Voeg de vergadering toe aan je agenda met de .ics-knop.
+- **Aanwezigheid en volmacht.** Laat weten of je komt, een volmacht geeft of afwezig bent. Kies bij een volmacht wie voor jou stemt: een lid van het gebouw, of iemand van buiten de mede-eigendom (partner, advocaat) van wie je de naam invult; nooit de syndicus (art. 3.87 §7 BW). Wie geen lid is, krijgt een tijdelijk account als volmachtdrager: vul je zijn e-mailadres in, dan krijgt hij een uitnodiging en kan hij de agenda zien, vanop afstand stemmen (als de vergadering dat toelaat) en de notulen tekenen. Zonder e-mailadres staat hij op naam in de aanwezigheidslijst en stemt en tekent hij ter plaatse; de syndicus registreert dan zijn papieren handtekening. De toegang van een volmachtdrager is beperkt tot die vergadering en vervalt zodra de notulen definitief zijn. Niemand mag meer dan drie volmachten dragen (tenzij alle stemmen samen hoogstens 10 % zijn); Trustee bewaakt dat. Voeg de vergadering toe aan je agenda met de .ics-knop.
 - **Quorum.** Syndicus en raad zien per kavel wie aanwezig of vertegenwoordigd is en of het quorum gehaald is (meer dan de helft van de eigenaars met minstens de helft van de aandelen, of meer dan 3/4 van de aandelen). Zo niet, dan kan een tweede bijeenroeping zonder quorum gemarkeerd worden.
 - **Stemmen tijdens de AV.** Bij elk agendapunt registreert de syndicus of de raad de stem per kavel (vóór, tegen, onthouding). Trustee weegt naar aandelen, laat onthoudingen buiten de meerderheid, toetst aan de vereiste meerderheid en bewaart de namen van wie tegenstemde.
 - **Notulen.** Met één klik maakt Trustee een ontwerp uit de aanwezigheid, het quorum en de beslissingen per punt. De syndicus vult aan (voorzitter, secretaris, varia) en maakt ze definitief: het document komt in *Documenten › Verslagen algemene vergadering* en alle stemgerechtigden krijgen een melding, binnen de wettelijke 30 dagen.
@@ -166,7 +166,7 @@ Onder *Instellingen › Gebouw* vul je de zetel van de VME en de gegevens van de
 |---|---|---|---|---|---|
 | Stemmen (gewogen) | ✔ | – | ✔ | ✔ als mede-eigenaar | ✔ als mede-eigenaar |
 | Aanwezigheid melden, volmacht geven | ✔ | – | ✔ | ✔ als mede-eigenaar | – (woont de AV ambtshalve bij) |
-| Volmacht dragen (ook een derde zonder account, op naam) | ✔ | ✔ | ✔ | ✔ | nooit |
+| Volmacht dragen (een derde krijgt een tijdelijk account, beperkt tot die vergadering) | ✔ | ✔ | ✔ | ✔ | nooit |
 | Agendapunt indienen | ✔ | – | ✔ | ✔ als mede-eigenaar | agendeert zelf |
 | AV eisen (1/5), mee ondertekenen | ✔ | – | ✔ | ✔ als mede-eigenaar | – |
 | Agenderen, stemming openen, documenten aan een stemming koppelen | – | – | ✔ | – | ✔ |
@@ -193,7 +193,7 @@ Onder *Instellingen › Gebouw* vul je de zetel van de VME en de gegevens van de
 | Markering *e-mail onbezorgbaar* wissen | – | – | – | – | ✔ |
 | Bezorgstatus van e-mail en postadressen zien | – | – | ✔ | ✔ | ✔ |
 | Aangetekende brieven aanmaken en verzending registreren | wie de vergadering wettig zelf bijeenriep | – | ✔ | ✔ | ✔ |
-| Aanmelden als deelnemer vanop afstand, zelf stemmen in de stemronde | ✔ | – | ✔ | ✔ als mede-eigenaar | ✔ als mede-eigenaar |
+| Aanmelden als deelnemer vanop afstand, zelf stemmen in de stemronde | ✔ | als volmachtdrager | ✔ | ✔ als mede-eigenaar of volmachtdrager | ✔ als mede-eigenaar |
 | Deelname vanop afstand toelaten, stemronde openen en sluiten | wie de vergadering wettig zelf bijeenriep | – | ✔ | ✔ | ✔ |
 | Notulen tekenen | als voorzitter, secretaris of aanwezige (ook als volmachtdrager) | – | idem | idem | als voorzitter of secretaris, of als aanwezige mede-eigenaar |
 | Papieren handtekeningen registreren, vragen om te tekenen | wie de vergadering wettig zelf bijeenriep | – | ✔ | ✔ | ✔ |

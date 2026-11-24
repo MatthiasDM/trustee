@@ -2,10 +2,6 @@ import type { Env } from "../env";
 import { HttpError } from "./util";
 import { suspendedFor, votingUnits, weightOf } from "./voting";
 
-/** Sleutel voor een volmachtdrager zonder account: zijn naam binnen de vergadering (hoofdletters, accenten en spaties tellen niet). */
-export const externalHolderId = (name: string) => `ext:${name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}`;
-export const isExternalHolder = (id: string | null | undefined) => !!id && id.startsWith("ext:");
-
 export interface AttendanceRow { unit_id: string; label: string; shares: number; owner_ids: string[]; owner_names: string; status: "attending" | "proxy" | "absent" | "unknown" | "suspended"; holder_name?: string | null; holder_id?: string | null; present: boolean; /** neemt op afstand deel (art. 3.87 §1) */ remote: boolean; /** wie de stem ter plaatse of op afstand uitbrengt: de stemgerechtigde, of bij volmacht de drager */ acting_id: string | null; split: boolean; suspended: boolean; voter_id: string | null; voter_name: string | null }
 
 /**
@@ -18,8 +14,8 @@ export async function attendance(env: Env, buildingId: string, meetingId: string
   const meeting = await env.DB.prepare("SELECT is_second_call FROM meetings WHERE id = ?").bind(meetingId).first<any>();
   const rows: AttendanceRow[] = vunits.map((u) => {
     const r = u.voter_id ? rsvps.find((x) => x.user_id === u.voter_id) : null;
-    // volmachtdrager: een lid (account) of een derde op naam
-    const holderId: string | null = r?.status === "proxy" ? r.proxy_user_id ?? (r.proxy_name ? externalHolderId(r.proxy_name) : null) : null;
+    // volmachtdrager: een lid, of een derde met een tijdelijk account (lib/proxyholder.ts)
+    const holderId: string | null = r?.status === "proxy" ? r.proxy_user_id ?? null : null;
     const holderName: string | null = r?.status === "proxy" ? r.holder_name ?? r.proxy_name ?? null : null;
     const status = u.suspended ? "suspended" : !r ? "unknown" : r.status === "attending" || r.status === "remote" ? "attending" : r.status === "proxy" && holderId ? "proxy" : r.status === "absent" ? "absent" : "unknown";
     const ownerNames = u.owners.map((o) => o.name).join(", ");
@@ -39,37 +35,22 @@ export async function attendance(env: Env, buildingId: string, meetingId: string
 }
 
 /**
- * Volmachtregels art. 3.87 §7: de lasthebber is "al dan niet lid van de algemene vergadering" (een lid met account of een derde op naam);
- * de syndicus kan niet als lasthebber optreden; niemand aanvaardt meer dan drie volmachten, tenzij eigen en gevolmachtigde stemmen samen
- * hoogstens 10 % van alle stemmen zijn; geen volmacht aan jezelf.
+ * Volmachtregels art. 3.87 §7: de lasthebber is "al dan niet lid van de algemene vergadering" (een lid, of een derde met een tijdelijk
+ * account: opts.external); de syndicus kan niet als lasthebber optreden; niemand aanvaardt meer dan drie volmachten, tenzij eigen en
+ * gevolmachtigde stemmen samen hoogstens 10 % van alle stemmen zijn; geen volmacht aan jezelf.
  */
-export async function validateProxy(env: Env, buildingId: string, meetingId: string, grantorId: string, holder: { user_id?: string | null; name?: string | null }) {
+export async function validateProxy(env: Env, buildingId: string, meetingId: string, grantorId: string, holderId: string, opts: { external?: boolean } = {}) {
+  if (holderId === grantorId) throw new HttpError(400, "Je kan jezelf geen volmacht geven");
+  const holder = await env.DB.prepare("SELECT u.name, (SELECT bm.role FROM building_members bm WHERE bm.building_id = ?1 AND bm.user_id = u.id) AS role, (SELECT 1 FROM org_members om JOIN buildings b ON b.org_id = om.org_id WHERE b.id = ?1 AND om.user_id = u.id) AS office FROM users u WHERE u.id = ?2").bind(buildingId, holderId).first<{ name: string; role: string | null; office: number | null }>();
+  if (!holder || (!holder.role && !opts.external)) throw new HttpError(400, "Volmachtdrager is geen lid van dit gebouw; vul voor iemand van buiten de mede-eigendom zijn naam in");
+  if (holder.role === "syndicus" || holder.office) throw new HttpError(400, "De syndicus mag geen volmachten dragen (art. 3.87 §7 BW)");
   const vunits = await votingUnits(env, buildingId);
   if (weightOf(vunits, grantorId) <= 0 && suspendedFor(vunits, grantorId).length) throw new HttpError(400, `Voor kavel ${suspendedFor(vunits, grantorId).map((u) => u.label).join(", ")} geeft enkel de lasthebber een volmacht (art. 3.87 §1, lid 2 BW)`);
-  let holderKey: string; let holderName: string; let ownShares = 0;
-  if (holder.user_id) {
-    if (holder.user_id === grantorId) throw new HttpError(400, "Je kan jezelf geen volmacht geven");
-    const h = await env.DB.prepare("SELECT bm.role, u.name FROM building_members bm JOIN users u ON u.id = bm.user_id WHERE bm.building_id = ? AND bm.user_id = ?").bind(buildingId, holder.user_id).first<any>();
-    if (!h) throw new HttpError(400, "Volmachtdrager is geen lid van dit gebouw; vul voor iemand van buiten de mede-eigendom zijn naam in");
-    if (h.role === "syndicus") throw new HttpError(400, "De syndicus mag geen volmachten dragen (art. 3.87 §7 BW)");
-    holderKey = holder.user_id; holderName = h.name; ownShares = weightOf(vunits, holder.user_id);
-  } else {
-    const name = (holder.name ?? "").trim();
-    if (name.length < 3) throw new HttpError(400, "Vul de volledige naam van de volmachtdrager in: de volmacht vermeldt de naam van de lasthebber (art. 3.87 §7 BW)");
-    holderKey = externalHolderId(name); holderName = name;
-    const people = (await env.DB.prepare("SELECT bm.user_id, bm.role, u.name FROM building_members bm JOIN users u ON u.id = bm.user_id WHERE bm.building_id = ?").bind(buildingId).all<{ user_id: string; role: string; name: string }>()).results;
-    const same = people.filter((p) => externalHolderId(p.name) === holderKey);
-    if (same.some((p) => p.role === "syndicus")) throw new HttpError(400, "De syndicus mag geen volmachten dragen (art. 3.87 §7 BW)");
-    if (same.some((p) => p.user_id === grantorId)) throw new HttpError(400, "Je kan jezelf geen volmacht geven");
-    if (same.length) throw new HttpError(400, `${same[0].name} is lid van dit gebouw: kies hem of haar in de lijst in plaats van de naam in te vullen`);
-  }
-  // alle volmachten van deze vergadering voor dezelfde drager, behalve die van de volmachtgever zelf
-  const others = ((await env.DB.prepare("SELECT user_id, proxy_user_id, proxy_name FROM meeting_rsvps WHERE meeting_id = ? AND status = 'proxy' AND user_id != ?").bind(meetingId, grantorId).all<{ user_id: string; proxy_user_id: string | null; proxy_name: string | null }>()).results)
-    .filter((r) => (r.proxy_user_id ?? (r.proxy_name ? externalHolderId(r.proxy_name) : null)) === holderKey);
+  const others = (await env.DB.prepare("SELECT user_id FROM meeting_rsvps WHERE meeting_id = ? AND status = 'proxy' AND proxy_user_id = ? AND user_id != ?").bind(meetingId, holderId, grantorId).all<{ user_id: string }>()).results;
   if (others.length >= 3) {
     const total = (await env.DB.prepare("SELECT COALESCE(SUM(shares),0) AS s FROM units WHERE building_id = ?").bind(buildingId).first<any>())?.s ?? 0;
-    const sum = ownShares + weightOf(vunits, grantorId) + others.reduce((a, r) => a + weightOf(vunits, r.user_id), 0);
-    if (total > 0 && sum / total > 0.10) throw new HttpError(400, `${holderName} draagt al 3 volmachten; meer mag enkel als eigen en gevolmachtigde stemmen samen hoogstens 10 % van de aandelen zijn (art. 3.87 §7 BW)`);
+    const sum = weightOf(vunits, holderId) + weightOf(vunits, grantorId) + others.reduce((a, r) => a + weightOf(vunits, r.user_id), 0);
+    if (total > 0 && sum / total > 0.10) throw new HttpError(400, `${holder.name} draagt al 3 volmachten; meer mag enkel als eigen en gevolmachtigde stemmen samen hoogstens 10 % van de aandelen zijn (art. 3.87 §7 BW)`);
   }
 }
 

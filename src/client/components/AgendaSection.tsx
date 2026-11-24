@@ -122,10 +122,11 @@ function DecisionForm({ item, onDone }: { item: AgendaItem; onDone: () => void }
 /** Belangenconflict (art. 3.87 §9 BW): wie voor de VME werkt of levert, neemt niet deel aan de stemming over zijn eigen opdracht. */
 function ConflictDialog({ item, onClose, onDone }: { item: AgendaItem; onClose: () => void; onDone: () => void }) {
   const b = useBuilding();
-  const members = useFetch<{ members: { user_id: string; name: string; role: string; units?: string }[] }>(`/api/buildings/${b.id}/members`);
+  const members = useFetch<{ members: { user_id: string; name: string; role: string; units?: string }[]; proxy_holders?: { user_id: string; name: string }[] }>(`/api/buildings/${b.id}/members`);
   const [sel, setSel] = useState<string[]>((item as any).conflict_user_ids ?? []); const [reason, setReason] = useState<string>((item as any).conflict_reason ?? ""); const [error, setError] = useState<unknown>(null);
   const keys = useFetch<any[]>(`/api/buildings/${b.id}/ledger/cost-keys`); const [keyId, setKeyId] = useState<string>((item as any).charge_key_id ?? "");
-  const list = (members.data?.members ?? []).filter((m) => m.role !== "huurder");
+  // iedereen die kan deelnemen aan de stemming: leden (ook een huurder kan een volmacht dragen) en volmachtdragers van buiten het gebouw
+  const list = [...(members.data?.members ?? []), ...(members.data?.proxy_holders ?? []).map((h) => ({ ...h, role: "volmachtdrager", units: undefined as string | undefined }))];
   return <Dialog open onOpenChange={(o) => !o && onClose()}><DialogContent><DialogHeader><DialogTitle>Stemregels: {item.title}</DialogTitle><DialogDescription>Een lasthebber van de VME, iemand die door de VME in dienst is genomen of voor de VME diensten levert, neemt niet deel aan de beraadslaging en de stemming over zijn opdracht, persoonlijk noch bij volmacht (art. 3.87 §9 BW). Zijn kavels en de volmachten die hij draagt tellen bij dit punt niet mee.</DialogDescription></DialogHeader>
     <div className="max-h-60 divide-y overflow-y-auto rounded-lg border">{list.map((m) => <label key={m.user_id} className="flex items-center gap-2 px-3 py-2 text-sm"><Checkbox checked={sel.includes(m.user_id)} onCheckedChange={(v) => setSel(v ? [...sel, m.user_id] : sel.filter((x) => x !== m.user_id))} /><span className="flex-1">{m.name}</span><span className="text-xs text-muted-foreground">{m.units ? `kavel ${m.units}` : m.role}</span></label>)}</div>
     <Field label="Reden"><Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="bv. Jan Peeters is zaakvoerder van de aannemer van de offerte" /></Field>

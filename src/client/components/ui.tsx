@@ -37,7 +37,7 @@ export function ErrorBox({ error }: { error: unknown }) {
   return <Alert variant="destructive"><AlertCircle /><AlertTitle>{msg}</AlertTitle>{issues && <AlertDescription><ul className="list-disc pl-4">{issues.map((i) => <li key={i}>{i}</li>)}</ul></AlertDescription>}</Alert>;
 }
 
-const ROLE_VARIANT: Record<Role, "info" | "violet" | "success" | "warning" | "pink"> = { syndicus: "info", raad: "violet", eigenaar: "success", huurder: "warning", commissaris: "pink" };
+const ROLE_VARIANT: Record<Role, "info" | "violet" | "success" | "warning" | "pink"> = { syndicus: "info", raad: "violet", eigenaar: "success", huurder: "warning", commissaris: "pink", volmachtdrager: "warning" };
 export function RoleBadge({ role }: { role?: Role | string | null }) {
   if (!role) return null;
   return <Badge variant={ROLE_VARIANT[role as Role] ?? "secondary"}>{ROLE_LABELS[role as Role] ?? role}</Badge>;

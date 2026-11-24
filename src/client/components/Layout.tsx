@@ -72,7 +72,7 @@ export function AppShell() {
     </div>}
     <div className="flex-1 overflow-y-auto px-3 py-2">
       <div className="mb-1 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{current ? t("Jouw VME") : t("Navigatie")}</div>
-      {current ? NAV.map((n) => <NavLink key={n.to} end={n.end} to={`/b/${current.id}/${n.to}`} className={({ isActive }) => cn("flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors", isActive ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "hover:bg-accent/60")}><n.icon className="size-4" />{t(n.label)}</NavLink>)
+      {current ? NAV.filter((n) => current.role !== "volmachtdrager" || n.to === "meetings").map((n) => <NavLink key={n.to} end={n.end} to={`/b/${current.id}/${n.to}`} className={({ isActive }) => cn("flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors", isActive ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "hover:bg-accent/60")}><n.icon className="size-4" />{t(n.label)}</NavLink>)
         : <NavLink to="/" className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm bg-sidebar-accent font-medium text-sidebar-accent-foreground"><Building2 className="size-4" />{t("Mijn gebouwen")}</NavLink>}
       {orgs.map((o) => <NavLink key={o.id} to={`/org/${o.id}`} className={({ isActive }) => cn("flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors", isActive ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "hover:bg-accent/60")}><Briefcase className="size-4" />{t("Kantoor")}: {o.name}</NavLink>)}
       <div className="mt-4 mb-1 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{t("Persoonlijk")}</div>

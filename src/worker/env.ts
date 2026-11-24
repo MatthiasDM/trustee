@@ -23,7 +23,7 @@ export interface Env {
 }
 
 export interface AuthUser { id: string; email: string; name: string; locale: string; is_superadmin: number; phone: string | null; demo_group?: string | null; /** 1 als tweestapsverificatie actief is */ totp?: number }
-export interface BuildingCtx { id: string; org_id: string; name: string; total_shares: number; role: string; units: number; demo_group?: string | null; acting?: boolean; dissolution_status?: string | null; liquidator_user_id?: string | null }
+export interface BuildingCtx { id: string; org_id: string; name: string; total_shares: number; role: string; units: number; demo_group?: string | null; acting?: boolean; /** enkel voor rol volmachtdrager: de vergaderingen waarvoor hij een volmacht draagt */ holder_meetings?: string[]; dissolution_status?: string | null; liquidator_user_id?: string | null }
 
 export type Vars = { user: AuthUser; building: BuildingCtx; sessionId: string };
 export type AppEnv = { Bindings: Env; Variables: Vars };

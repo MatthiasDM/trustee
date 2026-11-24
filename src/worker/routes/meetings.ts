@@ -11,6 +11,7 @@ import { canManageMeeting, hasSyndicus, ownerConveneRight } from "../lib/governa
 import { suspendedFor, voterIds, votingUnits, weightOf } from "../lib/voting";
 import { Pdf, pdfOpts } from "../lib/pdf";
 import { storeDocument } from "../lib/reports";
+import { HOLDER_ROLE, ensureExternalHolder } from "../lib/proxyholder";
 import { bodyHash, eligibleSigners, missingOfficers, signatureSection, signaturesOf } from "../lib/minutes";
 
 const meetings = new Hono<AppEnv>();
@@ -61,10 +62,12 @@ meetings.get("/:buildingId/meetings", requireBuilding(), async (c) => {
        (SELECT COUNT(*) FROM minutes_signatures s WHERE s.meeting_id = m.id) AS signatures,
        (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.status='absent') AS absent,
        (SELECT status FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.user_id = ?2) AS my_rsvp,
+       (SELECT COUNT(*) FROM meeting_rsvps r WHERE r.meeting_id = m.id AND r.status = 'proxy' AND r.proxy_user_id = ?2) AS my_proxies,
        (SELECT reported_missing_at FROM minutes_receipts mr WHERE mr.meeting_id = m.id AND mr.user_id = ?2) AS my_minutes_missing
      FROM meetings m LEFT JOIN documents d ON d.id = m.minutes_document_id LEFT JOIN users ch ON ch.id = m.chair_user_id LEFT JOIN users se ON se.id = m.secretary_user_id LEFT JOIN users cv ON cv.id = m.convened_by LEFT JOIN users cb ON cb.id = m.cancelled_by LEFT JOIN users cr ON cr.id = m.created_by WHERE m.building_id = ?1 ORDER BY m.starts_at DESC`
   ).bind(b.id, c.get("user").id).all();
-  return c.json((rows.results as any[]).map((m) => { const manage = canManageMeeting(b, c.get("user").id, m); return { ...m, remote_url: manage || m.my_rsvp === "remote" ? m.remote_url : null, minutes_body: manage ? m.minutes_body : null, can_manage: manage }; }));
+  const visible = b.role === HOLDER_ROLE ? (rows.results as any[]).filter((m) => b.holder_meetings?.includes(m.id)) : rows.results as any[];
+  return c.json(visible.map((m) => { const manage = canManageMeeting(b, c.get("user").id, m); return { ...m, remote_url: manage || m.my_rsvp === "remote" ? m.remote_url : null, minutes_body: manage ? m.minutes_body : null, can_manage: manage }; }));
 });
 
 meetings.post("/:buildingId/meetings", requireBuilding(), async (c) => {
@@ -211,20 +214,47 @@ meetings.post("/:buildingId/meetings/:meetingId/convene", requireBuilding(), asy
 meetings.put("/:buildingId/meetings/:meetingId/rsvp", requireBuilding(), async (c) => {
   const b = c.get("building");
   const user = c.get("user");
-  const { status, proxy_user_id, proxy_name } = z.object({ status: z.enum(["attending", "remote", "proxy", "absent"]), proxy_user_id: z.string().nullable().optional(), proxy_name: z.string().trim().max(160).nullable().optional() }).parse(await c.req.json());
-  const m = await c.env.DB.prepare("SELECT id, cancelled_at, remote_allowed FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
+  const { status, proxy_user_id, proxy_name, proxy_email } = z.object({ status: z.enum(["attending", "remote", "proxy", "absent"]), proxy_user_id: z.string().nullable().optional(), proxy_name: z.string().trim().max(160).nullable().optional(), proxy_email: z.string().trim().email().max(200).nullable().optional().or(z.literal("")) }).parse(await c.req.json());
+  const m = await c.env.DB.prepare("SELECT id, title, starts_at, cancelled_at, remote_allowed FROM meetings WHERE id = ? AND building_id = ?").bind(c.req.param("meetingId"), b.id).first<any>();
   if (!m) throw new HttpError(404, "Vergadering niet gevonden");
   if (m.cancelled_at) throw new HttpError(400, "Deze vergadering is geannuleerd");
   if (status === "remote" && !m.remote_allowed) throw new HttpError(400, "Deze vergadering voorziet geen deelname vanop afstand; dat kan enkel als de bijeenroeping erin voorziet (art. 3.87 §1 BW)");
+  if (!isCoOwner(b)) {
+    // Een volmachtdrager die zelf geen mede-eigenaar is (derde, huurder) kiest enkel hoe hij deelneemt: ter plaatse of vanop afstand.
+    const holds = await c.env.DB.prepare("SELECT 1 FROM meeting_rsvps WHERE meeting_id = ? AND status = 'proxy' AND proxy_user_id = ?").bind(m.id, user.id).first();
+    if (holds) {
+      if (status !== "attending" && status !== "remote") throw new HttpError(400, "Als volmachtdrager kies je enkel of je ter plaatse of vanop afstand deelneemt");
+      if (status === "remote") await c.env.DB.prepare("INSERT INTO meeting_rsvps (meeting_id, user_id, status, updated_at) VALUES (?,?,'remote',strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(meeting_id, user_id) DO UPDATE SET status = 'remote', proxy_user_id = NULL, proxy_name = NULL, updated_at = excluded.updated_at").bind(m.id, user.id).run();
+      else await c.env.DB.prepare("DELETE FROM meeting_rsvps WHERE meeting_id = ? AND user_id = ?").bind(m.id, user.id).run();
+      return c.json({ ok: true, as_holder: true });
+    }
+  }
   if (!isCoOwner(b)) throw new HttpError(403, "Enkel mede-eigenaars melden hun aanwezigheid of geven een volmacht; de syndicus woont de AV ambtshalve bij");
   {
     const vunits = await votingUnits(c.env, b.id); const sus = suspendedFor(vunits, user.id);
     if (sus.length && weightOf(vunits, user.id) <= 0) throw new HttpError(403, `Voor kavel ${sus.map((u) => u.label).join(", ")} neemt enkel de lasthebber deel aan de algemene vergadering${sus.some((u) => u.suspended) ? "; zolang die niet is aangewezen, is het deelnamerecht geschorst" : ` (${sus.map((u) => u.voter_name).join(", ")})`} (art. 3.87 §1, lid 2 BW)`);
   }
-  if (status === "proxy") { if (!proxy_user_id && !proxy_name) throw new HttpError(400, "Kies wie je volmacht krijgt, of vul de naam in van iemand van buiten de mede-eigendom"); await validateProxy(c.env, b.id, c.req.param("meetingId"), user.id, proxy_user_id ? { user_id: proxy_user_id } : { name: proxy_name }); }
+  let holderId: string | null = null; let ext: Awaited<ReturnType<typeof ensureExternalHolder>> | null = null;
+  if (status === "proxy") {
+    if (!proxy_user_id && !proxy_name) throw new HttpError(400, "Kies wie je volmacht krijgt, of vul de naam in van iemand van buiten de mede-eigendom");
+    if (!proxy_user_id) ext = await ensureExternalHolder(c, { name: proxy_name, email: proxy_email || null }, m);
+    holderId = proxy_user_id ?? ext!.user_id;
+    await validateProxy(c.env, b.id, m.id, user.id, holderId, { external: !!ext });
+  }
   await c.env.DB.prepare("INSERT INTO meeting_rsvps (meeting_id, user_id, status, proxy_user_id, proxy_name, updated_at) VALUES (?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(meeting_id, user_id) DO UPDATE SET status = excluded.status, proxy_user_id = excluded.proxy_user_id, proxy_name = excluded.proxy_name, updated_at = excluded.updated_at")
-    .bind(c.req.param("meetingId"), user.id, status, status === "proxy" ? proxy_user_id ?? null : null, status === "proxy" && !proxy_user_id ? proxy_name ?? null : null).run();
-  if (status === "proxy") await audit(c.env, b.id, user.id, "meeting.proxy", "meeting", c.req.param("meetingId"), proxy_user_id ? { holder_user_id: proxy_user_id } : { holder_name: proxy_name, external: true });
+    .bind(m.id, user.id, status, holderId, ext ? proxy_name ?? null : null).run();
+  // wie geen mede-eigenaar is en hier geen volmacht meer draagt, kan ook niet langer "vanop afstand" aangemeld staan
+  await c.env.DB.prepare(`DELETE FROM meeting_rsvps WHERE meeting_id = ?1 AND status = 'remote'
+    AND user_id NOT IN (SELECT proxy_user_id FROM meeting_rsvps WHERE meeting_id = ?1 AND status = 'proxy' AND proxy_user_id IS NOT NULL)
+    AND user_id NOT IN (SELECT uo.user_id FROM unit_owners uo JOIN units un ON un.id = uo.unit_id WHERE un.building_id = ?2)
+    AND user_id NOT IN (SELECT representative_user_id FROM units WHERE building_id = ?2 AND representative_user_id IS NOT NULL)
+    AND user_id NOT IN (SELECT user_id FROM building_members WHERE building_id = ?2 AND role IN ('eigenaar','raad'))`).bind(m.id, b.id).run();
+  if (status === "proxy") {
+    await audit(c.env, b.id, user.id, "meeting.proxy", "meeting", m.id, { holder_user_id: holderId, external: !!ext, account_created: !!ext?.created, invited: !!ext?.invited });
+    // een bestaand account (lid, of een derde die al een account had) krijgt bericht; een nieuw account kreeg de uitnodiging
+    if (!ext?.invited) await notifyBuilding(c.env, { buildingId: b.id, type: "meeting", title: `Volmacht: ${m.title}`, body: `${user.name} gaf je een volmacht voor deze vergadering.`, link: `/b/${b.id}/meetings`, userIds: [holderId!] });
+    return c.json({ ok: true, holder_user_id: holderId, external: !!ext, invited: !!ext?.invited, ...(ext?.invite_token ? { invite_token: ext.invite_token } : {}) });
+  }
   return c.json({ ok: true });
 });
 

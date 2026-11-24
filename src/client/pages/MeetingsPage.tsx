@@ -34,7 +34,8 @@ export function MeetingsPage() {
   const [conveneFor, setConveneFor] = useState<string | null>(null); const [cancelFor, setCancelFor] = useState<any>(null);
   const [proxyFor, setProxyFor] = useState<string | null>(null); const [minutesFor, setMinutesFor] = useState<any>(null); const [showAtt, setShowAtt] = useState<Record<string, boolean>>({});
   const [sp, setSp] = useSearchParams(); const [signFor, setSignFor] = useState<any>(null);
-  const members = useFetch<{ members: { user_id: string; name: string }[] }>(`/api/buildings/${b.id}/members`);
+  const guest = b.role === "volmachtdrager"; // lasthebber van buiten het gebouw: ziet enkel zijn vergadering
+  const members = useFetch<{ members: { user_id: string; name: string }[] }>(guest ? null : `/api/buildings/${b.id}/members`);
   const rsvp = async (id: string, status: string) => { await api.put(`/api/buildings/${b.id}/meetings/${id}/rsvp`, { status }); meetings.reload(); toast.success("Aanwezigheid opgeslagen"); };
   const now = new Date();
   const list = meetings.data ?? [];
@@ -53,24 +54,26 @@ export function MeetingsPage() {
         : d >= now && <p className="mt-2 text-xs text-muted-foreground">{m.convened_at ? <><Badge variant="success">Opgeroepen</Badge> op {fmtDateTime(m.convened_at)}{m.convened_by_name ? ` door ${m.convened_by_name}` : ""}</> : (b.isBoard || m.can_manage) ? <><Badge variant="warning">Nog niet opgeroepen</Badge> De leden zijn nog niet verwittigd; verstuur de oproeping minstens 15 dagen vooraf.</> : <Badge variant="outline">Oproeping volgt</Badge>}</p>}
       {!!m.convened_by_owners && <p className="mt-2 text-xs text-muted-foreground"><Badge variant="info">Bijeengeroepen door mede-eigenaars</Badge> {m.created_by_name ? `door ${m.created_by_name}. ` : ""}{m.legal_basis}</p>}
       <MeetingAgenda meetingId={m.id} meetingStartsAt={m.starts_at} canManage={!!m.can_manage} />
-      <ResidentQuestions meeting={m} canManage={b.isBoard || !!m.can_manage} />
-      <MinutesReceipts meeting={m} canManage={b.isBoard || !!m.can_manage} onChanged={() => meetings.reload()} />
+      {!guest && <ResidentQuestions meeting={m} canManage={b.isBoard || !!m.can_manage} />}
+      {!guest && <MinutesReceipts meeting={m} canManage={b.isBoard || !!m.can_manage} onChanged={() => meetings.reload()} />}
       {m.agenda && <details className="mt-3 text-sm"><summary className="cursor-pointer text-primary">Toelichting / vrije agenda</summary><div className="mt-2 whitespace-pre-wrap text-muted-foreground">{m.agenda}</div></details>}
       {m.minutes_document_id && <a className="mt-3 inline-flex items-center gap-1.5 text-sm text-primary hover:underline" href={`/api/buildings/${b.id}/documents/${m.minutes_document_id}/download?inline=1`} target="_blank" rel="noreferrer"><FileText className="size-4" />Verslag: {m.minutes_name}</a>}
       {new Date(m.starts_at) >= now && b.isOwner && <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4 text-sm"><span className="text-muted-foreground">{t("Aanwezig?")}</span>
         {[["attending", t("Ja")], ...(m.remote_allowed ? [["remote", "Vanop afstand"]] : []), ["proxy", t("Volmacht")], ["absent", t("Nee")]].map(([s, l]) => <Button key={s} size="sm" variant={m.my_rsvp === s ? "default" : "outline"} onClick={() => s === "proxy" ? setProxyFor(m.id) : rsvp(m.id, s)}>{s === "attending" ? <Check /> : s === "remote" ? <Video /> : s === "absent" ? <X /> : <Users />}{l}</Button>)}
         <span className="ml-auto text-xs text-muted-foreground">{m.attending} aanwezig{m.remote_allowed ? ` · ${m.remote} vanop afstand` : ""} · {m.proxy} volmacht · {m.absent} afwezig</span><Button size="sm" variant="ghost" onClick={() => setShowAtt({ ...showAtt, [m.id]: !showAtt[m.id] })}>Quorum</Button></div>}
+      {m.my_proxies > 0 && !b.isOwner && !m.cancelled_at && m.minutes_status !== "final" && <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4 text-sm"><Badge variant="info"><Users />Je draagt {m.my_proxies} volmacht{m.my_proxies > 1 ? "en" : ""}</Badge>
+        {m.remote_allowed ? <><span className="text-muted-foreground">Hoe neem je deel?</span>{[["attending", "Ter plaatse"], ["remote", "Vanop afstand"]].map(([s, l]) => <Button key={s} size="sm" variant={(m.my_rsvp === "remote" ? "remote" : "attending") === s ? "default" : "outline"} onClick={() => rsvp(m.id, s)}>{s === "remote" ? <Video /> : <Check />}{l}</Button>)}</> : <span className="text-muted-foreground">Je stemt ter plaatse voor wie je de volmacht gaf.</span>}</div>}
       <RemoteParticipation meeting={m} />
       {(showAtt[m.id] || new Date(m.starts_at) < now) && <AttendancePanel meeting={m} onChanged={() => meetings.reload()} />}
       {(b.isBoard || m.can_manage) && <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3 text-sm"><Button size="sm" variant={m.minutes_status === "final" ? "outline" : "default"} onClick={() => setMinutesFor(m)}><ScrollText />{m.minutes_status === "final" ? "Notulen (definitief)" : m.minutes_status === "draft" ? "Notulen (ontwerp)" : "Notulen opstellen"}</Button>{m.minutes_status === "final" && m.minutes_sent_at && <span className="text-xs text-muted-foreground">verzonden {fmtDateTime(m.minutes_sent_at)}</span>}{m.minutes_status === "draft" && <span className="text-xs text-muted-foreground">{m.signatures} handtekening(en)</span>}</div>}
-      {m.minutes_status === "draft" && !m.can_manage && !b.isBoard && b.isOwner && m.type !== "raad" && <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3 text-sm"><Button size="sm" variant="outline" onClick={() => setSignFor(m)}><PenLine />Notulen nalezen en tekenen</Button><span className="text-xs text-muted-foreground">Voor de voorzitter, de secretaris en wie aanwezig was (art. 3.87 §10 BW).</span></div>}
+      {m.minutes_status === "draft" && !m.can_manage && !b.isBoard && (b.isOwner || m.my_proxies > 0) && m.type !== "raad" && <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3 text-sm"><Button size="sm" variant="outline" onClick={() => setSignFor(m)}><PenLine />Notulen nalezen en tekenen</Button><span className="text-xs text-muted-foreground">Voor de voorzitter, de secretaris en wie aanwezig was (art. 3.87 §10 BW).</span></div>}
     </div>
   </div>; };
   return <div>
-    <PageHeader title={t("Algemene vergadering")} subtitle={t("Het hoogste orgaan van de VME: mede-eigenaars beslissen, stemmen naar aandelen. Agenda, aanwezigheden en verslagen.")} actions={<><Button variant="outline" asChild><Link to={`/b/${b.id}/decisions`}><Gavel />Beslissingenregister</Link></Button>{b.isBoard && <Button onClick={() => setOpen(true)}><CalendarPlus />{t("Vergadering plannen")}</Button>}</>} />
-    {!meetings.loading && <AgendaSection meetings={list} />}
-    <MeetingRequests meetings={list} onConvene={(r) => setOpen({ title: r.subject, type: "av", basis: r.convene_basis })} />
-    {meetings.loading ? <Spinner /> : !list.length ? <Empty icon={<Calendar />} title="Nog geen vergaderingen gepland" /> : <>
+    <PageHeader title={t("Algemene vergadering")} subtitle={t("Het hoogste orgaan van de VME: mede-eigenaars beslissen, stemmen naar aandelen. Agenda, aanwezigheden en verslagen.")} actions={<>{!guest && <Button variant="outline" asChild><Link to={`/b/${b.id}/decisions`}><Gavel />Beslissingenregister</Link></Button>}{b.isBoard && <Button onClick={() => setOpen(true)}><CalendarPlus />{t("Vergadering plannen")}</Button>}</>} />
+    {!meetings.loading && !guest && <AgendaSection meetings={list} />}
+    {!guest && <MeetingRequests meetings={list} onConvene={(r) => setOpen({ title: r.subject, type: "av", basis: r.convene_basis })} />}
+    {meetings.loading ? <Spinner /> : !list.length ? <Empty icon={<Calendar />} title={guest ? "Je draagt nu geen volmacht voor een vergadering" : "Nog geen vergaderingen gepland"} /> : <>
       <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t("Komende")}</h2>{upcoming.length ? <div className="mb-8 space-y-3">{upcoming.map((m) => <MeetingCard key={m.id} m={m} />)}</div> : <p className="mb-8 text-sm text-muted-foreground">Geen geplande vergaderingen.</p>}
       {past.length > 0 && <><h2 className="mb-3 text-sm font-medium text-muted-foreground">{t("Voorbije")}</h2><div className="space-y-3">{past.map((m) => <MeetingCard key={m.id} m={m} />)}</div></>}</>}
     {cancelled.length > 0 && <details className="mt-8 text-sm"><summary className="cursor-pointer text-muted-foreground">Geannuleerde vergaderingen ({cancelled.length})</summary><div className="mt-3 space-y-3">{cancelled.map((m) => <MeetingCard key={m.id} m={m} />)}</div></details>}
